@@ -3,7 +3,7 @@ import { basename } from "node:path"
 import type { Command } from "commander"
 import mime from "mime"
 
-import type { Asset } from "@nohead/sdk"
+import type { Asset, AssetKind } from "@nohead/sdk"
 import { imageUrl } from "@nohead/sdk/images"
 import type { CommandContext } from "../context.ts"
 import { CliError, ExitCode, unwrap } from "../errors.ts"
@@ -76,27 +76,41 @@ export function registerAssets(
     .command("list")
     .description("List assets, newest first")
     .option("--deleted", "list deleted assets instead", false)
-    .action(async (options: { deleted: boolean }) => {
-      const ctx = context()
-      const page = await unwrap(
-        (await ctx.project()).assets.list({
-          limit: 100,
-          deleted: options.deleted,
-        })
-      )
-      printResult(ctx, page, () =>
-        table(
-          ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
-          page.data.map((a) => [
-            a.id,
-            a.filename,
-            a.content_type,
-            size(a.byte_size),
-            a.status,
-          ])
+    .option(
+      "--search <words>",
+      "only assets whose filename or alt text has every word"
+    )
+    .option(
+      "--kind <kinds>",
+      `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`
+    )
+    .action(
+      async (options: { deleted: boolean; search?: string; kind?: string }) => {
+        const ctx = context()
+        const kind =
+          options.kind === undefined ? undefined : kinds(options.kind)
+        const page = await unwrap(
+          (await ctx.project()).assets.list({
+            limit: 100,
+            deleted: options.deleted,
+            q: options.search,
+            kind,
+          })
         )
-      )
-    })
+        printResult(ctx, page, () =>
+          table(
+            ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
+            page.data.map((a) => [
+              a.id,
+              a.filename,
+              a.content_type,
+              size(a.byte_size),
+              a.status,
+            ])
+          )
+        )
+      }
+    )
 
   assets
     .command("upload")
@@ -273,6 +287,22 @@ export function registerAssets(
 
 const FITS = ["contain", "cover", "fill"] as const
 const FORMATS = ["webp", "avif", "jpeg", "png"] as const
+const ASSET_KINDS: AssetKind[] = [
+  "image",
+  "video",
+  "audio",
+  "document",
+  "other",
+]
+
+/** `--kind image,video` as the kinds, checked, so a typo is a usage error. */
+function kinds(value: string): AssetKind[] {
+  return value.split(",").map((name) => {
+    const kind = ASSET_KINDS.find((k) => k === name.trim())
+    if (!kind) throw usageError(`--kind takes ${ASSET_KINDS.join(", ")}`)
+    return kind
+  })
+}
 
 /**
  * An image's URL with imgproxy's options for these (`imageUrl` from

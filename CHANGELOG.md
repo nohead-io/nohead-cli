@@ -8,6 +8,10 @@ its GitHub release's notes.
 
 ## Unreleased
 
+- `nohead assets list --search <words>` finds assets whose filename or alt
+  text has every word, and `--kind image,video` lists only assets of those
+  kinds (`image`, `video`, `audio`, `document` or `other`).
+
 - **Breaking (for scripts):** `nohead --version` also prints the SDK version
   it calls the API through: `0.1.0 (SDK 0.6.0)`. The CLI's own version stays
   the first word; a script that compares the whole output should read that
