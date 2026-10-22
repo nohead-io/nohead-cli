@@ -1,0 +1,111 @@
+# Stages a release when its tag (v1.2.3) is pushed. Tags are pushed by the
+# Nohead API repository's "CLI release" workflow, after this commit's
+# end-to-end tests passed against the API. npm trusted publishing (OIDC, no
+# token) stages @nohead/cli and the unscoped `nohead` (which runs it, so
+# `npx nohead` works) with provenance; each goes live only when a maintainer
+# approves it on npm with 2FA, @nohead/cli first. The GitHub release is a
+# draft until then; CHANGELOG.md's section for the version is its notes.
+#
+# Two jobs, so no dependency code runs where the publishing credential can be
+# minted: `build` installs and packs without it (CI and the end-to-end tests
+# have already tested this commit), and `publish` only stages those tarballs.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Only a commit on main is released, whoever pushed the tag: the deploy
+      # key that pushes tags also syncs the contract.
+      - name: Check the tag is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+        # Compared with main's commit, not the name, which a tag could shadow.
+        run: |
+          main=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
+          status=$(gh api "repos/$REPO/compare/$main...$SHA" --jq .status)
+          case "$status" in
+            identical | behind) ;;
+            *) echo "::error::$TAG ($SHA) is not on main ($status)"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 26
+          # No dependency cache for a release: a poisoned cache could reach the package.
+          package-manager-cache: false
+      - name: Check the versions and their notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          alias=$(node -p "require('./alias/package.json').version")
+          pinned=$(node -p "require('./alias/package.json').dependencies['@nohead/cli']")
+          if [ "$TAG" != "v$version" ] || [ "$alias" != "$version" ] || [ "$pinned" != "$version" ]; then
+            echo "::error::Tag $TAG must match @nohead/cli ($version), nohead ($alias) and the @nohead/cli it runs ($pinned)"; exit 1
+          fi
+          awk -v v="$version" '$0 == "## " v {found=1; next} found && /^## / {exit} found' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no section for $version"; exit 1
+          fi
+      # Also builds dist/ (prepare).
+      - run: npm ci
+      # Main's ruleset already requires CI; the unit tests are cheap insurance.
+      - run: npm test
+      - name: Pack, and install as users do
+        run: scripts/install-packed.sh release
+      - run: mv notes.md release/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release
+          path: release
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # npm's trusted publishers only accept this environment, which only v* tags can use.
+    environment: release
+    permissions:
+      contents: write # the draft GitHub release
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      # The trusted publishers may only stage (npm 11.15+, which Node 26 has).
+      - name: Stage
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          npm stage publish "./nohead-cli-${TAG#v}.tgz" --provenance --access public
+          npm stage publish "./nohead-${TAG#v}.tgz" --provenance --access public
+      - name: Draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" -R "$REPO" --verify-tag --draft --title "$TAG" --notes-file notes.md

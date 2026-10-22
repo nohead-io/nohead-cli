@@ -1,0 +1,62 @@
+{
+  "name": "@nohead/cli",
+  "version": "0.1.0",
+  "description": "The Nohead command-line interface",
+  "license": "MIT",
+  "homepage": "https://nohead.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nohead-io/nohead-cli.git"
+  },
+  "bugs": "https://github.com/nohead-io/nohead-cli/issues",
+  "keywords": [
+    "nohead",
+    "cms",
+    "headless",
+    "cli"
+  ],
+  "type": "module",
+  "bin": {
+    "nohead": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "dev": "node src/index.ts",
+    "typecheck": "tsc",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@nohead/sdk": "^0.6.0",
+    "@sindresorhus/slugify": "^3.0.1",
+    "commander": "^15.0.0",
+    "mime": "^4.1.1",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "eslint": "^10.12.0",
+    "fast-check": "^4.10.2",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
+  }
+}

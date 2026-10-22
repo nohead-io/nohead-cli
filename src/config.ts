@@ -1,0 +1,52 @@
+import { homedir } from "node:os"
+import { join } from "node:path"
+
+import type { Runtime } from "./context.ts"
+import { usageError } from "./input.ts"
+
+/** Saved credentials (`nohead login`). */
+interface Profile {
+  api_url: string
+  api_key: string
+  project_id?: string
+}
+
+export interface ConfigFile {
+  profiles: Record<string, Profile>
+}
+
+export const DEFAULT_PROFILE = "default"
+
+/**
+ * $NOHEAD_CONFIG, else $XDG_CONFIG_HOME/nohead/config.json, else
+ * ~/.config/nohead/config.json. Without $HOME (Windows, some containers) ~ is
+ * the user's home directory, never the current one.
+ */
+export function configPath(env: Runtime["env"]): string {
+  if (env.NOHEAD_CONFIG) return env.NOHEAD_CONFIG
+  const base = env.XDG_CONFIG_HOME ?? join(env.HOME || homedir(), ".config")
+  return join(base, "nohead", "config.json")
+}
+
+export async function readConfig(runtime: Runtime): Promise<ConfigFile> {
+  const path = configPath(runtime.env)
+  let text: string
+  try {
+    text = await runtime.readFile(path)
+  } catch {
+    return { profiles: {} }
+  }
+  try {
+    const parsed = JSON.parse(text) as Partial<ConfigFile>
+    return { profiles: parsed.profiles ?? {} }
+  } catch {
+    throw usageError(`${path} is not valid JSON; fix or delete it`)
+  }
+}
+
+/** Written with owner-only permissions: it holds API keys. */
+export async function writeConfig(runtime: Runtime, config: ConfigFile) {
+  const path = configPath(runtime.env)
+  await runtime.writePrivateFile(path, `${JSON.stringify(config, null, 2)}\n`)
+  return path
+}

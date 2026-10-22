@@ -1,0 +1,32 @@
+# The Nohead API repository pushes contract/update when the API's published
+# contract changes (openapi.json and regenerated types). This opens the pull
+# request for it, or comments on the open one, with the pushed commit's
+# message: the operations added and removed. CI runs on the push itself.
+name: Contract pull request
+
+on:
+  push:
+    branches: [contract/update]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pull-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          body=$(printf '%s\n' "$MESSAGE" | tail -n +3)
+          number=$(gh pr list -R "$REPO" --head contract/update --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr comment "$number" -R "$REPO" --body "$body"
+          else
+            gh pr create -R "$REPO" --base main --head contract/update \
+              --title "Update the API contract" --body "$body"
+          fi

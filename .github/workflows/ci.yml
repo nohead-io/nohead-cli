@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    # The API repository pushes contract/update, and this push run is its
+    # check. Its pull request is opened by github-actions (contract-pr.yml),
+    # so GitHub holds that pull request's run for approval: a duplicate.
+    branches: [main, contract/update]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Lint, types and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          # The only supported Node release line (package.json "engines").
+          node-version: 26
+          cache: npm
+      # Also builds dist/ (prepare).
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      # Both packages as users get them: the tarballs, with their
+      # dependencies from npm.
+      - name: Install the packages
+        run: scripts/install-packed.sh
+
+  # The one check main's ruleset requires, so the required checks don't change
+  # when the jobs do.
+  ci-success:
+    name: CI passed
+    if: always()
+    needs: [checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify all jobs succeeded
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: echo "$RESULTS" | jq -e 'all(. == "success")'

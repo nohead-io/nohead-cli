@@ -1,0 +1,32 @@
+{
+  "name": "nohead",
+  "version": "0.1.0",
+  "description": "The Nohead command-line interface (npx nohead); runs @nohead/cli",
+  "license": "MIT",
+  "homepage": "https://nohead.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nohead-io/nohead-cli.git",
+    "directory": "alias"
+  },
+  "bugs": "https://github.com/nohead-io/nohead-cli/issues",
+  "keywords": [
+    "nohead",
+    "cms",
+    "headless",
+    "cli"
+  ],
+  "type": "module",
+  "bin": {
+    "nohead": "./nohead.js"
+  },
+  "files": [
+    "nohead.js"
+  ],
+  "dependencies": {
+    "@nohead/cli": "0.1.0"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}
