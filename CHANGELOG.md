@@ -6,6 +6,11 @@ new commands and options are minor releases; a change that could break your
 scripts (output, exit codes, flags) is a major one. Each release's section is
 its GitHub release's notes.
 
+## Unreleased
+
+- `nohead --version` also prints the SDK version it calls the API through:
+  `0.1.0 (SDK 0.6.0)`. The CLI's own version stays the first word.
+
 ## 0.1.0
 
 The first release.

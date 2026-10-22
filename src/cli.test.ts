@@ -1,6 +1,7 @@
+import { VERSION as SDK_VERSION } from "@nohead/sdk"
 import { describe, expect, it } from "vitest"
 
-import { run } from "./cli.ts"
+import { run, VERSION } from "./cli.ts"
 import { ExitCode } from "./errors.ts"
 import { contractResponse } from "./test/contract.ts"
 import { testRuntime, withoutWaiting } from "./test/runtime.ts"
@@ -94,5 +95,12 @@ describe("usage", () => {
     await t.ok(["--help"])
     expect(t.out()).toContain("Usage: nohead")
     expect(t.out()).toContain("collections")
+  })
+
+  it("prints its version and the SDK's for --version", async () => {
+    const t = testRuntime()
+
+    await t.ok(["--version"])
+    expect(t.out()).toBe(`${VERSION} (SDK ${SDK_VERSION})\n`)
   })
 })
