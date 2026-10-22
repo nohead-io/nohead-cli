@@ -3357,7 +3357,7 @@
       "get": {
         "operationId": "collections_search",
         "summary": "Search records",
-        "description": "Full-text search in a collection, ranked by relevance (or `sort`).\nAnyone who can read the collection can search it. With an API key the\nwords match its `searchable` fields; members in the web app match all\nits text fields. Filters work as in the records list,\non `published_at` (`exists` only) and on fields marked `filterable`\n(not on `deleted` or the other timestamps); `sort` on `created_at`, `updated_at`, `published_at` and\nfields marked `sortable` (`-` for descending).\nResults are the current records; changes appear within seconds. At\nmost the first 1,000 hits can be paged through. `expand` embeds related\nrecords and assets as in the records list. `409` with a detail code:\n`index_building` while a new collection's index is first built, and\n`rebuilding` when filtering or sorting on a field newly made\n`filterable` or `sortable`, or searching words while the index is\nrebuilt for a field's new key, until the rebuild that adds it has run\n(the index status is `stale` meanwhile).\n",
+        "description": "Full-text search in a collection, ranked by relevance (or `sort`).\nAnyone who can read the collection can search it, and the words match\nits `searchable` fields. Filters work as in the records list,\non `published_at` (`exists` only) and on fields marked `filterable`\n(not on `deleted` or the other timestamps); `sort` on `created_at`, `updated_at`, `published_at` and\nfields marked `sortable` (`-` for descending).\nResults are the current records; changes appear within seconds. At\nmost the first 1,000 hits can be paged through. `expand` embeds related\nrecords and assets as in the records list. `409` with a detail code:\n`index_building` while a new collection's index is first built, and\n`rebuilding` when filtering or sorting on a field newly made\n`filterable` or `sortable`, or searching words while the index is\nrebuilt for a field's new key, until the rebuild that adds it has run\n(the index status is `stale` meanwhile).\n",
         "tags": [
           "search"
         ],
@@ -3435,7 +3435,7 @@
       "get": {
         "operationId": "projects_search",
         "summary": "Search across collections",
-        "description": "One ranked list of matching records from the project's collections (or\nthose in `filter[collection]`), matching their `searchable` fields with\nan API key as in a collection search. `filter[published_at][exists]`\nnarrows to published records (`true`) or unpublished ones.\n",
+        "description": "One ranked list of matching records from the project's collections (or\nthose in `filter[collection]`), matching their `searchable` fields as\nin a collection search. `filter[published_at][exists]`\nnarrows to published records (`true`) or unpublished ones.\n",
         "tags": [
           "search"
         ],
@@ -5534,7 +5534,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5579,7 +5579,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5610,7 +5610,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5633,7 +5633,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5666,7 +5666,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5695,7 +5695,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5726,7 +5726,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5752,7 +5752,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5786,7 +5786,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5820,7 +5820,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
@@ -5847,7 +5847,7 @@
           },
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field (API searches). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
           },
           "filterable": {
             "type": "boolean",
