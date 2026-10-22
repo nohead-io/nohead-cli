@@ -20,7 +20,8 @@ cd "$installed"
 npm init --yes >/dev/null
 npm install --ignore-scripts --no-audit --no-fund --silent \
   "$packages/nohead-cli-$version.tgz" "$packages/nohead-$version.tgz"
-actual=$(node node_modules/nohead/nohead.js --version)
+# The first word: the SDK it uses follows, in parentheses.
+actual=$(node node_modules/nohead/nohead.js --version | cut -d" " -f1)
 if [ "$actual" != "$version" ]; then
   echo "nohead --version printed $actual, not $version" >&2
   exit 1
