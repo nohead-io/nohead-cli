@@ -3,12 +3,13 @@ import { basename } from "node:path"
 import type { Command } from "commander"
 import mime from "mime"
 
-import type { Asset } from "@nohead/sdk"
+import type { Asset, AssetKind } from "@nohead/sdk"
 import { imageUrl } from "@nohead/sdk/images"
 import type { CommandContext } from "../context.ts"
 import { CliError, ExitCode, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printNotice, printResult, table } from "../output.ts"
+import { printList } from "../pages.ts"
 
 /** The file's type by its extension, for example image/png for cover.png. */
 export function contentTypeFor(path: string): string {
@@ -76,27 +77,55 @@ export function registerAssets(
     .command("list")
     .description("List assets, newest first")
     .option("--deleted", "list deleted assets instead", false)
-    .action(async (options: { deleted: boolean }) => {
-      const ctx = context()
-      const page = await unwrap(
-        (await ctx.project()).assets.list({
+    .option(
+      "--search <words>",
+      "only assets whose filename or alt text has every word"
+    )
+    .option(
+      "--kind <kinds>",
+      `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`
+    )
+    .option("--cursor <cursor>", "continue from a previous page's next_cursor")
+    .option("--all", "follow cursors and return every asset", false)
+    .action(
+      async (options: {
+        deleted: boolean
+        search?: string
+        kind?: string
+        cursor?: string
+        all: boolean
+      }) => {
+        const ctx = context()
+        // Checked first, so a typo fails before any request.
+        const kind =
+          options.kind === undefined ? undefined : kinds(options.kind)
+        const query = {
           limit: 100,
           deleted: options.deleted,
-        })
-      )
-      printResult(ctx, page, () =>
-        table(
-          ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
-          page.data.map((a) => [
-            a.id,
-            a.filename,
-            a.content_type,
-            size(a.byte_size),
-            a.status,
-          ])
+          // An empty search (an unset shell variable) means no search.
+          q: options.search || undefined,
+          kind,
+          cursor: options.cursor,
+        }
+        const api = await ctx.project()
+        await printList(
+          ctx,
+          options.all,
+          () => api.assets.list(query),
+          (items) =>
+            table(
+              ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
+              items.map((a) => [
+                a.id,
+                a.filename,
+                a.content_type,
+                size(a.byte_size),
+                a.status,
+              ])
+            )
         )
-      )
-    })
+      }
+    )
 
   assets
     .command("upload")
@@ -273,6 +302,32 @@ export function registerAssets(
 
 const FITS = ["contain", "cover", "fill"] as const
 const FORMATS = ["webp", "avif", "jpeg", "png"] as const
+const ASSET_KINDS: AssetKind[] = [
+  "image",
+  "video",
+  "audio",
+  "document",
+  "other",
+]
+
+/**
+ * `--kind image,video` as the kinds, checked, so a typo is a usage error.
+ * Empty pieces (`image,`) are skipped.
+ */
+function kinds(value: string): AssetKind[] {
+  const names = value
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean)
+  if (names.length === 0)
+    throw usageError(`--kind takes ${ASSET_KINDS.join(", ")}`)
+  return names.map((name) => {
+    const kind = ASSET_KINDS.find((k) => k === name)
+    if (!kind)
+      throw usageError(`--kind takes ${ASSET_KINDS.join(", ")}, not "${name}"`)
+    return kind
+  })
+}
 
 /**
  * An image's URL with imgproxy's options for these (`imageUrl` from

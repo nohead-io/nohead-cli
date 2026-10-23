@@ -1668,6 +1668,71 @@ describe("assets", () => {
     expect(t.requests).toHaveLength(0)
   })
 
+  it("searches assets and lists them by kind", async () => {
+    let query: URLSearchParams | undefined
+    const t = testRuntime({
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/assets`]: (request) => {
+          query = new URL(request.url).searchParams
+          return contractResponse("assets_list", page([asset("ready")]))
+        },
+      },
+    })
+
+    await t.ok([
+      "assets",
+      "list",
+      "--search",
+      "hero jpg",
+      "--kind",
+      "image,video",
+    ])
+    expect(query?.get("q")).toBe("hero jpg")
+    expect(query?.get("filter[kind][in]")).toBe("image,video")
+    expect(t.out()).toContain(asset().id)
+  })
+
+  it("ends at a page with the next cursor, or follows every page with --all", async () => {
+    const api = () =>
+      testRuntime({
+        routes: {
+          "GET /v1/me": me,
+          [`GET /v1/projects/${PROJECT_ID}/assets`]: (request) =>
+            new URL(request.url).searchParams.get("cursor")
+              ? contractResponse("assets_list", page([asset()]))
+              : contractResponse("assets_list", page([asset()], "next-page")),
+        },
+      })
+    const assetQueries = (t: ReturnType<typeof api>) =>
+      t.requests
+        .filter((r) => r.url.includes("/assets"))
+        .map((r) => new URL(r.url).searchParams)
+
+    const one = api()
+    await one.ok(["assets", "list", "--kind", "image,"])
+    expect(one.out()).toContain("More: --cursor next-page")
+    expect(assetQueries(one)[0].get("filter[kind][in]")).toBe("image")
+
+    const all = api()
+    await all.ok(["--json", "assets", "list", "--all", "--search", ""])
+    expect(all.json().data).toHaveLength(2)
+    const [first, second] = assetQueries(all)
+    expect(first.has("q")).toBe(false)
+    expect(second.get("cursor")).toBe("next-page")
+  })
+
+  it("refuses an unknown kind before calling the API", async () => {
+    const t = testRuntime({ routes: {} })
+    expect(await run(["assets", "list", "--kind", "photo"], t.runtime)).toBe(
+      ExitCode.Usage
+    )
+    expect(t.err()).toContain(
+      '--kind takes image, video, audio, document, other, not "photo"'
+    )
+    expect(t.requests).toHaveLength(0)
+  })
+
   it("uploads a file straight to storage, then completes it", async () => {
     let stored: Uint8Array | undefined
     const t = testRuntime({
