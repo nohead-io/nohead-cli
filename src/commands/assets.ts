@@ -9,6 +9,7 @@ import type { CommandContext } from "../context.ts"
 import { CliError, ExitCode, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printNotice, printResult, table } from "../output.ts"
+import { printList } from "../pages.ts"
 
 /** The file's type by its extension, for example image/png for cover.png. */
 export function contentTypeFor(path: string): string {
@@ -84,30 +85,44 @@ export function registerAssets(
       "--kind <kinds>",
       `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`
     )
+    .option("--cursor <cursor>", "continue from a previous page's next_cursor")
+    .option("--all", "follow cursors and return every asset", false)
     .action(
-      async (options: { deleted: boolean; search?: string; kind?: string }) => {
+      async (options: {
+        deleted: boolean
+        search?: string
+        kind?: string
+        cursor?: string
+        all: boolean
+      }) => {
         const ctx = context()
+        // Checked first, so a typo fails before any request.
         const kind =
           options.kind === undefined ? undefined : kinds(options.kind)
-        const page = await unwrap(
-          (await ctx.project()).assets.list({
-            limit: 100,
-            deleted: options.deleted,
-            q: options.search,
-            kind,
-          })
-        )
-        printResult(ctx, page, () =>
-          table(
-            ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
-            page.data.map((a) => [
-              a.id,
-              a.filename,
-              a.content_type,
-              size(a.byte_size),
-              a.status,
-            ])
-          )
+        const query = {
+          limit: 100,
+          deleted: options.deleted,
+          // An empty search (an unset shell variable) means no search.
+          q: options.search || undefined,
+          kind,
+          cursor: options.cursor,
+        }
+        const api = await ctx.project()
+        await printList(
+          ctx,
+          options.all,
+          () => api.assets.list(query),
+          (items) =>
+            table(
+              ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
+              items.map((a) => [
+                a.id,
+                a.filename,
+                a.content_type,
+                size(a.byte_size),
+                a.status,
+              ])
+            )
         )
       }
     )
@@ -295,11 +310,21 @@ const ASSET_KINDS: AssetKind[] = [
   "other",
 ]
 
-/** `--kind image,video` as the kinds, checked, so a typo is a usage error. */
+/**
+ * `--kind image,video` as the kinds, checked, so a typo is a usage error.
+ * Empty pieces (`image,`) are skipped.
+ */
 function kinds(value: string): AssetKind[] {
-  return value.split(",").map((name) => {
-    const kind = ASSET_KINDS.find((k) => k === name.trim())
-    if (!kind) throw usageError(`--kind takes ${ASSET_KINDS.join(", ")}`)
+  const names = value
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean)
+  if (names.length === 0)
+    throw usageError(`--kind takes ${ASSET_KINDS.join(", ")}`)
+  return names.map((name) => {
+    const kind = ASSET_KINDS.find((k) => k === name)
+    if (!kind)
+      throw usageError(`--kind takes ${ASSET_KINDS.join(", ")}, not "${name}"`)
     return kind
   })
 }
