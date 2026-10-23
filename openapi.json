@@ -9872,7 +9872,7 @@
         }
       },
       "RateLimited": {
-        "description": "Too many requests for this API key or user (or, with failing\ncredentials, this IP address). A published-only key is counted per\nclient IP. Wait `Retry-After` seconds; retries with the same `Idempotency-Key`\nare safe.\n",
+        "description": "Too many requests for this API key or user (or, with failing\ncredentials, this IP address). A published-only key is counted per\nclient IP. Wait `Retry-After` seconds; retries with the same `Idempotency-Key`\nare safe. On the Free plan, an organization's API keys are also\nrefused once its API requests reach the month's limit, with a\n`plan_limit` detail (`field` `api_requests`, `usage` and `limit`),\nuntil the next month (UTC) or an upgrade.\n",
         "headers": {
           "X-Request-Id": {
             "$ref": "#/components/headers/RequestId"
