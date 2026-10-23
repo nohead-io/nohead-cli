@@ -1,6 +1,6 @@
 {
   "name": "nohead",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The Nohead command-line interface (npx nohead); runs @nohead/cli",
   "license": "MIT",
   "homepage": "https://nohead.io",
@@ -24,7 +24,7 @@
     "nohead.js"
   ],
   "dependencies": {
-    "@nohead/cli": "0.1.0"
+    "@nohead/cli": "0.2.0"
   },
   "engines": {
     "node": ">=26"
