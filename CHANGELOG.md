@@ -6,7 +6,7 @@ new commands and options are minor releases; a change that could break your
 scripts (output, exit codes, flags) is a major one. Each release's section is
 its GitHub release's notes.
 
-## Unreleased
+## 0.2.0
 
 - `nohead assets list --search <words>` finds assets whose filename or alt
   text has every word, and `--kind image,video` lists only assets of those
