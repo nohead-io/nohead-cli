@@ -18,7 +18,7 @@ nohead fields add testimonials quote --type long-text --required
 nohead fields add testimonials avatar --type asset
 
 nohead records create testimonials --set name=Ada --set "quote=Great platform"
-nohead records update rec_... --set company=Analytical --if-revision 1
+nohead records update rec_... --set company=Analytical --if-revision 1 --note "Add the company"
 nohead records history rec_...
 nohead records revert rec_... 1 --dry-run
 ```
