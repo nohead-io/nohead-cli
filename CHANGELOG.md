@@ -3,8 +3,9 @@
 Changes to the `nohead` CLI (`@nohead/cli`, and `nohead`, which runs it) that
 you can notice. Versions follow [Semantic Versioning](https://semver.org):
 new commands and options are minor releases; a change that could break your
-scripts (output, exit codes, flags) is a major one. Each release's section is
-its GitHub release's notes.
+scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
+may also break scripts, and its notes mark each such change **Breaking**. Each
+release's section is its GitHub release's notes.
 
 ## 0.2.0
 
