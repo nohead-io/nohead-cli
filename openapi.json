@@ -9283,7 +9283,7 @@
               "null"
             ],
             "format": "uri",
-            "description": "The URL that plays a ready video or audio file inline, for\n`<video>` and `<audio>` (with range requests, so players can seek),\ndeleted ones included until they are purged; null for other types.\nOpen, never expiring and cached on a CDN, like `file_url`.\n",
+            "description": "The URL that plays a ready video or audio file inline, for\n`<video>` and `<audio>` (with range requests, so players can seek),\ndeleted ones included until they are purged: MP4, QuickTime, M4A,\n3GP, WebM, Matroska, MP3, AAC, FLAC, WAV and Ogg (whose content is\nchecked when the upload completes). Null for other types, which\n`file_url` downloads.\nOpen, never expiring and cached on a CDN, like `file_url`.\n",
             "examples": [
               "https://media.nohead.io/0199f5c2-7b1e-7c3a-9d4f-2a6b8c0e1f3d/0199f5c2-8a2d-7e4b-b1c3-5d7e9f1a2b4c"
             ]
