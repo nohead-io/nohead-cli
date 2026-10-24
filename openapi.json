@@ -3156,51 +3156,6 @@
         }
       }
     },
-    "/v1/assets/{asset_id}/download-url": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/AssetId"
-        }
-      ],
-      "get": {
-        "operationId": "assets_download_url",
-        "summary": "Get a download URL",
-        "description": "A short-lived URL (2 minutes) that downloads the original file under its\nfilename: ask for it when the download starts, not ahead of time. A\ndownload that has started finishes however long it takes. `409` with\ndetail code `upload_incomplete` for an upload not yet completed, and\n`deleted` for a deleted asset.\n",
-        "tags": [
-          "assets"
-        ],
-        "responses": {
-          "200": {
-            "description": "The download URL.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadUrl"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          }
-        }
-      }
-    },
     "/v1/assets/{asset_id}/usage": {
       "parameters": [
         {
@@ -9222,6 +9177,8 @@
           "purge_after",
           "image_url",
           "preview_url",
+          "file_url",
+          "media_url",
           "uploaded_at",
           "created_at",
           "updated_at"
@@ -9309,6 +9266,28 @@
             "format": "uri",
             "description": "The URL of a small rendition (fits in 640×640, WebP), for ready images and SVGs (rasterized; SVGs have no `image_url`), deleted ones included until they are purged; null otherwise."
           },
+          "file_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "The URL of the file as uploaded, for ready assets of any type,\ndeleted ones included until they are purged; null otherwise. It\ndownloads the file under its `filename` (a rename applies within a\nminute or so), is open and never expires, and is cached on a CDN.\n",
+            "examples": [
+              "https://files.nohead.io/0199f5c2-7b1e-7c3a-9d4f-2a6b8c0e1f3d/0199f5c2-8a2d-7e4b-b1c3-5d7e9f1a2b4c"
+            ]
+          },
+          "media_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "The URL that plays a ready video or audio file inline, for\n`<video>` and `<audio>` (with range requests, so players can seek),\ndeleted ones included until they are purged; null for other types.\nOpen, never expiring and cached on a CDN, like `file_url`.\n",
+            "examples": [
+              "https://media.nohead.io/0199f5c2-7b1e-7c3a-9d4f-2a6b8c0e1f3d/0199f5c2-8a2d-7e4b-b1c3-5d7e9f1a2b4c"
+            ]
+          },
           "uploaded_at": {
             "$ref": "#/components/schemas/NullableTimestamp"
           },
@@ -9391,31 +9370,6 @@
                 }
               }
             }
-          }
-        }
-      },
-      "DownloadUrl": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "object",
-          "asset_id",
-          "url",
-          "expires_at"
-        ],
-        "properties": {
-          "object": {
-            "const": "download_url"
-          },
-          "asset_id": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string",
-            "format": "uri"
-          },
-          "expires_at": {
-            "$ref": "#/components/schemas/Timestamp"
           }
         }
       },

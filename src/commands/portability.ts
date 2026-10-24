@@ -89,9 +89,14 @@ function withoutAliases<T extends { data: RecordData }>(
   }
 }
 
-async function allAssets(ctx: CommandContext): Promise<Asset[]> {
+/** The project's assets that have a file: uploads completed. */
+async function allAssets(
+  ctx: CommandContext
+): Promise<(Asset & { file_url: string })[]> {
   const all = await unwrapAll((await ctx.project()).assets.list({ limit: 100 }))
-  return all.filter((asset) => asset.status === "ready")
+  return all.filter(
+    (asset): asset is Asset & { file_url: string } => asset.file_url !== null
+  )
 }
 
 /**
@@ -270,7 +275,7 @@ export function registerPortability(
         }
 
         // Keys without assets:read still export schema and records.
-        let assets: Asset[] = []
+        let assets: Awaited<ReturnType<typeof allAssets>> = []
         try {
           assets = await allAssets(ctx)
         } catch (error) {
@@ -286,8 +291,9 @@ export function registerPortability(
         )
         if (options.includeFiles) {
           for (const asset of assets) {
-            const link = await unwrap(ctx.api.assets.downloadUrl(asset.id))
-            const response = await ctx.runtime.fetch(new Request(link.url))
+            const response = await ctx.runtime.fetch(
+              new Request(asset.file_url)
+            )
             if (!response.ok)
               throw new CliError(ExitCode.ApiError, {
                 type: "download_failed",

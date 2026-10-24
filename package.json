@@ -40,7 +40,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@nohead/sdk": "^0.7.0",
+    "@nohead/sdk": "^0.8.0",
     "@sindresorhus/slugify": "^3.0.1",
     "commander": "^15.0.0",
     "mime": "^4.1.1",
