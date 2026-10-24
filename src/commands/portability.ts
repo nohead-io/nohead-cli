@@ -285,9 +285,13 @@ export function registerPortability(
           toJsonLines(assets)
         )
         if (options.includeFiles) {
+          let files = 0
           for (const asset of assets) {
-            const link = await unwrap(ctx.api.assets.downloadUrl(asset.id))
-            const response = await ctx.runtime.fetch(new Request(link.url))
+            // An upload never completed has no file to export.
+            if (!asset.file_url) continue
+            const response = await ctx.runtime.fetch(
+              new Request(asset.file_url)
+            )
             if (!response.ok)
               throw new CliError(ExitCode.ApiError, {
                 type: "download_failed",
@@ -301,8 +305,9 @@ export function registerPortability(
               ),
               new Uint8Array(await response.arrayBuffer())
             )
+            files++
           }
-          printNotice(ctx, `Exported ${assets.length} files`)
+          printNotice(ctx, `Exported ${files} files`)
         }
 
         const manifest: Manifest = {

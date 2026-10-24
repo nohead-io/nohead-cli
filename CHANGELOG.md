@@ -7,6 +7,14 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `nohead assets download` and `nohead export --include-files` fetch files
+  from the asset's `file_url` (the API's download links are gone), on
+  `@nohead/sdk` 0.8.0. An asset whose upload was never completed has no file:
+  `assets download` exits 1 with `not_uploaded`, and `export --include-files`
+  skips it, counting only the files it saved.
+
 ## 0.2.0
 
 - `nohead assets list --search <words>` finds assets whose filename or alt

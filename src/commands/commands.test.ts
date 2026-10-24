@@ -1803,19 +1803,28 @@ describe("assets", () => {
       routes: {
         "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
           contractResponse("assets_get", dotfile),
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/download-url": () =>
-          contractResponse("assets_download_url", {
-            object: "download_url",
-            asset_id: dotfile.id,
-            url: "https://storage.test/original",
-            expires_at: NOW,
-          }),
         "GET /original": () => new Response(new Uint8Array([1])),
       },
     })
 
     await t.ok(["assets", "download", dotfile.id])
     expect(Object.keys(t.written)).toEqual([`${dotfile.id}.pnpmfile.cjs`])
+  })
+
+  it("has nothing to download for an upload never completed", async () => {
+    const pending = asset("pending")
+    const t = testRuntime({
+      routes: {
+        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+          contractResponse("assets_get", pending),
+      },
+    })
+
+    expect(
+      await run(["--json", "assets", "download", pending.id], t.runtime)
+    ).toBe(ExitCode.ApiError)
+    expect(JSON.parse(t.err()).error.type).toBe("not_uploaded")
+    expect(t.written).toEqual({})
   })
 
   it("never replaces an existing file without --force, and prints names without escape codes", async () => {
@@ -1831,13 +1840,6 @@ describe("assets", () => {
             contractResponse("assets_get", {
               ...named,
               filename: "cover]0;pwned.png",
-            }),
-          "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/download-url": () =>
-            contractResponse("assets_download_url", {
-              object: "download_url",
-              asset_id: named.id,
-              url: "https://storage.test/original",
-              expires_at: NOW,
             }),
           "GET /original": () => new Response(new Uint8Array([1, 2, 3])),
         },

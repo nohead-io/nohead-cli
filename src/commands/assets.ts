@@ -240,8 +240,14 @@ export function registerAssets(
       async (id: string, options: { output?: string; force?: boolean }) => {
         const ctx = context()
         const asset = await unwrap(ctx.api.assets.get(id))
-        const link = await unwrap(ctx.api.assets.downloadUrl(id))
-        const response = await ctx.runtime.fetch(new Request(link.url))
+        // The file as uploaded, under the asset's file_url; none until the
+        // upload is completed.
+        if (!asset.file_url)
+          throw new CliError(ExitCode.ApiError, {
+            type: "not_uploaded",
+            message: `Asset ${asset.id} has no file yet: its upload was never completed`,
+          })
+        const response = await ctx.runtime.fetch(new Request(asset.file_url))
         if (!response.ok)
           throw new CliError(ExitCode.ApiError, {
             type: "download_failed",

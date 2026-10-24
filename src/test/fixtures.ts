@@ -144,6 +144,8 @@ export function asset(status: "pending" | "ready" = "ready") {
     purge_after: null,
     image_url: null,
     preview_url: null,
+    file_url: status === "ready" ? "https://storage.test/original" : null,
+    media_url: null,
     uploaded_at: status === "ready" ? NOW : null,
     created_at: NOW,
     updated_at: NOW,
