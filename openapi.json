@@ -2888,7 +2888,7 @@
       "post": {
         "operationId": "assets_upload",
         "summary": "Start an upload",
-        "description": "Step 1 of uploading a file. Returns the pending asset with its `upload`:\nsend the file's bytes with `upload.method` to `upload.url`, with\n`upload.headers`, before `upload.expires_at`. The bytes go directly to\nstorage, not through this API. Then call\n`POST /v1/assets/{asset_id}/complete`.\n\n`content_type` and `byte_size` must be the file's; storage refuses another\ncontent type and completion refuses another size.\n\nThe file counts toward the organization's storage from here on, while it\nuploads too. On plans where storage is a hard limit (Free), a file that\nwould go over it is refused with `402 plan_limit_exceeded`; on others,\n`Nohead-Usage-Warning` reports going over.\n\nA project can have at most 100 uploads in progress (started within the\nupload's lifetime, not yet completed or deleted); past that, `409` with\n`too_many_uploads`. Uploads never completed are removed after a day.\n",
+        "description": "Step 1 of uploading a file. Returns the pending asset with its `upload`:\nsend the file's bytes with `upload.method` to `upload.url`, with\n`upload.headers`, before `upload.expires_at`. The bytes go directly to\nstorage, not through this API. Then call\n`POST /v1/assets/{asset_id}/complete`.\n\n`content_type` and `byte_size` must be the file's; storage refuses another\ncontent type and completion refuses another size. A file larger than the\nplan allows (10 MB on Free, 100 MB on paid plans) is refused with\n`402 plan_limit_exceeded`, whose details give its size (`usage`) and\nthe limit (`limit`) for `byte_size`.\n\nThe file counts toward the organization's storage from here on, while it\nuploads too. On plans where storage is a hard limit (Free), a file that\nwould go over it is refused with `402 plan_limit_exceeded`; on others,\n`Nohead-Usage-Warning` reports going over.\n\nA project can have at most 100 uploads in progress (started within the\nupload's lifetime, not yet completed or deleted); past that, `409` with\n`too_many_uploads`. Uploads never completed are removed after a day.\n",
         "tags": [
           "assets"
         ],
@@ -9441,7 +9441,7 @@
           "byte_size": {
             "type": "integer",
             "minimum": 1,
-            "description": "Exact size of the file in bytes (at most 100 MB by default)."
+            "description": "Exact size of the file in bytes, at most the plan's largest upload (10 MB on Free, 100 MB on paid plans)."
           }
         }
       },
