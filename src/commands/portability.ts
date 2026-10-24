@@ -89,9 +89,14 @@ function withoutAliases<T extends { data: RecordData }>(
   }
 }
 
-async function allAssets(ctx: CommandContext): Promise<Asset[]> {
+/** The project's assets that have a file: uploads completed. */
+async function allAssets(
+  ctx: CommandContext
+): Promise<(Asset & { file_url: string })[]> {
   const all = await unwrapAll((await ctx.project()).assets.list({ limit: 100 }))
-  return all.filter((asset) => asset.status === "ready")
+  return all.filter(
+    (asset): asset is Asset & { file_url: string } => asset.file_url !== null
+  )
 }
 
 /**
@@ -270,7 +275,7 @@ export function registerPortability(
         }
 
         // Keys without assets:read still export schema and records.
-        let assets: Asset[] = []
+        let assets: Awaited<ReturnType<typeof allAssets>> = []
         try {
           assets = await allAssets(ctx)
         } catch (error) {
@@ -285,10 +290,7 @@ export function registerPortability(
           toJsonLines(assets)
         )
         if (options.includeFiles) {
-          let files = 0
           for (const asset of assets) {
-            // An upload never completed has no file to export.
-            if (!asset.file_url) continue
             const response = await ctx.runtime.fetch(
               new Request(asset.file_url)
             )
@@ -305,9 +307,8 @@ export function registerPortability(
               ),
               new Uint8Array(await response.arrayBuffer())
             )
-            files++
           }
-          printNotice(ctx, `Exported ${files} files`)
+          printNotice(ctx, `Exported ${assets.length} files`)
         }
 
         const manifest: Manifest = {

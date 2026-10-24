@@ -11,9 +11,10 @@ release's section is its GitHub release's notes.
 
 - `nohead assets download` and `nohead export --include-files` fetch files
   from the asset's `file_url` (the API's download links are gone), on
-  `@nohead/sdk` 0.8.0. An asset whose upload was never completed has no file:
-  `assets download` exits 1 with `not_uploaded`, and `export --include-files`
-  skips it, counting only the files it saved.
+  `@nohead/sdk` 0.8.0. **Breaking:** `assets download` now saves a deleted
+  asset's file too, until it is purged (it was refused with `deleted`); an
+  asset whose upload was never completed has no file, and exits 1 with
+  `not_uploaded`.
 
 ## 0.2.0
 
