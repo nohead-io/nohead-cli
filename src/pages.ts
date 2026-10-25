@@ -15,34 +15,38 @@ export interface PageOptions {
 
 /**
  * Adds a list command's paging options: `--limit` (the page size, 100 unless
- * the command gives another default), `--cursor` and `--all` (which follows
+ * the command shows fewer by default), `--cursor` and `--all` (which follows
  * cursors and returns every one of `items`).
  */
 export function withPaging(
   command: Command,
   items: string,
-  defaultLimit?: number
+  defaultLimit = 100
 ): Command {
   return command
-    .option(
-      "--limit <n>",
-      "page size (1-100)",
-      defaultLimit === undefined ? undefined : String(defaultLimit)
-    )
+    .option("--limit <n>", `page size (1-100, default ${defaultLimit})`)
     .option("--cursor <cursor>", "continue from a previous page's next_cursor")
     .option("--all", `follow cursors and return every ${items}`, false)
 }
 
-/** The list query for the paging options: 100 to a page unless --limit. */
-export function pageQuery(options: Omit<PageOptions, "all">): {
+/**
+ * The list query for the paging options: `defaultLimit` to a page unless
+ * --limit, and always 100 with --all, which reads every page anyway.
+ */
+export function pageQuery(
+  options: Omit<PageOptions, "all"> & { all?: boolean },
+  defaultLimit = 100
+): {
   limit: number
   cursor?: string
 } {
   return {
     limit:
-      options.limit === undefined
-        ? 100
-        : positiveInteger(options.limit, "--limit"),
+      options.limit !== undefined
+        ? positiveInteger(options.limit, "--limit")
+        : options.all
+          ? 100
+          : defaultLimit,
     ...(options.cursor ? { cursor: options.cursor } : {}),
   }
 }

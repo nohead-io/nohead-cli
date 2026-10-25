@@ -246,23 +246,22 @@ export function registerRecords(
       .option(
         "--sort <sort>",
         "created_at, updated_at, published_at, id or a field; prefix - for descending"
+      )
+      .option(
+        "--expand <fields>",
+        "relation fields whose records to embed (comma-separated)"
       ),
     "record"
-  )
-    .option(
-      "--expand <fields>",
-      "relation fields whose records to embed (comma-separated)"
+  ).action(async (collection: string, options: ListOptions) => {
+    const ctx = context()
+    const query = listQuery(options)
+    await printList(
+      ctx,
+      options.all,
+      () => ctx.api.records.list(collection, query),
+      recordTable
     )
-    .action(async (collection: string, options: ListOptions) => {
-      const ctx = context()
-      const query = listQuery(options)
-      await printList(
-        ctx,
-        options.all,
-        () => ctx.api.records.list(collection, query),
-        recordTable
-      )
-    })
+  })
 
   withDataFlags(
     records

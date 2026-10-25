@@ -3108,15 +3108,20 @@ describe("paged lists", () => {
         null,
         "next-page",
       ])
+      // Every page is read anyway, so as few requests as can be.
+      expect(lists(all).map((q) => q.get("limit"))).toEqual(["100", "100"])
     }
   )
 
-  it("refuses a --limit that is not a positive integer before calling the API", async () => {
-    const t = testRuntime({ routes: {} })
-    expect(await run(["audit", "--limit", "ten"], t.runtime)).toBe(
-      ExitCode.Usage
-    )
-    expect(t.err()).toContain("--limit must be a positive integer")
-    expect(t.requests).toHaveLength(0)
-  })
+  it.each([["audit"], ["search", "shoes"]])(
+    "%s refuses a --limit that is not a positive integer before calling the API",
+    async (...argv) => {
+      const t = testRuntime({ routes: {} })
+      expect(await run([...argv, "--limit", "ten"], t.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(t.err()).toContain("--limit must be a positive integer")
+      expect(t.requests).toHaveLength(0)
+    }
+  )
 })

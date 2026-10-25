@@ -4,6 +4,9 @@ import type { CommandContext } from "../context.ts"
 import { table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
+// A screenful by default; --limit and --all read more.
+const AUDIT_PAGE = 20
+
 export function registerAudit(program: Command, context: () => CommandContext) {
   withPaging(
     program
@@ -17,7 +20,7 @@ export function registerAudit(program: Command, context: () => CommandContext) {
       .option("--since <time>", "only events at or after this ISO 8601 time")
       .option("--until <time>", "only events before this ISO 8601 time"),
     "event",
-    20
+    AUDIT_PAGE
   ).action(
     async (
       options: PageOptions & {
@@ -30,7 +33,7 @@ export function registerAudit(program: Command, context: () => CommandContext) {
     ) => {
       const ctx = context()
       const query = {
-        ...pageQuery(options),
+        ...pageQuery(options, AUDIT_PAGE),
         filter: {
           type: options.type,
           resource_id: options.resource,

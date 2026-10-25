@@ -15,8 +15,9 @@ release's section is its GitHub release's notes.
   saying there were more. Like `records list`, they now end with
   `More: --cursor <cursor>` when there are, and take `--limit`, `--cursor`
   and `--all` (every page). `records history` takes `--all` too, and
-  `assets list` takes `--limit`. A `--limit` that is not a positive integer
-  is refused before any request.
+  `assets list` takes `--limit`. `--all` reads 100 to a page whatever the
+  command's default page size. A `--limit` that is not a positive integer
+  is refused before any request, by `search` too.
 - Commands that take a field key (`fields update`, `fields delete`,
   `fields restore`, `fields migrate`) find a field in a collection with
   more than 100 fields; they looked in the first 100 only.
