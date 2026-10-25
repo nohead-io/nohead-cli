@@ -67,6 +67,44 @@ describe("nohead health", () => {
     ).toBe(ExitCode.ApiError)
     expect(JSON.parse(json.err())).toEqual({ error })
   })
+
+  it("lists an API error's details, and --json prints the error as the API sent it", async () => {
+    const error = {
+      type: "validation_error",
+      message: "Record validation failed",
+      request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+      details: [
+        { field: "title", code: "required", message: "can't be blank" },
+        {
+          code: "plan_limit",
+          message: "Plan limit reached",
+          usage: 9,
+          limit: 9,
+        },
+      ],
+    }
+    const routes = {
+      "POST /v1/collections/posts/records": () =>
+        contractResponse("records_create", { error }, { status: 422 }),
+    }
+    const argv = ["records", "create", "posts", "--set", "title="]
+
+    const t = testRuntime({ routes })
+    expect(await run(argv, t.runtime)).toBe(ExitCode.ApiError)
+    expect(t.err()).toBe(
+      [
+        "Error: Record validation failed",
+        "  - title: can't be blank",
+        "  - Plan limit reached",
+        "Request ID: req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+        "",
+      ].join("\n")
+    )
+
+    const json = testRuntime({ routes })
+    expect(await run(["--json", ...argv], json.runtime)).toBe(ExitCode.ApiError)
+    expect(json.err()).toBe(`${JSON.stringify({ error }, null, 2)}\n`)
+  })
 })
 
 describe("usage", () => {

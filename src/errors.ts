@@ -36,19 +36,6 @@ export class CliError extends Error {
   }
 }
 
-function isErrorEnvelope(value: unknown): value is { error: ErrorBody } {
-  if (typeof value !== "object" || value === null || !("error" in value)) {
-    return false
-  }
-  const error = value.error
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    typeof (error as ErrorBody).type === "string" &&
-    typeof (error as ErrorBody).message === "string"
-  )
-}
-
 /** Awaits an SDK call, turning its errors into CliErrors. */
 export async function unwrap<T>(call: PromiseLike<T>): Promise<T> {
   try {
@@ -84,12 +71,19 @@ export async function unwrapFind<T>(
 
 function cliError(error: unknown): unknown {
   if (error instanceof APIError) {
-    if (isErrorEnvelope(error.body)) {
-      return new CliError(ExitCode.ApiError, error.body.error)
-    }
+    // The SDK reads the error envelope: a type means the body was one.
+    if (error.type === undefined)
+      return new CliError(ExitCode.ApiError, {
+        type: "internal_error",
+        message: `Unexpected API response (HTTP ${error.status})`,
+      })
+    // As the API sends it: in this order, details only when there are some.
+    const { type, message, requestId, details } = error
     return new CliError(ExitCode.ApiError, {
-      type: "internal_error",
-      message: `Unexpected API response (HTTP ${error.status})`,
+      type,
+      message,
+      request_id: requestId,
+      ...(details.length > 0 && { details }),
     })
   }
   // Storage could not be reached (the cause), or refused the bytes.
