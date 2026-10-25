@@ -56,6 +56,8 @@ function buildProgram(runtime: Runtime, config: ConfigFile) {
       "--idempotency-key <key>",
       "makes retrying a mutation safe: the same key and request return the first result"
     )
+    // Subcommands copy these settings when .command() makes them, so they
+    // are set before any command is registered.
     .showHelpAfterError()
     .exitOverride()
     .configureOutput({
@@ -81,17 +83,6 @@ function buildProgram(runtime: Runtime, config: ConfigFile) {
   registerWebhooks(program, context)
   registerAudit(program, context)
   registerPortability(program, context)
-
-  // Subcommands inherit the parent's error handling and output streams.
-  const propagate = (command: Command) => {
-    for (const sub of command.commands) {
-      sub
-        .exitOverride()
-        .configureOutput({ writeOut: runtime.stdout, writeErr: runtime.stderr })
-      propagate(sub)
-    }
-  }
-  propagate(program)
 
   return program
 }
