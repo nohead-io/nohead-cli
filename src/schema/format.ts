@@ -2,7 +2,7 @@ import { parse, stringify } from "yaml"
 
 import type { Collection } from "@nohead/sdk"
 import { isFieldType, type FieldType } from "../field-types.ts"
-import { usageError } from "../input.ts"
+import { isObject, usageError } from "../input.ts"
 import { escapeC1 } from "../output.ts"
 
 /**
@@ -159,9 +159,6 @@ export function toYaml(collections: CollectionSpec[]): string {
     escapeC1(stringify(document, { lineWidth: 0 })),
   ].join("\n")
 }
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 function unknownKeys(
   value: Record<string, unknown>,

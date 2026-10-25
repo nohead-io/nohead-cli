@@ -16,7 +16,14 @@ import type {
   ScheduledChange,
 } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
-import { CliError, ExitCode, unwrap, type ErrorBody } from "../errors.ts"
+import {
+  CliError,
+  ExitCode,
+  isForbidden,
+  itemError,
+  unwrap,
+  type ErrorBody,
+} from "../errors.ts"
 import {
   collect,
   ifRevisionOption,
@@ -369,11 +376,7 @@ export function registerRecords(
         unwrap(ctx.api.records.get(id, { expand: options.expand?.split(",") })),
         // Published-only keys may not read schedules: show the record.
         scheduleOf(ctx, id).catch((error: unknown) => {
-          if (
-            error instanceof CliError &&
-            error.body.type === "authorization_error"
-          )
-            return null
+          if (isForbidden(error)) return null
           throw error
         }),
       ])
@@ -809,12 +812,7 @@ export function registerRecords(
             }
             created.push(record.id)
           } catch (error) {
-            if (
-              !(error instanceof CliError) ||
-              error.exitCode === ExitCode.Network
-            )
-              throw error
-            failed.push({ line: index + 1, error: error.body })
+            failed.push({ line: index + 1, error: itemError(error) })
           }
         }
 

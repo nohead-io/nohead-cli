@@ -36,6 +36,10 @@ export function parseSet(pairs: string[]): Record<string, unknown> {
   return result
 }
 
+/** A JSON object or YAML mapping: not null, not an array. */
+export const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
 export function parseJsonObject(
   text: string,
   source: string
@@ -46,10 +50,8 @@ export function parseJsonObject(
   } catch {
     throw usageError(`${source} is not valid JSON`)
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw usageError(`${source} must be a JSON object`)
-  }
-  return value as Record<string, unknown>
+  if (!isObject(value)) throw usageError(`${source} must be a JSON object`)
+  return value
 }
 
 export async function readSource(

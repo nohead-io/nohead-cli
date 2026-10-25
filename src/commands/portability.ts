@@ -10,8 +10,15 @@ import type {
   RecordRevisionDetail,
 } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
-import { CliError, ExitCode, unwrap, type ErrorBody } from "../errors.ts"
-import { parseJsonObject, readSource, usageError } from "../input.ts"
+import {
+  CliError,
+  ExitCode,
+  isForbidden,
+  itemError,
+  unwrap,
+  type ErrorBody,
+} from "../errors.ts"
+import { isObject, parseJsonObject, readSource } from "../input.ts"
 import { printNotice, printResult, toJson, toJsonLines } from "../output.ts"
 import {
   fromCollections,
@@ -96,31 +103,32 @@ async function allAssets(
 }
 
 /**
- * The exported files' metadata (with --include-files), checked before
- * anything is imported. An ID names a file in the export, so anything but an
- * asset ID could reach outside it ("../../.ssh/id_ed25519").
+ * The exported files' metadata (with --include-files). An ID names a file in
+ * the export, so anything but an asset ID could reach outside it
+ * ("../../.ssh/id_ed25519").
  */
 async function readExportedAssets(
   ctx: CommandContext,
   dir: string,
-  manifest: Manifest
+  manifest: Manifest,
+  problems: string[]
 ): Promise<Asset[]> {
   if (!manifest.include_files) return []
-
-  const lines = (await readSource(ctx.runtime, join(dir, "assets.jsonl")))
-    .split("\n")
-    .filter((l) => l.trim())
-  return lines.map((line, index) => {
-    const asset = parseJsonObject(
-      line,
-      `assets.jsonl line ${index + 1}`
-    ) as unknown as Asset
-    if (typeof asset.id !== "string" || !ASSET_ID.test(asset.id))
-      throw usageError(
-        `assets.jsonl line ${index + 1}: ${toJson(asset.id)} is not an asset ID`
-      )
-    return asset
-  })
+  const file = "assets.jsonl"
+  let text: string
+  try {
+    text = await readSource(ctx.runtime, join(dir, file))
+  } catch {
+    problems.push(`${file} is missing`)
+    return []
+  }
+  return readLines<Asset>(
+    text,
+    file,
+    "an asset (its id is not an asset ID)",
+    (item) => typeof item.id === "string" && ASSET_ID.test(item.id),
+    problems
+  )
 }
 
 /** Re-uploads exported files; old asset ID -> new. */
@@ -247,11 +255,7 @@ export function registerPortability(
                 )
               )
             } catch (error) {
-              if (
-                !(error instanceof CliError) ||
-                error.body.type !== "authorization_error"
-              )
-                throw error
+              if (!isForbidden(error)) throw error
               draftsReadable = false
               printNotice(ctx, `Skipped drafts: ${error.body.message}`)
             }
@@ -277,10 +281,7 @@ export function registerPortability(
         try {
           assets = await allAssets(ctx)
         } catch (error) {
-          const forbidden =
-            error instanceof CliError &&
-            error.body.type === "authorization_error"
-          if (!forbidden || options.includeFiles) throw error
+          if (!isForbidden(error) || options.includeFiles) throw error
           printNotice(ctx, `Skipped assets: ${error.body.message}`)
         }
         await ctx.runtime.writeFile(
@@ -310,7 +311,7 @@ export function registerPortability(
         const manifest: Manifest = {
           format: "nohead-export",
           version: 1,
-          exported_at: new Date().toISOString(),
+          exported_at: ctx.runtime.now().toISOString(),
           api_url: ctx.baseUrl,
           project_id: await ctx.projectId(),
           include_history: options.includeHistory,
@@ -357,8 +358,7 @@ export function registerPortability(
       )
       // Everything is read and checked before anything is written, so a
       // broken file never leaves a half-imported project.
-      const exported = await readExportedContent(ctx, dir, manifest, desired)
-      const assets = await readExportedAssets(ctx, dir, manifest)
+      const { exported, assets } = await readExport(ctx, dir, manifest, desired)
       const remote = await remoteCollections(ctx)
       const changes = applicable(
         planChanges(desired, fromCollections(remote), remote)
@@ -444,20 +444,19 @@ function readLines<T>(
   return items
 }
 
-const isObject = (value: unknown) => typeof value === "object" && value !== null
-
 /**
- * Reads every exported record and draft and checks the export is complete
- * and consistent: each collection is in the schema, each file parses, each
- * line is a record (an ID and data) or a draft (also its record and changed
- * fields), and the counts match the manifest.
+ * Reads every exported record, draft and file's metadata and checks the
+ * export is complete and consistent: each collection is in the schema, each
+ * file parses, each line is a record (an ID and data), a draft (also its
+ * record and changed fields) or an asset (an asset ID), and the counts match
+ * the manifest.
  */
-async function readExportedContent(
+async function readExport(
   ctx: CommandContext,
   dir: string,
   manifest: Manifest,
   schema: CollectionSpec[]
-): Promise<ExportedContent> {
+): Promise<{ exported: ExportedContent; assets: Asset[] }> {
   const problems: string[] = []
   const exported: ExportedContent = new Map()
   for (const {
@@ -528,6 +527,7 @@ async function readExportedContent(
     }
     exported.set(slug, { records, drafts })
   }
+  const assets = await readExportedAssets(ctx, dir, manifest, problems)
   if (problems.length > 0)
     throw new CliError(ExitCode.Usage, {
       type: "invalid_request",
@@ -536,7 +536,7 @@ async function readExportedContent(
         .slice(0, 20)
         .map((message) => ({ code: "invalid_export", message })),
     })
-  return exported
+  return { exported, assets }
 }
 
 /** A collection's fields by what import does to their values. */
@@ -647,9 +647,7 @@ async function importContent(
       await action()
       return true
     } catch (error) {
-      if (!(error instanceof CliError) || error.exitCode === ExitCode.Network)
-        throw error
-      failed.push({ collection, record: item, error: error.body })
+      failed.push({ collection, record: item, error: itemError(error) })
       return false
     }
   }

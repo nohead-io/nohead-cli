@@ -46,6 +46,22 @@ export async function unwrap<T>(call: PromiseLike<T>): Promise<T> {
   }
 }
 
+/** The API key may not do this (authorization_error); some commands go on without it. */
+export function isForbidden(error: unknown): error is CliError {
+  return error instanceof CliError && error.body.type === "authorization_error"
+}
+
+/**
+ * The error of one item among many (a line or record being imported), to
+ * report with the others and go on. Anything else stops the command: an
+ * API that cannot be reached, or a bug.
+ */
+export function itemError(error: unknown): ErrorBody {
+  if (!(error instanceof CliError) || error.exitCode === ExitCode.Network)
+    throw error
+  return error.body
+}
+
 /** The first item of an SDK list that matches, reading pages until it does. */
 export async function unwrapFind<T>(
   items: AsyncIterable<T>,

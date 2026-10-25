@@ -2804,7 +2804,10 @@ describe("export", () => {
     expect(
       Array.from(t.written[`out/assets/${asset().id}`] as Uint8Array)
     ).toEqual([1, 2, 3])
-    expect(JSON.parse(t.text("out/manifest.json")).assets).toBe(1)
+    expect(JSON.parse(t.text("out/manifest.json"))).toMatchObject({
+      exported_at: NOW,
+      assets: 1,
+    })
   })
 
   it("exports without drafts for a key that can't read them", async () => {
@@ -2962,7 +2965,7 @@ describe("import", () => {
 
     expect(await run(["import", "out"], t.runtime)).toBe(ExitCode.Usage)
     expect(t.err()).toContain(
-      'assets.jsonl line 1: "../../.ssh/id_ed25519" is not an asset ID'
+      "assets.jsonl line 1 is not an asset (its id is not an asset ID)"
     )
     expect(t.requests).toHaveLength(0)
   })

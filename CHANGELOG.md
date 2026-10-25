@@ -54,6 +54,10 @@ release's section is its GitHub release's notes.
   `--width`, `--height` and `--quality` (which read the asset first). An
   empty `--if-revision ""` is refused as not a positive integer; it was
   ignored, so the write went ahead unguarded.
+- `import` checks `assets.jsonl` (with `--include-files` exports) along
+  with the records and drafts, and lists its problems (a line without an
+  asset ID, the file missing) in the same `incomplete or damaged` error
+  instead of stopping at the first.
 
 ## 0.3.0
 
