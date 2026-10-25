@@ -227,16 +227,19 @@ describe("fields", () => {
     expect((await body(rich.requests[0])).type).toBe("rich_text")
   })
 
-  it("rejects unknown field types before calling the API", async () => {
-    const t = testRuntime()
-
-    expect(
-      await run(
-        ["fields", "add", "posts", "size", "--type", "float"],
-        t.runtime
+  it("rejects unknown field types and numbers before calling the API", async () => {
+    for (const [args, message] of [
+      [["add", "posts", "size", "--type", "float"], "Unknown field type"],
+      [["migrate", "posts", "size", "--type", "float"], "Unknown field type"],
+      [["update", "posts", "size", "--max", "ten"], "--max must be a number"],
+    ] as const) {
+      const t = testRuntime()
+      expect(await run(["fields", ...args], t.runtime), args.join(" ")).toBe(
+        ExitCode.Usage
       )
-    ).toBe(ExitCode.Usage)
-    expect(t.err()).toContain("Unknown field type")
+      expect(t.err()).toContain(message)
+      expect(t.requests).toHaveLength(0)
+    }
   })
 
   it("updates a field by API key, merging configuration", async () => {
@@ -927,6 +930,26 @@ describe("records", () => {
 
     await t.ok(["records", "diff", REC_A, "--from", "1", "--to", "2"])
     expect(t.out()).toContain("title (changed): Helo → Hello")
+  })
+
+  it("refuses revision numbers that are not positive integers before calling the API", async () => {
+    for (const [args, message] of [
+      [["diff", REC_A, "--from", "one", "--to", "2"], "--from"],
+      [["revision", REC_A, "0"], "<revision>"],
+      [["revert", REC_A, "1.5"], "<revision>"],
+      [["publish", REC_A, "--if-revision", ""], "--if-revision"],
+    ] as const) {
+      const t = testRuntime()
+      expect(
+        await run(["--json", "records", ...args], t.runtime),
+        args.join(" ")
+      ).toBe(ExitCode.Usage)
+      expect(JSON.parse(t.err()).error).toEqual({
+        type: "invalid_request",
+        message: `${message} must be a positive integer`,
+      })
+      expect(t.requests).toHaveLength(0)
+    }
   })
 
   it("pages through history and shows one revision in full", async () => {

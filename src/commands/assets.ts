@@ -118,7 +118,8 @@ export function registerAssets(
       )
       .option(
         "--kind <kinds>",
-        `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`
+        `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`,
+        kinds
       ),
     "asset"
   ).action(
@@ -126,18 +127,16 @@ export function registerAssets(
       options: PageOptions & {
         deleted: boolean
         search?: string
-        kind?: string
+        kind?: AssetKind[]
       }
     ) => {
       const ctx = context()
-      // Checked first, so a typo fails before any request.
-      const kind = options.kind === undefined ? undefined : kinds(options.kind)
       const query = {
         ...pageQuery(options),
         deleted: options.deleted,
         // An empty search (an unset shell variable) means no search.
         q: options.search || undefined,
-        kind,
+        kind: options.kind,
       }
       const api = await ctx.project()
       await printList(
@@ -237,8 +236,8 @@ export function registerAssets(
     .command("url")
     .description("Print an image's URL, resized, cropped or converted")
     .argument("<id>", "asset ID (ast_...)")
-    .option("--width <px>", "width in pixels")
-    .option("--height <px>", "height in pixels")
+    .option("--width <px>", "width in pixels", wholeNumber("--width", 4096))
+    .option("--height <px>", "height in pixels", wholeNumber("--height", 4096))
     .addOption(
       new Option("--fit <fit>", "how the image fills width and height")
         .choices(FITS)
@@ -249,16 +248,16 @@ export function registerAssets(
         .choices(["original", ...FORMATS])
         .default("original")
     )
-    .option("--quality <n>", "1-100")
+    .option("--quality <n>", "1-100", wholeNumber("--quality", 100))
     .action(
       async (
         id: string,
         options: {
-          width?: string
-          height?: string
+          width?: number
+          height?: number
           fit: Fit
           format: Format | "original"
-          quality?: string
+          quality?: number
         }
       ) => {
         const ctx = context()
@@ -367,36 +366,38 @@ function kinds(value: string): AssetKind[] {
   })
 }
 
+/** A parser for a whole number from 1 to `max`, for `flag`. */
+function wholeNumber(flag: string, max: number) {
+  return (value: string) => {
+    const number = Number(value)
+    if (!Number.isInteger(number) || number < 1 || number > max)
+      throw usageError(`${flag} takes a whole number from 1 to ${max}`)
+    return number
+  }
+}
+
 /**
  * An image's URL with imgproxy's options for these (`imageUrl` from
  * `@nohead/sdk/images`): image URLs are open, so renditions need no request.
- * Checks the options first, so a typo is a usage error.
  */
 function renditionUrl(
   asset: Asset,
   options: {
-    width?: string
-    height?: string
+    width?: number
+    height?: number
     fit: Fit
     format: Format | "original"
-    quality?: string
+    quality?: number
   }
 ): string {
   if (!asset.image_url)
     throw usageError(
       `${asset.id} has no image URL: it isn't a ready JPEG, PNG, GIF, WebP or AVIF image`
     )
-  const number = (name: string, value: string | undefined, max: number) => {
-    if (value === undefined) return undefined
-    const parsed = Number(value)
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > max)
-      throw usageError(`--${name} takes a whole number from 1 to ${max}`)
-    return parsed
-  }
   return imageUrl(asset, {
-    width: number("width", options.width, 4096),
-    height: number("height", options.height, 4096),
-    quality: number("quality", options.quality, 100),
+    width: options.width,
+    height: options.height,
+    quality: options.quality,
     fit: options.fit,
     format: options.format === "original" ? undefined : options.format,
   })

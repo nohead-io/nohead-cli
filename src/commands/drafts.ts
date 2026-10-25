@@ -4,7 +4,7 @@ import type { NoheadDraft } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
 import { unwrap } from "../errors.ts"
 import {
-  ifMatch,
+  ifRevisionOption,
   parseTime,
   positiveInteger,
   readData,
@@ -13,11 +13,6 @@ import {
 import { details, printResult, table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 import { withDataFlags, type DataOptions } from "./records.ts"
-
-const IF_REVISION = [
-  "--if-revision <n>",
-  "fail with 412 unless the draft is still at this revision",
-] as const
 
 function draftTable(drafts: NoheadDraft[]): string {
   return table(
@@ -113,12 +108,13 @@ export function registerDrafts(
       .argument("<record>", "record ID")
       .option(
         "--from-revision <n>",
-        "start from this revision's values instead of the record's"
+        "start from this revision's values instead of the record's",
+        (value) => positiveInteger(value, "--from-revision")
       )
   ).action(
     async (
       record: string,
-      options: DataOptions & { fromRevision?: string }
+      options: DataOptions & { fromRevision?: number }
     ) => {
       const ctx = context()
       const data = await readData(ctx.runtime, options, {
@@ -130,10 +126,7 @@ export function registerDrafts(
           {
             ...(Object.keys(data).length > 0 && { data }),
             ...(options.fromRevision !== undefined && {
-              from_revision: positiveInteger(
-                options.fromRevision,
-                "--from-revision"
-              ),
+              from_revision: options.fromRevision,
             }),
           },
           ctx.writeOptions()
@@ -155,16 +148,16 @@ export function registerDrafts(
         "Change a draft; only the given fields change (null clears one)"
       )
       .argument("<draft>", "draft ID (drf_...)")
-      .option(...IF_REVISION)
+      .addOption(ifRevisionOption("draft"))
   ).action(
-    async (id: string, options: DataOptions & { ifRevision?: string }) => {
+    async (id: string, options: DataOptions & { ifRevision?: number }) => {
       const ctx = context()
       const data = await readData(ctx.runtime, options)
       const draft = await unwrap(
         ctx.api.drafts.update(
           id,
           { data },
-          { ...ctx.writeOptions(), ...ifMatch(options.ifRevision) }
+          { ...ctx.writeOptions(), ifMatch: options.ifRevision }
         )
       )
       printResult(
@@ -181,13 +174,13 @@ export function registerDrafts(
       "Apply a draft to its record now, as one revision (the record stays live or not)"
     )
     .argument("<draft>", "draft ID (drf_...)")
-    .option(...IF_REVISION)
-    .action(async (id: string, options: { ifRevision?: string }) => {
+    .addOption(ifRevisionOption("draft"))
+    .action(async (id: string, options: { ifRevision?: number }) => {
       const ctx = context()
       const record = await unwrap(
         ctx.api.drafts.merge(id, {
           ...ctx.writeOptions(),
-          ...ifMatch(options.ifRevision),
+          ifMatch: options.ifRevision,
         })
       )
       printResult(
@@ -201,17 +194,17 @@ export function registerDrafts(
     .command("discard")
     .description("Delete a draft for good (the record is unchanged)")
     .argument("<draft>", "draft ID (drf_...)")
-    .option(...IF_REVISION)
+    .addOption(ifRevisionOption("draft"))
     .option("--yes", "confirm: a discarded draft cannot be restored", false)
     .action(
-      async (id: string, options: { ifRevision?: string; yes: boolean }) => {
+      async (id: string, options: { ifRevision?: number; yes: boolean }) => {
         const ctx = context()
         if (!options.yes)
           throw usageError(`Refusing to discard ${id} without --yes`)
         const draft = await unwrap(
           ctx.api.drafts.discard(id, {
             ...ctx.writeOptions(),
-            ...ifMatch(options.ifRevision),
+            ifMatch: options.ifRevision,
           })
         )
         printResult(ctx, draft, () => `Discarded ${draft.id}`)

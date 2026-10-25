@@ -25,7 +25,7 @@ import {
 } from "../errors.ts"
 import {
   collect,
-  ifMatch,
+  ifRevisionOption,
   parseJsonObject,
   parseTime,
   positiveInteger,
@@ -210,16 +210,12 @@ function lifecycle(
     .command(name)
     .description(description)
     .argument("<id>", "record ID")
-  if (guarded)
-    command.option(
-      "--if-revision <n>",
-      "fail with 412 unless the record is still at this revision"
-    )
-  command.action(async (id: string, options: { ifRevision?: string }) => {
+  if (guarded) command.addOption(ifRevisionOption("record"))
+  command.action(async (id: string, options: { ifRevision?: number }) => {
     const ctx = context()
     const record = await call(ctx, id, {
       ...ctx.writeOptions(),
-      ...ifMatch(options.ifRevision),
+      ifMatch: options.ifRevision,
     })
     printResult(ctx, record, () => done(record))
   })
@@ -415,19 +411,16 @@ export function registerRecords(
         "Update a record; only the given fields change (null clears one)"
       )
       .argument("<id>", "record ID")
-      .option(
-        "--if-revision <n>",
-        "fail with 412 unless the record is still at this revision"
-      )
+      .addOption(ifRevisionOption("record"))
   ).action(
-    async (id: string, options: DataOptions & { ifRevision?: string }) => {
+    async (id: string, options: DataOptions & { ifRevision?: number }) => {
       const ctx = context()
       const data = await readData(ctx.runtime, options)
       const record = await unwrap(
         ctx.api.records.update(
           id,
           { data },
-          { ...ctx.writeOptions(), ...ifMatch(options.ifRevision) }
+          { ...ctx.writeOptions(), ifMatch: options.ifRevision }
         )
       )
       printResult(
@@ -650,12 +643,12 @@ export function registerRecords(
     .command("revision")
     .description("Show one revision: the record as it was, and what changed")
     .argument("<id>", "record ID")
-    .argument("<revision>", "revision number")
-    .action(async (id: string, number: string) => {
+    .argument("<revision>", "revision number", (value) =>
+      positiveInteger(value, "<revision>")
+    )
+    .action(async (id: string, number: number) => {
       const ctx = context()
-      const revision = await unwrap(
-        ctx.api.records.revisions.get(id, positiveInteger(number, "<revision>"))
-      )
+      const revision = await unwrap(ctx.api.records.revisions.get(id, number))
       printResult(ctx, revision, () =>
         [
           details([
@@ -681,15 +674,16 @@ export function registerRecords(
     .command("diff")
     .description("Compare two revisions")
     .argument("<id>", "record ID")
-    .requiredOption("--from <revision>", "older revision")
-    .requiredOption("--to <revision>", "newer revision")
-    .action(async (id: string, options: { from: string; to: string }) => {
+    .requiredOption("--from <revision>", "older revision", (value) =>
+      positiveInteger(value, "--from")
+    )
+    .requiredOption("--to <revision>", "newer revision", (value) =>
+      positiveInteger(value, "--to")
+    )
+    .action(async (id: string, options: { from: number; to: number }) => {
       const ctx = context()
       const diff = await unwrap(
-        ctx.api.records.diff(id, {
-          from: positiveInteger(options.from, "--from"),
-          to: positiveInteger(options.to, "--to"),
-        })
+        ctx.api.records.diff(id, { from: options.from, to: options.to })
       )
       printResult(ctx, diff, () => changesText(diff.changes))
     })
@@ -700,25 +694,24 @@ export function registerRecords(
       "Revert a record to an earlier revision (writes a new revision)"
     )
     .argument("<id>", "record ID")
-    .argument("<revision>", "revision to revert to")
-    .option("--dry-run", "show what would change without writing", false)
-    .option(
-      "--if-revision <n>",
-      "fail with 412 unless the record is still at this revision"
+    .argument("<revision>", "revision to revert to", (value) =>
+      positiveInteger(value, "<revision>")
     )
+    .option("--dry-run", "show what would change without writing", false)
+    .addOption(ifRevisionOption("record"))
     .action(
       async (
         id: string,
-        revision: string,
-        options: { dryRun: boolean; ifRevision?: string }
+        revision: number,
+        options: { dryRun: boolean; ifRevision?: number }
       ) => {
         const ctx = context()
         const result = await unwrap(
           ctx.api.records.revisions.revert(
             id,
-            positiveInteger(revision, "<revision>"),
+            revision,
             { dry_run: options.dryRun },
-            { ...ctx.writeOptions(), ...ifMatch(options.ifRevision) }
+            { ...ctx.writeOptions(), ifMatch: options.ifRevision }
           ) as PromiseLike<RecordModel | RevertPreview>
         )
         printResult(ctx, result, () =>

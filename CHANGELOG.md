@@ -47,6 +47,13 @@ release's section is its GitHub release's notes.
   be reached like the API: they exit 3 with `network_error` (it was exit 4,
   `Unexpected error`). A download gives up after the time an upload of the
   file may take (a minute, longer for a large file), with the same error.
+- Numbers and field types given to a command are checked before it makes
+  any request, with the same messages: `fields migrate --type`,
+  `--max-length`, `--min` and `--max` on `fields update` and
+  `fields migrate` (which looked the field up first), and `assets url`
+  `--width`, `--height` and `--quality` (which read the asset first). An
+  empty `--if-revision ""` is refused as not a positive integer; it was
+  ignored, so the write went ahead unguarded.
 
 ## 0.3.0
 
