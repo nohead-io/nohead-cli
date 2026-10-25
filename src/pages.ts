@@ -2,7 +2,7 @@ import type { Command } from "commander"
 
 import type { PagePromise } from "@nohead/sdk"
 import type { CommandContext } from "./context.ts"
-import { unwrap, unwrapAll } from "./errors.ts"
+import { unwrap } from "./errors.ts"
 import { positiveInteger } from "./input.ts"
 import { printResult } from "./output.ts"
 
@@ -61,7 +61,7 @@ export async function printList<T>(
   render: (items: T[]) => string
 ): Promise<void> {
   if (all) {
-    const items = await unwrapAll(list())
+    const items = await unwrap(Array.fromAsync(list()))
     printResult(ctx, { data: items }, () => render(items))
     return
   }

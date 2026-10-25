@@ -46,17 +46,6 @@ export async function unwrap<T>(call: PromiseLike<T>): Promise<T> {
   }
 }
 
-/** Every item of an SDK list, across its pages. */
-export async function unwrapAll<T>(items: AsyncIterable<T>): Promise<T[]> {
-  const all: T[] = []
-  try {
-    for await (const item of items) all.push(item)
-  } catch (error) {
-    throw cliError(error)
-  }
-  return all
-}
-
 /** The first item of an SDK list that matches, reading pages until it does. */
 export async function unwrapFind<T>(
   items: AsyncIterable<T>,

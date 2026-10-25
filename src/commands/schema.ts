@@ -6,7 +6,7 @@ import type {
   FieldMigrationPreview,
 } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
-import { CliError, ExitCode, unwrap, unwrapAll } from "../errors.ts"
+import { CliError, ExitCode, unwrap } from "../errors.ts"
 import { readSource, usageError } from "../input.ts"
 import { printNotice, printResult } from "../output.ts"
 import {
@@ -29,7 +29,9 @@ const DEFAULT_FILE = "nohead.schema.yaml"
 export async function remoteCollections(
   ctx: CommandContext
 ): Promise<Collection[]> {
-  return unwrapAll((await ctx.project()).collections.list({ limit: 100 }))
+  return unwrap(
+    Array.fromAsync((await ctx.project()).collections.list({ limit: 100 }))
+  )
 }
 
 async function plan(ctx: CommandContext, file: string) {

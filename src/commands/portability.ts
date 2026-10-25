@@ -10,13 +10,7 @@ import type {
   RecordRevisionDetail,
 } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
-import {
-  CliError,
-  ExitCode,
-  unwrap,
-  unwrapAll,
-  type ErrorBody,
-} from "../errors.ts"
+import { CliError, ExitCode, unwrap, type ErrorBody } from "../errors.ts"
 import { parseJsonObject, readSource, usageError } from "../input.ts"
 import { printNotice, printResult, toJson, toJsonLines } from "../output.ts"
 import {
@@ -93,7 +87,9 @@ function withoutAliases<T extends { data: RecordData }>(
 async function allAssets(
   ctx: CommandContext
 ): Promise<(Asset & { file_url: string })[]> {
-  const all = await unwrapAll((await ctx.project()).assets.list({ limit: 100 }))
+  const all = await unwrap(
+    Array.fromAsync((await ctx.project()).assets.list({ limit: 100 }))
+  )
   return all.filter(
     (asset): asset is Asset & { file_url: string } => asset.file_url !== null
   )
@@ -168,8 +164,8 @@ async function history(
   record: RecordModel
 ): Promise<RecordRevisionDetail[]> {
   const revisions: RecordRevisionDetail[] = []
-  for (const { revision } of await unwrapAll(
-    ctx.api.records.revisions.list(record.id, { limit: 100 })
+  for (const { revision } of await unwrap(
+    Array.fromAsync(ctx.api.records.revisions.list(record.id, { limit: 100 }))
   )) {
     revisions.push(
       await unwrap(ctx.api.records.revisions.get(record.id, revision))
@@ -245,8 +241,10 @@ export function registerPortability(
           let drafts: NoheadDraft[] | undefined
           if (draftsReadable) {
             try {
-              drafts = await unwrapAll(
-                ctx.api.drafts.list(collection.id, { limit: 100 })
+              drafts = await unwrap(
+                Array.fromAsync(
+                  ctx.api.drafts.list(collection.id, { limit: 100 })
+                )
               )
             } catch (error) {
               if (

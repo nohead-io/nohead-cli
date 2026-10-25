@@ -16,13 +16,7 @@ import type {
   ScheduledChange,
 } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
-import {
-  CliError,
-  ExitCode,
-  unwrap,
-  unwrapAll,
-  type ErrorBody,
-} from "../errors.ts"
+import { CliError, ExitCode, unwrap, type ErrorBody } from "../errors.ts"
 import {
   collect,
   ifRevisionOption,
@@ -98,7 +92,7 @@ export function allRecords(
   collection: string,
   query: RecordListParams
 ): Promise<RecordModel[]> {
-  return unwrapAll(ctx.api.records.list(collection, query))
+  return unwrap(Array.fromAsync(ctx.api.records.list(collection, query)))
 }
 
 function label(record: RecordModel): string {
