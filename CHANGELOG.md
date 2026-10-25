@@ -28,6 +28,10 @@ release's section is its GitHub release's notes.
   config file into the current directory.
 - A list page that says there is more but gives no cursor no longer ends
   with `More: --cursor null`; like the SDKs, the CLI stops there.
+- With `--json`, usage errors (a missing argument, an unknown command or
+  option) print the error envelope on stderr, as other errors do, such as
+  `{ "error": { "type": "invalid_request", "message": "missing required argument 'id'" } }`,
+  instead of commander's message and the command's help. They still exit 2.
 
 ## 0.3.0
 

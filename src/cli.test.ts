@@ -127,6 +127,31 @@ describe("usage", () => {
     expect(excess.requests).toHaveLength(0)
   })
 
+  it("prints usage errors as the error document with --json, help left out", async () => {
+    const missing = testRuntime()
+    expect(await run(["--json", "records", "get"], missing.runtime)).toBe(
+      ExitCode.Usage
+    )
+    expect(JSON.parse(missing.err())).toEqual({
+      error: {
+        type: "invalid_request",
+        message: "missing required argument 'id'",
+      },
+    })
+
+    // --json after the command counts too; a command needs a subcommand.
+    const bare = testRuntime()
+    expect(await run(["records", "--json"], bare.runtime)).toBe(ExitCode.Usage)
+    expect(JSON.parse(bare.err()).error.message).toBe(
+      "missing command; see --help"
+    )
+    expect(bare.out()).toBe("")
+
+    const human = testRuntime()
+    expect(await run(["records"], human.runtime)).toBe(ExitCode.Usage)
+    expect(human.err()).toContain("Usage: nohead records")
+  })
+
   it("exits 0 for --help and prints to stdout", async () => {
     const t = testRuntime()
 

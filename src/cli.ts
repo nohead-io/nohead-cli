@@ -23,13 +23,13 @@ import {
   type GlobalOptions,
   type Runtime,
 } from "./context.ts"
-import { CliError, ExitCode } from "./errors.ts"
+import { CliError, ExitCode, type ErrorBody } from "./errors.ts"
 import { printError } from "./output.ts"
 import { VERSION } from "./version.ts"
 
 export { VERSION }
 
-function buildProgram(runtime: Runtime, config: ConfigFile) {
+function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
   const program = new Command()
     .name("nohead")
     .description(
@@ -62,7 +62,8 @@ function buildProgram(runtime: Runtime, config: ConfigFile) {
     .exitOverride()
     .configureOutput({
       writeOut: runtime.stdout,
-      writeErr: runtime.stderr,
+      // With --json, stderr carries only the error document run() prints.
+      writeErr: json ? () => {} : runtime.stderr,
     })
 
   const context = (): CommandContext =>
@@ -89,20 +90,25 @@ function buildProgram(runtime: Runtime, config: ConfigFile) {
 
 /** Runs the CLI and resolves to the process exit code. Never calls process.exit. */
 export async function run(argv: string[], runtime: Runtime): Promise<number> {
+  // Usage errors stop commander before it has read --json.
+  const json = argv.includes("--json")
   let program: Command | undefined
   try {
-    program = buildProgram(runtime, await readConfig(runtime))
+    program = buildProgram(runtime, await readConfig(runtime), json)
     await program.parseAsync(argv, { from: "user" })
     return ExitCode.Success
   } catch (error) {
     if (error instanceof CommanderError) {
       // --help and --version exit through here with code 0.
-      return error.exitCode === 0 ? ExitCode.Success : ExitCode.Usage
+      if (error.exitCode === 0) return ExitCode.Success
+      // Commander printed the error and the help, except with --json.
+      if (json) printError(runtime, true, usage(error))
+      return ExitCode.Usage
     }
     const cliError = error instanceof CliError ? error : unexpected(error)
     printError(
       runtime,
-      program?.opts<GlobalOptions>().json ?? argv.includes("--json"),
+      program?.opts<GlobalOptions>().json ?? json,
       cliError.body
     )
     if (!(error instanceof CliError) && runtime.env.NOHEAD_DEBUG)
@@ -110,6 +116,21 @@ export async function run(argv: string[], runtime: Runtime): Promise<number> {
         `${error instanceof Error ? error.stack : String(error)}\n`
       )
     return cliError.exitCode
+  }
+}
+
+/**
+ * A commander error as the CLI's own usage errors read: "missing required
+ * argument 'id'". A command given no subcommand shows its help instead of an
+ * error message.
+ */
+function usage(error: CommanderError): ErrorBody {
+  return {
+    type: "invalid_request",
+    message:
+      error.code === "commander.help"
+        ? "missing command; see --help"
+        : error.message.replace(/^error: /, ""),
   }
 }
 
