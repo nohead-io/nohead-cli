@@ -28,6 +28,36 @@ release's section is its GitHub release's notes.
   config file into the current directory.
 - A list page that says there is more but gives no cursor no longer ends
   with `More: --cursor null`; like the SDKs, the CLI stops there.
+- With `--json`, usage errors (a missing argument, an unknown command or
+  option) print the error envelope on stderr, as other errors do, such as
+  `{ "error": { "type": "invalid_request", "message": "missing required argument 'id'" } }`,
+  instead of commander's message and the command's help. They still exit 2.
+- Options and arguments with a fixed set of values (`records list`,
+  `records bulk` and `records export` `--status`, the `records bulk`
+  action, `records scheduled --sort`, `assets url --fit` and `--format`,
+  `webhooks deliveries --status`) list their choices in `--help`, and refuse
+  any other value as other usage errors do, with a new message such as
+  `option '--fit <fit>' argument 'crop' is invalid. Allowed choices are contain, cover, fill.`
+  `assets url` checks `--fit` and `--format` before any request, and
+  `webhooks deliveries --status` before the API sees it. Flags that cannot
+  go together (`fields update --required --optional`, and in
+  `fields migrate` also `--multiple --single` and `--backfill --backfill-json`)
+  say so in the same way: `option '--optional' cannot be used with option '--required'`.
+- `assets download` and `export --include-files` treat storage that cannot
+  be reached like the API: they exit 3 with `network_error` (it was exit 4,
+  `Unexpected error`). A download gives up after the time an upload of the
+  file may take (a minute, longer for a large file), with the same error.
+- Numbers and field types given to a command are checked before it makes
+  any request, with the same messages: `fields migrate --type`,
+  `--max-length`, `--min` and `--max` on `fields update` and
+  `fields migrate` (which looked the field up first), and `assets url`
+  `--width`, `--height` and `--quality` (which read the asset first). An
+  empty `--if-revision ""` is refused as not a positive integer; it was
+  ignored, so the write went ahead unguarded.
+- `import` checks `assets.jsonl` (with `--include-files` exports) along
+  with the records and drafts, and lists its problems (a line without an
+  asset ID, the file missing) in the same `incomplete or damaged` error
+  instead of stopping at the first.
 
 ## 0.3.0
 

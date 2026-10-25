@@ -46,15 +46,20 @@ export async function unwrap<T>(call: PromiseLike<T>): Promise<T> {
   }
 }
 
-/** Every item of an SDK list, across its pages. */
-export async function unwrapAll<T>(items: AsyncIterable<T>): Promise<T[]> {
-  const all: T[] = []
-  try {
-    for await (const item of items) all.push(item)
-  } catch (error) {
-    throw cliError(error)
-  }
-  return all
+/** The API key may not do this (authorization_error); some commands go on without it. */
+export function isForbidden(error: unknown): error is CliError {
+  return error instanceof CliError && error.body.type === "authorization_error"
+}
+
+/**
+ * The error of one item among many (a line or record being imported), to
+ * report with the others and go on. Anything else stops the command: an
+ * API that cannot be reached, or a bug.
+ */
+export function itemError(error: unknown): ErrorBody {
+  if (!(error instanceof CliError) || error.exitCode === ExitCode.Network)
+    throw error
+  return error.body
 }
 
 /** The first item of an SDK list that matches, reading pages until it does. */
@@ -90,16 +95,21 @@ function cliError(error: unknown): unknown {
   // Storage could not be reached (the cause), or refused the bytes.
   if (error instanceof UploadError)
     return error.cause
-      ? new CliError(ExitCode.Network, {
-          type: "network_error",
-          message: `Could not reach storage: ${reason(fetchFailure(error.cause))}`,
-        })
+      ? storageUnreachable(error.cause)
       : new CliError(ExitCode.ApiError, {
           type: "upload_failed",
           message: error.message,
         })
   if (error instanceof ConnectionError) return networkError(fetchFailure(error))
   return error
+}
+
+/** Storage, where files go up and come down, could not be reached. */
+export function storageUnreachable(cause: unknown): CliError {
+  return new CliError(ExitCode.Network, {
+    type: "network_error",
+    message: `Could not reach storage: ${reason(fetchFailure(cause))}`,
+  })
 }
 
 function networkError(cause: unknown) {

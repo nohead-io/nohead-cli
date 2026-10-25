@@ -1,4 +1,5 @@
 import slugify from "@sindresorhus/slugify"
+import { Option } from "commander"
 
 import type { Runtime } from "./context.ts"
 import { CliError, ExitCode } from "./errors.ts"
@@ -35,6 +36,10 @@ export function parseSet(pairs: string[]): Record<string, unknown> {
   return result
 }
 
+/** A JSON object or YAML mapping: not null, not an array. */
+export const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
 export function parseJsonObject(
   text: string,
   source: string
@@ -45,10 +50,8 @@ export function parseJsonObject(
   } catch {
     throw usageError(`${source} is not valid JSON`)
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw usageError(`${source} must be a JSON object`)
-  }
-  return value as Record<string, unknown>
+  if (!isObject(value)) throw usageError(`${source} must be a JSON object`)
+  return value
 }
 
 export async function readSource(
@@ -146,7 +149,10 @@ export function toFieldKey(name: string): string {
     .replace(/_+$/, "")
 }
 
-/** The SDK's ifMatch (If-Match) for an expected revision, when given. */
-export function ifMatch(revision?: string): { ifMatch?: number } {
-  return revision ? { ifMatch: positiveInteger(revision, "--if-revision") } : {}
+/** --if-revision, the revision a record or draft must be at: the SDK's ifMatch. */
+export function ifRevisionOption(what: "record" | "draft"): Option {
+  return new Option(
+    "--if-revision <n>",
+    `fail with 412 unless the ${what} is still at this revision`
+  ).argParser((value) => positiveInteger(value, "--if-revision"))
 }

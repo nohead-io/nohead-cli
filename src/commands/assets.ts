@@ -1,12 +1,12 @@
 import { basename } from "node:path"
 
-import type { Command } from "commander"
+import { Option, type Command } from "commander"
 import mime from "mime"
 
 import type { Asset, AssetKind } from "@nohead/sdk"
 import { imageUrl } from "@nohead/sdk/images"
 import type { CommandContext } from "../context.ts"
-import { CliError, ExitCode, unwrap } from "../errors.ts"
+import { CliError, ExitCode, storageUnreachable, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printNotice, printResult, table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
@@ -23,10 +23,10 @@ function size(bytes: number): string {
 }
 
 /**
- * The longest an upload attempt may take: the file at 64 KB/s (a slow
- * connection), and at least a minute. 100 MB gets about 27 minutes.
+ * The longest an upload attempt or a download may take: the file at 64 KB/s
+ * (a slow connection), and at least a minute. 100 MB gets about 27 minutes.
  */
-const uploadTimeout = (bytes: number) => Math.max(60_000, bytes / 64)
+const transferTimeout = (bytes: number) => Math.max(60_000, bytes / 64)
 
 /**
  * Uploads a file the platform way: start the upload, PUT the bytes
@@ -45,10 +45,44 @@ export async function uploadAsset(
       { filename: file.filename, content_type: file.contentType },
       {
         ...ctx.writeOptions(idempotencyKey ?? null),
-        timeout: uploadTimeout(file.bytes.byteLength),
+        timeout: transferTimeout(file.bytes.byteLength),
       }
     )
   )
+}
+
+/**
+ * An asset's file, from its `file_url`, of `size` bytes (its byte_size).
+ * Storage that cannot be reached or stalls is a network error, as for
+ * uploads; one that refuses names the file when there is a `filename`.
+ */
+export async function downloadFile(
+  ctx: CommandContext,
+  url: string,
+  size: number,
+  filename?: string
+): Promise<Uint8Array> {
+  const timeout = transferTimeout(size)
+  try {
+    const response = await ctx.runtime.fetch(
+      new Request(url, { signal: AbortSignal.timeout(timeout) })
+    )
+    if (!response.ok)
+      throw new CliError(ExitCode.ApiError, {
+        type: "download_failed",
+        message: filename
+          ? `${filename}: storage returned ${response.status}`
+          : `Storage returned ${response.status}`,
+      })
+    return await response.bytes()
+  } catch (error) {
+    if (error instanceof CliError) throw error
+    throw storageUnreachable(
+      error instanceof DOMException && error.name === "TimeoutError"
+        ? new Error(`The download timed out after ${timeout} ms`)
+        : error
+    )
+  }
 }
 
 function describe(asset: Asset): string {
@@ -84,7 +118,8 @@ export function registerAssets(
       )
       .option(
         "--kind <kinds>",
-        `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`
+        `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`,
+        kinds
       ),
     "asset"
   ).action(
@@ -92,18 +127,16 @@ export function registerAssets(
       options: PageOptions & {
         deleted: boolean
         search?: string
-        kind?: string
+        kind?: AssetKind[]
       }
     ) => {
       const ctx = context()
-      // Checked first, so a typo fails before any request.
-      const kind = options.kind === undefined ? undefined : kinds(options.kind)
       const query = {
         ...pageQuery(options),
         deleted: options.deleted,
         // An empty search (an unset shell variable) means no search.
         q: options.search || undefined,
-        kind,
+        kind: options.kind,
       }
       const api = await ctx.project()
       await printList(
@@ -203,23 +236,28 @@ export function registerAssets(
     .command("url")
     .description("Print an image's URL, resized, cropped or converted")
     .argument("<id>", "asset ID (ast_...)")
-    .option("--width <px>", "width in pixels")
-    .option("--height <px>", "height in pixels")
-    .option("--fit <fit>", "contain, cover or fill")
-    .option(
-      "--format <format>",
-      "original (the default), webp, avif, jpeg or png"
+    .option("--width <px>", "width in pixels", wholeNumber("--width", 4096))
+    .option("--height <px>", "height in pixels", wholeNumber("--height", 4096))
+    .addOption(
+      new Option("--fit <fit>", "how the image fills width and height")
+        .choices(FITS)
+        .default("contain")
     )
-    .option("--quality <n>", "1-100")
+    .addOption(
+      new Option("--format <format>", "the image format")
+        .choices(["original", ...FORMATS])
+        .default("original")
+    )
+    .option("--quality <n>", "1-100", wholeNumber("--quality", 100))
     .action(
       async (
         id: string,
         options: {
-          width?: string
-          height?: string
-          fit?: string
-          format?: string
-          quality?: string
+          width?: number
+          height?: number
+          fit: Fit
+          format: Format | "original"
+          quality?: number
         }
       ) => {
         const ctx = context()
@@ -245,12 +283,7 @@ export function registerAssets(
             type: "not_uploaded",
             message: `Asset ${asset.id} has no file yet: its upload was never completed`,
           })
-        const response = await ctx.runtime.fetch(new Request(asset.file_url))
-        if (!response.ok)
-          throw new CliError(ExitCode.ApiError, {
-            type: "download_failed",
-            message: `Storage returned ${response.status}`,
-          })
+        const bytes = await downloadFile(ctx, asset.file_url, asset.byte_size)
         // The filename is anyone's choice, so nothing is replaced without
         // --force, and a dotfile (".pnpmfile.cjs", ".envrc", which tools run
         // from the current directory) is saved under the asset's ID.
@@ -259,11 +292,9 @@ export function registerAssets(
           options.output ??
           (name && !name.startsWith(".") ? name : `${asset.id}${name}`)
         try {
-          await ctx.runtime.writeFile(
-            output,
-            new Uint8Array(await response.arrayBuffer()),
-            { exclusive: !options.force }
-          )
+          await ctx.runtime.writeFile(output, bytes, {
+            exclusive: !options.force,
+          })
         } catch (error) {
           if ((error as { code?: string }).code !== "EEXIST") throw error
           throw usageError(
@@ -305,7 +336,9 @@ export function registerAssets(
 }
 
 const FITS = ["contain", "cover", "fill"] as const
+type Fit = (typeof FITS)[number]
 const FORMATS = ["webp", "avif", "jpeg", "png"] as const
+type Format = (typeof FORMATS)[number]
 const ASSET_KINDS: AssetKind[] = [
   "image",
   "video",
@@ -333,43 +366,39 @@ function kinds(value: string): AssetKind[] {
   })
 }
 
+/** A parser for a whole number from 1 to `max`, for `flag`. */
+function wholeNumber(flag: string, max: number) {
+  return (value: string) => {
+    const number = Number(value)
+    if (!Number.isInteger(number) || number < 1 || number > max)
+      throw usageError(`${flag} takes a whole number from 1 to ${max}`)
+    return number
+  }
+}
+
 /**
  * An image's URL with imgproxy's options for these (`imageUrl` from
  * `@nohead/sdk/images`): image URLs are open, so renditions need no request.
- * Checks the options first, so a typo is a usage error.
  */
 function renditionUrl(
   asset: Asset,
   options: {
-    width?: string
-    height?: string
-    fit?: string
-    format?: string
-    quality?: string
+    width?: number
+    height?: number
+    fit: Fit
+    format: Format | "original"
+    quality?: number
   }
 ): string {
   if (!asset.image_url)
     throw usageError(
       `${asset.id} has no image URL: it isn't a ready JPEG, PNG, GIF, WebP or AVIF image`
     )
-  const number = (name: string, value: string | undefined, max: number) => {
-    if (value === undefined) return undefined
-    const parsed = Number(value)
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > max)
-      throw usageError(`--${name} takes a whole number from 1 to ${max}`)
-    return parsed
-  }
-  const fit = FITS.find((f) => f === (options.fit ?? "contain"))
-  if (!fit) throw usageError("--fit takes contain, cover or fill")
-  const format = FORMATS.find((f) => f === options.format)
-  if (options.format !== undefined && options.format !== "original" && !format)
-    throw usageError(`--format takes original, ${FORMATS.join(", ")}`)
-
   return imageUrl(asset, {
-    width: number("width", options.width, 4096),
-    height: number("height", options.height, 4096),
-    quality: number("quality", options.quality, 100),
-    fit,
-    format,
+    width: options.width,
+    height: options.height,
+    quality: options.quality,
+    fit: options.fit,
+    format: options.format === "original" ? undefined : options.format,
   })
 }

@@ -1,7 +1,8 @@
-import type { Command } from "commander"
+import { Option, type Command } from "commander"
 
 import type {
   FieldDefinition,
+  FieldType,
   FieldMigration,
   FieldMigrationCounts,
   FieldMigrationPreview,
@@ -122,8 +123,6 @@ function backfill(options: {
   backfill?: string
   backfillJson?: string
 }): unknown {
-  if (options.backfill !== undefined && options.backfillJson !== undefined)
-    throw usageError("Pass either --backfill or --backfill-json, not both")
   if (options.backfillJson === undefined) return options.backfill
   try {
     return JSON.parse(options.backfillJson)
@@ -147,15 +146,23 @@ export function registerMigrations(
       )
       .argument("<collection>", "collection slug or ID")
       .argument("<field>", "field key or ID")
-      .option("--type <type>", "new field type")
+      .option("--type <type>", "new field type", fieldType)
       .option("--multiple", "store a list of values")
-      .option("--single", "store a single value")
+      .addOption(
+        new Option("--single", "store a single value").conflicts("multiple")
+      )
       .option("--required", "make the field required (see --backfill)")
-      .option("--optional", "make the field optional")
+      .addOption(
+        new Option("--optional", "make the field optional").conflicts(
+          "required"
+        )
+      )
       .option("--backfill <text>", "value for records that have none")
-      .option(
-        "--backfill-json <json>",
-        "value for records that have none, as JSON"
+      .addOption(
+        new Option(
+          "--backfill-json <json>",
+          "value for records that have none, as JSON"
+        ).conflicts("backfill")
       )
       .option(
         "--clear-invalid",
@@ -173,7 +180,7 @@ export function registerMigrations(
       collection: string,
       ref: string,
       options: ConfigOptions & {
-        type?: string
+        type?: FieldType
         multiple?: boolean
         single?: boolean
         required?: boolean
@@ -187,17 +194,12 @@ export function registerMigrations(
       }
     ) => {
       const ctx = context()
-      if (options.multiple && options.single)
-        throw usageError("Pass either --multiple or --single, not both")
-      if (options.required && options.optional)
-        throw usageError("Pass either --required or --optional, not both")
-
       const field = await resolveField(ctx, collection, ref)
       const config = await configuration(ctx, options)
       const body: Omit<FieldMigrationRequest, "field_id"> = {
         on_invalid: options.clearInvalid ? "clear" : "fail",
       }
-      if (options.type) body.type = fieldType(options.type)
+      if (options.type) body.type = options.type
       if (options.multiple) body.multiple = true
       if (options.single) body.multiple = false
       if (options.required) body.required = true

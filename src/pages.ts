@@ -2,13 +2,13 @@ import type { Command } from "commander"
 
 import type { PagePromise } from "@nohead/sdk"
 import type { CommandContext } from "./context.ts"
-import { unwrap, unwrapAll } from "./errors.ts"
+import { unwrap } from "./errors.ts"
 import { positiveInteger } from "./input.ts"
 import { printResult } from "./output.ts"
 
 /** The options {@link withPaging} adds. */
 export interface PageOptions {
-  limit?: string
+  limit?: number
   cursor?: string
   all: boolean
 }
@@ -24,7 +24,11 @@ export function withPaging(
   defaultLimit = 100
 ): Command {
   return command
-    .option("--limit <n>", `page size (1-100, default ${defaultLimit})`)
+    .option(
+      "--limit <n>",
+      `page size (1-100, default ${defaultLimit})`,
+      (value) => positiveInteger(value, "--limit")
+    )
     .option("--cursor <cursor>", "continue from a previous page's next_cursor")
     .option("--all", `follow cursors and return every ${items}`, false)
 }
@@ -41,12 +45,7 @@ export function pageQuery(
   cursor?: string
 } {
   return {
-    limit:
-      options.limit !== undefined
-        ? positiveInteger(options.limit, "--limit")
-        : options.all
-          ? 100
-          : defaultLimit,
+    limit: options.limit ?? (options.all ? 100 : defaultLimit),
     ...(options.cursor ? { cursor: options.cursor } : {}),
   }
 }
@@ -62,7 +61,7 @@ export async function printList<T>(
   render: (items: T[]) => string
 ): Promise<void> {
   if (all) {
-    const items = await unwrapAll(list())
+    const items = await unwrap(Array.fromAsync(list()))
     printResult(ctx, { data: items }, () => render(items))
     return
   }

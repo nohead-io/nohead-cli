@@ -85,7 +85,7 @@ Scripts and agents depend on this, so it is covered by unit and E2E tests:
 
 - **stdout** carries only results. With `--json`, exactly one JSON document (the API's representation). `records export` writes JSON Lines.
 - **stderr** carries errors, summaries and diagnostics. With `--json`, errors use the API error envelope `{ "error": { "type", "message", "request_id", "details" } }`.
-- **Exit codes:** `0` success, `1` API error (validation, auth, 404, 412, import failures), `2` usage error (bad arguments, missing API key, unreadable files), `3` API unreachable, `4` unexpected CLI failure (a bug; `NOHEAD_DEBUG=1` prints the stack).
+- **Exit codes:** `0` success, `1` API error (validation, auth, 404, 412, import failures), `2` usage error (bad arguments, missing API key, unreadable files), `3` API or storage unreachable, `4` unexpected CLI failure (a bug; `NOHEAD_DEBUG=1` prints the stack).
 - **Retries:** up to 3, reported on stderr. `429` responses are retried after `Retry-After` (up to 60 s). Network failures, `500`, `502`, `503` and `504` are retried with backoff. Every write carries an `Idempotency-Key` (`--idempotency-key`, or a new one per request), so a repeat returns the first result.
 - Deleting a collection requires `--yes`. Everything else is soft-deleted and recoverable.
 

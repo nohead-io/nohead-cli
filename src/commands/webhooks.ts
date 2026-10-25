@@ -1,4 +1,4 @@
-import type { Command } from "commander"
+import { Option, type Command } from "commander"
 
 import type { WebhookCreate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
@@ -128,7 +128,12 @@ export function registerWebhooks(
       .command("deliveries")
       .description("List a webhook's deliveries, newest first")
       .argument("<id>", "webhook ID (wh_...)")
-      .option("--status <status>", "pending, succeeded or failed"),
+      .addOption(
+        new Option(
+          "--status <status>",
+          "only deliveries with this status"
+        ).choices(["pending", "succeeded", "failed"])
+      ),
     "delivery"
   ).action(
     async (

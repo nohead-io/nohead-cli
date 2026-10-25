@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 
-import type { Command } from "commander"
+import { Argument, Option, type Command } from "commander"
 
 import type {
   Change,
@@ -19,13 +19,14 @@ import type { CommandContext } from "../context.ts"
 import {
   CliError,
   ExitCode,
+  isForbidden,
+  itemError,
   unwrap,
-  unwrapAll,
   type ErrorBody,
 } from "../errors.ts"
 import {
   collect,
-  ifMatch,
+  ifRevisionOption,
   parseJsonObject,
   parseTime,
   positiveInteger,
@@ -45,7 +46,7 @@ import { parseFilters } from "../filters.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
 interface ListOptions extends PageOptions {
-  status?: string
+  status?: "published" | "unpublished"
   filter?: string[]
   deleted: boolean
   sort?: string
@@ -72,15 +73,17 @@ export function withDataFlags(command: Command): Command {
     )
 }
 
-const STATUSES = ["published", "unpublished"]
+/** --status: published or unpublished. */
+const statusOption = (description: string) =>
+  new Option("--status <status>", description).choices([
+    "published",
+    "unpublished",
+  ])
 
 function listQuery(options: ListOptions): RecordListParams {
   const filter: RecordFilter = parseFilters(options.filter)
-  if (options.status) {
-    if (!STATUSES.includes(options.status))
-      throw usageError(`--status must be one of ${STATUSES.join(", ")}`)
+  if (options.status)
     filter.published_at = { exists: options.status === "published" }
-  }
   if (options.deleted) filter.deleted = true
   return {
     filter,
@@ -96,7 +99,7 @@ export function allRecords(
   collection: string,
   query: RecordListParams
 ): Promise<RecordModel[]> {
-  return unwrapAll(ctx.api.records.list(collection, query))
+  return unwrap(Array.fromAsync(ctx.api.records.list(collection, query)))
 }
 
 function label(record: RecordModel): string {
@@ -208,16 +211,12 @@ function lifecycle(
     .command(name)
     .description(description)
     .argument("<id>", "record ID")
-  if (guarded)
-    command.option(
-      "--if-revision <n>",
-      "fail with 412 unless the record is still at this revision"
-    )
-  command.action(async (id: string, options: { ifRevision?: string }) => {
+  if (guarded) command.addOption(ifRevisionOption("record"))
+  command.action(async (id: string, options: { ifRevision?: number }) => {
     const ctx = context()
     const record = await call(ctx, id, {
       ...ctx.writeOptions(),
-      ...ifMatch(options.ifRevision),
+      ifMatch: options.ifRevision,
     })
     printResult(ctx, record, () => done(record))
   })
@@ -236,7 +235,7 @@ export function registerRecords(
       .command("list")
       .description("List records (newest first by default)")
       .argument("<collection>", "collection slug or ID")
-      .option("--status <status>", "published or unpublished")
+      .addOption(statusOption("only records with this status"))
       .option(
         "--filter <expression>",
         'filter, e.g. price<50, released>=today, "category in shoes,bags", "cover exists", "published_at exists"; repeatable',
@@ -269,13 +268,21 @@ export function registerRecords(
       .description(
         "Publish, unpublish, delete, restore or update many records; each gets its own revision"
       )
-      .argument("<action>", "publish, unpublish, delete, restore or update")
+      .addArgument(
+        new Argument("<action>", "what to do to the records").choices([
+          "publish",
+          "unpublish",
+          "delete",
+          "restore",
+          "update",
+        ])
+      )
       .argument("<collection>", "collection slug or ID")
       .argument(
         "[ids...]",
         "record IDs (or select with --status/--filter/--every)"
       )
-      .option("--status <status>", "select records with this status")
+      .addOption(statusOption("select records with this status"))
       .option(
         "--filter <expression>",
         "select records by filter, as in records list; repeatable",
@@ -285,15 +292,12 @@ export function registerRecords(
       .option("--every", "select every record in the collection", false)
   ).action(
     async (
-      action: string,
+      action: RecordBatchRequest["action"],
       collection: string,
       ids: string[],
       options: ListOptions & DataOptions & { every: boolean }
     ) => {
       const ctx = context()
-      const actions = ["publish", "unpublish", "delete", "restore", "update"]
-      if (!actions.includes(action))
-        throw usageError(`action must be one of ${actions.join(", ")}`)
       const selecting =
         Boolean(options.status || options.filter?.length || options.deleted) ||
         options.every
@@ -322,7 +326,7 @@ export function registerRecords(
           ctx.api.records.bulk(
             collection,
             {
-              action: action as RecordBatchRequest["action"],
+              action,
               record_ids: targets.slice(i, i + 100),
               ...(data ? { data } : {}),
             },
@@ -372,11 +376,7 @@ export function registerRecords(
         unwrap(ctx.api.records.get(id, { expand: options.expand?.split(",") })),
         // Published-only keys may not read schedules: show the record.
         scheduleOf(ctx, id).catch((error: unknown) => {
-          if (
-            error instanceof CliError &&
-            error.body.type === "authorization_error"
-          )
-            return null
+          if (isForbidden(error)) return null
           throw error
         }),
       ])
@@ -408,19 +408,16 @@ export function registerRecords(
         "Update a record; only the given fields change (null clears one)"
       )
       .argument("<id>", "record ID")
-      .option(
-        "--if-revision <n>",
-        "fail with 412 unless the record is still at this revision"
-      )
+      .addOption(ifRevisionOption("record"))
   ).action(
-    async (id: string, options: DataOptions & { ifRevision?: string }) => {
+    async (id: string, options: DataOptions & { ifRevision?: number }) => {
       const ctx = context()
       const data = await readData(ctx.runtime, options)
       const record = await unwrap(
         ctx.api.records.update(
           id,
           { data },
-          { ...ctx.writeOptions(), ...ifMatch(options.ifRevision) }
+          { ...ctx.writeOptions(), ifMatch: options.ifRevision }
         )
       )
       printResult(
@@ -525,17 +522,21 @@ export function registerRecords(
         "List a collection's scheduled publishes, unpublishes and draft merges, soonest first"
       )
       .argument("<collection>", "collection slug or ID")
-      .option("--sort <sort>", "at (soonest first, the default) or -at"),
+      .addOption(
+        new Option(
+          "--sort <sort>",
+          "at: soonest first (the default); -at: latest first"
+        ).choices(["at", "-at"])
+      ),
     "change"
   ).action(
-    async (collection: string, options: PageOptions & { sort?: string }) => {
+    async (
+      collection: string,
+      options: PageOptions & { sort?: "at" | "-at" }
+    ) => {
       const ctx = context()
-      let sort: "at" | "-at" | undefined
-      if (options.sort === "at" || options.sort === "-at") sort = options.sort
-      else if (options.sort !== undefined)
-        throw usageError("--sort must be at or -at")
       const query = {
-        ...(sort && { sort }),
+        ...(options.sort && { sort: options.sort }),
         ...pageQuery(options),
       }
       await printList(
@@ -639,12 +640,12 @@ export function registerRecords(
     .command("revision")
     .description("Show one revision: the record as it was, and what changed")
     .argument("<id>", "record ID")
-    .argument("<revision>", "revision number")
-    .action(async (id: string, number: string) => {
+    .argument("<revision>", "revision number", (value) =>
+      positiveInteger(value, "<revision>")
+    )
+    .action(async (id: string, number: number) => {
       const ctx = context()
-      const revision = await unwrap(
-        ctx.api.records.revisions.get(id, positiveInteger(number, "<revision>"))
-      )
+      const revision = await unwrap(ctx.api.records.revisions.get(id, number))
       printResult(ctx, revision, () =>
         [
           details([
@@ -670,15 +671,16 @@ export function registerRecords(
     .command("diff")
     .description("Compare two revisions")
     .argument("<id>", "record ID")
-    .requiredOption("--from <revision>", "older revision")
-    .requiredOption("--to <revision>", "newer revision")
-    .action(async (id: string, options: { from: string; to: string }) => {
+    .requiredOption("--from <revision>", "older revision", (value) =>
+      positiveInteger(value, "--from")
+    )
+    .requiredOption("--to <revision>", "newer revision", (value) =>
+      positiveInteger(value, "--to")
+    )
+    .action(async (id: string, options: { from: number; to: number }) => {
       const ctx = context()
       const diff = await unwrap(
-        ctx.api.records.diff(id, {
-          from: positiveInteger(options.from, "--from"),
-          to: positiveInteger(options.to, "--to"),
-        })
+        ctx.api.records.diff(id, { from: options.from, to: options.to })
       )
       printResult(ctx, diff, () => changesText(diff.changes))
     })
@@ -689,25 +691,24 @@ export function registerRecords(
       "Revert a record to an earlier revision (writes a new revision)"
     )
     .argument("<id>", "record ID")
-    .argument("<revision>", "revision to revert to")
-    .option("--dry-run", "show what would change without writing", false)
-    .option(
-      "--if-revision <n>",
-      "fail with 412 unless the record is still at this revision"
+    .argument("<revision>", "revision to revert to", (value) =>
+      positiveInteger(value, "<revision>")
     )
+    .option("--dry-run", "show what would change without writing", false)
+    .addOption(ifRevisionOption("record"))
     .action(
       async (
         id: string,
-        revision: string,
-        options: { dryRun: boolean; ifRevision?: string }
+        revision: number,
+        options: { dryRun: boolean; ifRevision?: number }
       ) => {
         const ctx = context()
         const result = await unwrap(
           ctx.api.records.revisions.revert(
             id,
-            positiveInteger(revision, "<revision>"),
+            revision,
             { dry_run: options.dryRun },
-            { ...ctx.writeOptions(), ...ifMatch(options.ifRevision) }
+            { ...ctx.writeOptions(), ifMatch: options.ifRevision }
           ) as PromiseLike<RecordModel | RevertPreview>
         )
         printResult(ctx, result, () =>
@@ -723,12 +724,16 @@ export function registerRecords(
     .description("Export records as JSON Lines (one API record per line)")
     .argument("<collection>", "collection slug or ID")
     .option("--output <path>", "write to a file instead of stdout")
-    .option("--status <status>", "published or unpublished")
+    .addOption(statusOption("only records with this status"))
     .option("--deleted", "export deleted records instead", false)
     .action(
       async (
         collection: string,
-        options: { output?: string; status?: string; deleted: boolean }
+        options: {
+          output?: string
+          status?: ListOptions["status"]
+          deleted: boolean
+        }
       ) => {
         const ctx = context()
         const all = await allRecords(
@@ -807,12 +812,7 @@ export function registerRecords(
             }
             created.push(record.id)
           } catch (error) {
-            if (
-              !(error instanceof CliError) ||
-              error.exitCode === ExitCode.Network
-            )
-              throw error
-            failed.push({ line: index + 1, error: error.body })
+            failed.push({ line: index + 1, error: itemError(error) })
           }
         }
 

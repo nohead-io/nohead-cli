@@ -1,4 +1,4 @@
-import type { Command } from "commander"
+import { Option, type Command } from "commander"
 
 import type { Field, FieldCreate, FieldUpdate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
@@ -31,9 +31,9 @@ export interface ConfigOptions {
   sortable?: boolean
   options?: string
   target?: string
-  maxLength?: string
-  min?: string
-  max?: string
+  maxLength?: number
+  min?: number
+  max?: number
   description?: string
   includeTime?: boolean
   timeZone?: string
@@ -53,10 +53,9 @@ export async function configuration(
       .split(",")
       .map((o) => o.trim())
       .filter(Boolean)
-  if (options.maxLength !== undefined)
-    config.max_length = number(options.maxLength, "--max-length")
-  if (options.min !== undefined) config.min = number(options.min, "--min")
-  if (options.max !== undefined) config.max = number(options.max, "--max")
+  if (options.maxLength !== undefined) config.max_length = options.maxLength
+  if (options.min !== undefined) config.min = options.min
+  if (options.max !== undefined) config.max = options.max
   if (options.description !== undefined)
     config.description = options.description
   if (options.includeTime !== undefined)
@@ -116,9 +115,17 @@ export function withConfigFlags(command: Command): Command {
   return command
     .option("--options <list>", "enum options, comma-separated")
     .option("--target <collection>", "relation target collection (slug or ID)")
-    .option("--max-length <n>", "maximum length for plain text fields")
-    .option("--min <n>", "minimum for number fields")
-    .option("--max <n>", "maximum for number fields")
+    .option(
+      "--max-length <n>",
+      "maximum length for plain text fields",
+      (value) => number(value, "--max-length")
+    )
+    .option("--min <n>", "minimum for number fields", (value) =>
+      number(value, "--min")
+    )
+    .option("--max <n>", "maximum for number fields", (value) =>
+      number(value, "--max")
+    )
     .option("--description <text>", "help text shown to editors")
     .option("--include-time", "date fields: a date and a time, not a day")
     .option("--no-include-time", "date fields: a day, with no time")
@@ -189,7 +196,11 @@ export function registerFields(
         "<name>",
         "field name; the key is derived from it unless --key is given"
       )
-      .requiredOption("--type <type>", `one of: ${FIELD_TYPES.join(", ")}`)
+      .requiredOption(
+        "--type <type>",
+        `one of: ${FIELD_TYPES.join(", ")}`,
+        fieldType
+      )
       .option("--key <key>", "field key (default: snake_case of the name)")
       .option("--required", "every record must have a value", false)
       .option("--multiple", "store a list of values", false)
@@ -198,7 +209,7 @@ export function registerFields(
       collection: string,
       name: string,
       options: ConfigOptions & {
-        type: string
+        type: FieldType
         key?: string
         required: boolean
         multiple: boolean
@@ -211,7 +222,7 @@ export function registerFields(
           {
             name,
             key: options.key ?? toFieldKey(name),
-            type: fieldType(options.type),
+            type: options.type,
             required: options.required,
             multiple: options.multiple,
             configuration: mergeConfiguration(
@@ -245,7 +256,11 @@ export function registerFields(
         "new key (the old one keeps working as an alias for 6 months)"
       )
       .option("--required", "make the field required")
-      .option("--optional", "make the field optional")
+      .addOption(
+        new Option("--optional", "make the field optional").conflicts(
+          "required"
+        )
+      )
   ).action(
     async (
       collection: string,
@@ -258,9 +273,6 @@ export function registerFields(
       }
     ) => {
       const ctx = context()
-      if (options.required && options.optional)
-        throw usageError("Pass either --required or --optional, not both")
-
       const field = await resolveField(ctx, collection, ref)
       const config = await configuration(ctx, options)
       const body: FieldUpdate = {}

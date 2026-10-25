@@ -161,6 +161,23 @@ export function testRuntime({
 }
 
 /**
+ * Makes AbortSignal.timeout, which fake timers don't drive, run on the fake
+ * clock withoutWaiting runs, for the rest of the test. A test of a timeout
+ * that stops using AbortSignal.timeout times out rather than passing.
+ */
+export function fakeTimeouts() {
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    const controller = new AbortController()
+    setTimeout(
+      () => controller.abort(new DOMException("Timed out", "TimeoutError")),
+      ms
+    )
+    return controller.signal
+  })
+  onTestFinished(() => timeout.mockRestore())
+}
+
+/**
  * Runs `work` on fake timers, so the SDK's retry backoff takes no time.
  */
 export async function withoutWaiting<T>(work: () => Promise<T>): Promise<T> {

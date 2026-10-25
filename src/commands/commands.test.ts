@@ -1,4 +1,4 @@
-import { describe, expect, it, onTestFinished, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import { run } from "../cli.ts"
 import { ExitCode } from "../errors.ts"
@@ -19,6 +19,7 @@ import {
   revision,
 } from "../test/fixtures.ts"
 import {
+  fakeTimeouts,
   raw,
   testRuntime,
   withoutWaiting,
@@ -226,16 +227,19 @@ describe("fields", () => {
     expect((await body(rich.requests[0])).type).toBe("rich_text")
   })
 
-  it("rejects unknown field types before calling the API", async () => {
-    const t = testRuntime()
-
-    expect(
-      await run(
-        ["fields", "add", "posts", "size", "--type", "float"],
-        t.runtime
+  it("rejects unknown field types and numbers before calling the API", async () => {
+    for (const [args, message] of [
+      [["add", "posts", "size", "--type", "float"], "Unknown field type"],
+      [["migrate", "posts", "size", "--type", "float"], "Unknown field type"],
+      [["update", "posts", "size", "--max", "ten"], "--max must be a number"],
+    ] as const) {
+      const t = testRuntime()
+      expect(await run(["fields", ...args], t.runtime), args.join(" ")).toBe(
+        ExitCode.Usage
       )
-    ).toBe(ExitCode.Usage)
-    expect(t.err()).toContain("Unknown field type")
+      expect(t.err()).toContain(message)
+      expect(t.requests).toHaveLength(0)
+    }
   })
 
   it("updates a field by API key, merging configuration", async () => {
@@ -844,6 +848,21 @@ describe("records", () => {
     expect(t.requests).toHaveLength(2)
   })
 
+  it("refuses an unknown --status before calling the API", async () => {
+    const t = testRuntime()
+
+    expect(
+      await run(
+        ["--json", "records", "list", "posts", "--status", "draft"],
+        t.runtime
+      )
+    ).toBe(ExitCode.Usage)
+    expect(JSON.parse(t.err()).error.message).toBe(
+      "option '--status <status>' argument 'draft' is invalid. Allowed choices are published, unpublished."
+    )
+    expect(t.requests).toHaveLength(0)
+  })
+
   it("writes no export when a later page fails", async () => {
     const t = testRuntime({
       routes: {
@@ -911,6 +930,26 @@ describe("records", () => {
 
     await t.ok(["records", "diff", REC_A, "--from", "1", "--to", "2"])
     expect(t.out()).toContain("title (changed): Helo → Hello")
+  })
+
+  it("refuses revision numbers that are not positive integers before calling the API", async () => {
+    for (const [args, message] of [
+      [["diff", REC_A, "--from", "one", "--to", "2"], "--from"],
+      [["revision", REC_A, "0"], "<revision>"],
+      [["revert", REC_A, "1.5"], "<revision>"],
+      [["publish", REC_A, "--if-revision", ""], "--if-revision"],
+    ] as const) {
+      const t = testRuntime()
+      expect(
+        await run(["--json", "records", ...args], t.runtime),
+        args.join(" ")
+      ).toBe(ExitCode.Usage)
+      expect(JSON.parse(t.err()).error).toEqual({
+        type: "invalid_request",
+        message: `${message} must be a positive integer`,
+      })
+      expect(t.requests).toHaveLength(0)
+    }
   })
 
   it("pages through history and shows one revision in full", async () => {
@@ -1500,18 +1539,40 @@ describe("field migrations", () => {
   })
 
   it("rejects contradictory flags", async () => {
-    for (const [flags, message] of [
-      [["--multiple", "--single"], "--multiple or --single, not both"],
-      [["--required", "--optional"], "--required or --optional, not both"],
-    ] as const) {
+    for (const [args, message] of [
+      [
+        ["migrate", "products", "price", "--multiple", "--single"],
+        "option '--single' cannot be used with option '--multiple'",
+      ],
+      [
+        ["migrate", "products", "price", "--required", "--optional"],
+        "option '--optional' cannot be used with option '--required'",
+      ],
+      [
+        [
+          "migrate",
+          "products",
+          "price",
+          "--backfill",
+          "",
+          "--backfill-json",
+          "0",
+        ],
+        "option '--backfill-json <json>' cannot be used with option '--backfill <text>'",
+      ],
+      [
+        ["update", "products", "price", "--optional", "--required"],
+        "option '--optional' cannot be used with option '--required'",
+      ],
+    ]) {
       const t = testRuntime()
-      expect(
-        await run(
-          ["fields", "migrate", "products", "price", ...flags],
-          t.runtime
-        )
-      ).toBe(ExitCode.Usage)
-      expect(t.err()).toContain(message)
+      expect(await run(["--json", "fields", ...args], t.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(JSON.parse(t.err()).error).toEqual({
+        type: "invalid_request",
+        message,
+      })
       expect(t.requests).toHaveLength(0)
     }
   })
@@ -2018,6 +2079,52 @@ describe("assets", () => {
     expect(Object.keys(t.written)).toEqual([`${dotfile.id}.pnpmfile.cjs`])
   })
 
+  it("reports storage that is down or stalls as a network error", async () => {
+    const download = (file: Handler) =>
+      testRuntime({
+        routes: {
+          "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+            contractResponse("assets_get", asset("ready")),
+          "GET /original": file,
+        },
+      })
+    const argv = ["--json", "assets", "download", asset().id]
+
+    const down = download(() => {
+      throw new TypeError("fetch failed")
+    })
+    expect(await run(argv, down.runtime)).toBe(ExitCode.Network)
+    expect(JSON.parse(down.err()).error).toEqual({
+      type: "network_error",
+      message: "Could not reach storage: fetch failed",
+    })
+
+    fakeTimeouts()
+    // Headers, then a body that never ends: as fetch does, reading it
+    // fails with the reason once the signal aborts.
+    const stalled = download(
+      (request) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1]))
+              request.signal.addEventListener("abort", () =>
+                controller.error(request.signal.reason)
+              )
+            },
+          })
+        )
+    )
+    expect(await withoutWaiting(() => run(argv, stalled.runtime))).toBe(
+      ExitCode.Network
+    )
+    expect(JSON.parse(stalled.err()).error).toEqual({
+      type: "network_error",
+      message: "Could not reach storage: The download timed out after 60000 ms",
+    })
+    expect(stalled.written).toEqual({})
+  })
+
   it("has nothing to download for an upload never completed", async () => {
     const pending = asset("pending")
     const t = testRuntime({
@@ -2104,19 +2211,17 @@ describe("assets", () => {
     )
     expect(t.requests).toHaveLength(1)
 
-    const other = testRuntime({
-      routes: {
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
-          contractResponse("assets_get", { ...asset(), image_url: image }),
-      },
-    })
+    const other = testRuntime()
     expect(
       await run(
         ["assets", "url", "ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T", "--fit", "crop"],
         other.runtime
       )
     ).toBe(ExitCode.Usage)
-    expect(other.err()).toContain("--fit takes contain, cover or fill")
+    expect(other.err()).toContain(
+      "option '--fit <fit>' argument 'crop' is invalid. Allowed choices are contain, cover, fill."
+    )
+    expect(other.requests).toHaveLength(0)
   })
 
   it("narrows a project-wide search by published_at only", async () => {
@@ -2547,21 +2652,9 @@ describe("transient failures", () => {
   })
 
   it("gives up on an API that never answers with exit code 3", async () => {
-    // The SDK's per-attempt timeout (AbortSignal.timeout, which fake timers
-    // don't drive), on the fake clock withoutWaiting runs. The CLI has no
-    // timeout option to shorten it instead; if the SDK stops using
-    // AbortSignal.timeout, this test times out rather than passing.
-    const timeout = vi
-      .spyOn(AbortSignal, "timeout")
-      .mockImplementation((ms) => {
-        const controller = new AbortController()
-        setTimeout(
-          () => controller.abort(new DOMException("Timed out", "TimeoutError")),
-          ms
-        )
-        return controller.signal
-      })
-    onTestFinished(() => timeout.mockRestore())
+    // The SDK's per-attempt timeout; the CLI has no timeout option to
+    // shorten it instead.
+    fakeTimeouts()
     let calls = 0
     const hanging = testRuntime({
       routes: {
@@ -2693,6 +2786,28 @@ describe("export", () => {
     expect(JSON.parse(t.text("out/manifest.json")).collections).toEqual([
       { slug: "posts", records: 1, drafts: 1 },
     ])
+  })
+
+  it("downloads every asset's file with --include-files", async () => {
+    const t = testRuntime({
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([])),
+        [`GET /v1/projects/${PROJECT_ID}/assets`]: () =>
+          contractResponse("assets_list", page([asset("ready")])),
+        "GET /original": () => new Response(new Uint8Array([1, 2, 3])),
+      },
+    })
+
+    await t.ok(["export", "--output", "out", "--include-files"])
+    expect(
+      Array.from(t.written[`out/assets/${asset().id}`] as Uint8Array)
+    ).toEqual([1, 2, 3])
+    expect(JSON.parse(t.text("out/manifest.json"))).toMatchObject({
+      exported_at: NOW,
+      assets: 1,
+    })
   })
 
   it("exports without drafts for a key that can't read them", async () => {
@@ -2850,7 +2965,7 @@ describe("import", () => {
 
     expect(await run(["import", "out"], t.runtime)).toBe(ExitCode.Usage)
     expect(t.err()).toContain(
-      'assets.jsonl line 1: "../../.ssh/id_ed25519" is not an asset ID'
+      "assets.jsonl line 1 is not an asset (its id is not an asset ID)"
     )
     expect(t.requests).toHaveLength(0)
   })

@@ -41,7 +41,12 @@ export function registerSearch(
       "--sort <sort>",
       "created_at, updated_at, published_at or a sortable field; - for descending"
     )
-    .option("--limit <n>", "results (1-100)", "20")
+    .option(
+      "--limit <n>",
+      "results (1-100)",
+      (value) => positiveInteger(value, "--limit"),
+      20
+    )
     .action(
       async (
         query: string,
@@ -49,11 +54,11 @@ export function registerSearch(
           collection?: string
           filter?: string[]
           sort?: string
-          limit: string
+          limit: number
         }
       ) => {
         const ctx = context()
-        const limit = positiveInteger(options.limit, "--limit")
+        const { limit } = options
         const filter = parseFilters(options.filter)
         let page
         if (options.collection) {
