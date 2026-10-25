@@ -1,15 +1,11 @@
 import type { Command } from "commander"
 
-import {
-  configPath,
-  DEFAULT_PROFILE,
-  readConfig,
-  writeConfig,
-} from "../config.ts"
+import { configPath, readConfig, writeConfig } from "../config.ts"
 import {
   createApi,
   DEFAULT_API_URL,
   envVar,
+  profileName,
   requireSecureUrl,
   type CommandContext,
 } from "../context.ts"
@@ -26,10 +22,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     .action(async () => {
       const ctx = context()
       const { runtime, options } = ctx
-      const name =
-        options.profile ??
-        envVar(runtime.env, "NOHEAD_PROFILE") ??
-        DEFAULT_PROFILE
+      const name = profileName(options, runtime.env)
       const apiUrl =
         options.apiUrl ??
         envVar(runtime.env, "NOHEAD_API_URL") ??
@@ -91,10 +84,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     )
     .action(async () => {
       const ctx = context()
-      const name =
-        ctx.options.profile ??
-        envVar(ctx.runtime.env, "NOHEAD_PROFILE") ??
-        DEFAULT_PROFILE
+      const name = profileName(ctx.options, ctx.runtime.env)
       const config = await readConfig(ctx.runtime)
       const known = name in config.profiles
       delete config.profiles[name]

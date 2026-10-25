@@ -2547,7 +2547,10 @@ describe("transient failures", () => {
   })
 
   it("gives up on an API that never answers with exit code 3", async () => {
-    // The SDK's per-attempt timeout, on the fake clock withoutWaiting runs.
+    // The SDK's per-attempt timeout (AbortSignal.timeout, which fake timers
+    // don't drive), on the fake clock withoutWaiting runs. The CLI has no
+    // timeout option to shorten it instead; if the SDK stops using
+    // AbortSignal.timeout, this test times out rather than passing.
     const timeout = vi
       .spyOn(AbortSignal, "timeout")
       .mockImplementation((ms) => {

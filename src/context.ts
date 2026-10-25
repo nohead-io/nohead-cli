@@ -39,6 +39,14 @@ export function envVar(
   return env[name] || undefined
 }
 
+/** The profile a command uses: --profile, then NOHEAD_PROFILE, then the default. */
+export function profileName(
+  options: { profile?: string },
+  env: Runtime["env"]
+): string {
+  return options.profile ?? envVar(env, "NOHEAD_PROFILE") ?? DEFAULT_PROFILE
+}
+
 /** Process boundary the CLI runs against, injectable for tests. */
 export interface Runtime {
   stdout: (text: string) => void
@@ -156,12 +164,13 @@ export function createContext(
   config: ConfigFile = { profiles: {} }
 ): CommandContext {
   const envApiKey = envVar(runtime.env, "NOHEAD_API_KEY")
-  const envProfile = envVar(runtime.env, "NOHEAD_PROFILE")
-  const profileName = options.profile ?? envProfile ?? DEFAULT_PROFILE
-  const profile = config.profiles[profileName]
+  const name = profileName(options, runtime.env)
+  const profile = config.profiles[name]
   // A named profile that does not exist yet is fine for `login`, which
   // creates it; any command that needs credentials fails here instead.
-  const missingProfile = !profile && Boolean(options.profile || envProfile)
+  const missingProfile =
+    !profile &&
+    Boolean(options.profile || envVar(runtime.env, "NOHEAD_PROFILE"))
   const baseUrl =
     options.apiUrl ??
     envVar(runtime.env, "NOHEAD_API_URL") ??
@@ -178,7 +187,7 @@ export function createContext(
   const credentials = envApiKey
     ? "NOHEAD_API_KEY"
     : profileKey
-      ? `profile ${profileName}`
+      ? `profile ${name}`
       : "none"
   const fetch = runtime.fetch
   // With --json, stderr carries only the final error document.
@@ -187,13 +196,13 @@ export function createContext(
     if (missingProfile && !envApiKey) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message: `No saved profile "${profileName}". Run: nohead login --profile ${profileName}`,
+        message: `No saved profile "${name}". Run: nohead login --profile ${name}`,
       })
     }
     if (!apiKey && profile?.api_key) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message: `Profile "${profileName}" holds a key for ${savedUrl}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
+        message: `Profile "${name}" holds a key for ${savedUrl}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
       })
     }
     if (!apiKey) {
