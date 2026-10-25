@@ -1,6 +1,6 @@
 import { basename } from "node:path"
 
-import type { Command } from "commander"
+import { Option, type Command } from "commander"
 import mime from "mime"
 
 import type { Asset, AssetKind } from "@nohead/sdk"
@@ -205,10 +205,15 @@ export function registerAssets(
     .argument("<id>", "asset ID (ast_...)")
     .option("--width <px>", "width in pixels")
     .option("--height <px>", "height in pixels")
-    .option("--fit <fit>", "contain, cover or fill")
-    .option(
-      "--format <format>",
-      "original (the default), webp, avif, jpeg or png"
+    .addOption(
+      new Option("--fit <fit>", "how the image fills width and height")
+        .choices(FITS)
+        .default("contain")
+    )
+    .addOption(
+      new Option("--format <format>", "the image format")
+        .choices(["original", ...FORMATS])
+        .default("original")
     )
     .option("--quality <n>", "1-100")
     .action(
@@ -217,8 +222,8 @@ export function registerAssets(
         options: {
           width?: string
           height?: string
-          fit?: string
-          format?: string
+          fit: Fit
+          format: Format | "original"
           quality?: string
         }
       ) => {
@@ -305,7 +310,9 @@ export function registerAssets(
 }
 
 const FITS = ["contain", "cover", "fill"] as const
+type Fit = (typeof FITS)[number]
 const FORMATS = ["webp", "avif", "jpeg", "png"] as const
+type Format = (typeof FORMATS)[number]
 const ASSET_KINDS: AssetKind[] = [
   "image",
   "video",
@@ -343,8 +350,8 @@ function renditionUrl(
   options: {
     width?: string
     height?: string
-    fit?: string
-    format?: string
+    fit: Fit
+    format: Format | "original"
     quality?: string
   }
 ): string {
@@ -359,17 +366,11 @@ function renditionUrl(
       throw usageError(`--${name} takes a whole number from 1 to ${max}`)
     return parsed
   }
-  const fit = FITS.find((f) => f === (options.fit ?? "contain"))
-  if (!fit) throw usageError("--fit takes contain, cover or fill")
-  const format = FORMATS.find((f) => f === options.format)
-  if (options.format !== undefined && options.format !== "original" && !format)
-    throw usageError(`--format takes original, ${FORMATS.join(", ")}`)
-
   return imageUrl(asset, {
     width: number("width", options.width, 4096),
     height: number("height", options.height, 4096),
     quality: number("quality", options.quality, 100),
-    fit,
-    format,
+    fit: options.fit,
+    format: options.format === "original" ? undefined : options.format,
   })
 }

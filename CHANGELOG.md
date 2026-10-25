@@ -32,6 +32,17 @@ release's section is its GitHub release's notes.
   option) print the error envelope on stderr, as other errors do, such as
   `{ "error": { "type": "invalid_request", "message": "missing required argument 'id'" } }`,
   instead of commander's message and the command's help. They still exit 2.
+- Options and arguments with a fixed set of values (`records list`,
+  `records bulk` and `records export` `--status`, the `records bulk`
+  action, `records scheduled --sort`, `assets url --fit` and `--format`,
+  `webhooks deliveries --status`) list their choices in `--help`, and refuse
+  any other value as other usage errors do, with a new message such as
+  `option '--fit <fit>' argument 'crop' is invalid. Allowed choices are contain, cover, fill.`
+  `assets url` checks `--fit` and `--format` before any request, and
+  `webhooks deliveries --status` before the API sees it. Flags that cannot
+  go together (`fields update --required --optional`, and in
+  `fields migrate` also `--multiple --single` and `--backfill --backfill-json`)
+  say so in the same way: `option '--optional' cannot be used with option '--required'`.
 
 ## 0.3.0
 

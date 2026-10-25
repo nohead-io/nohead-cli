@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 
-import type { Command } from "commander"
+import { Argument, Option, type Command } from "commander"
 
 import type {
   Change,
@@ -45,7 +45,7 @@ import { parseFilters } from "../filters.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
 interface ListOptions extends PageOptions {
-  status?: string
+  status?: "published" | "unpublished"
   filter?: string[]
   deleted: boolean
   sort?: string
@@ -72,15 +72,17 @@ export function withDataFlags(command: Command): Command {
     )
 }
 
-const STATUSES = ["published", "unpublished"]
+/** --status: published or unpublished. */
+const statusOption = (description: string) =>
+  new Option("--status <status>", description).choices([
+    "published",
+    "unpublished",
+  ])
 
 function listQuery(options: ListOptions): RecordListParams {
   const filter: RecordFilter = parseFilters(options.filter)
-  if (options.status) {
-    if (!STATUSES.includes(options.status))
-      throw usageError(`--status must be one of ${STATUSES.join(", ")}`)
+  if (options.status)
     filter.published_at = { exists: options.status === "published" }
-  }
   if (options.deleted) filter.deleted = true
   return {
     filter,
@@ -236,7 +238,7 @@ export function registerRecords(
       .command("list")
       .description("List records (newest first by default)")
       .argument("<collection>", "collection slug or ID")
-      .option("--status <status>", "published or unpublished")
+      .addOption(statusOption("only records with this status"))
       .option(
         "--filter <expression>",
         'filter, e.g. price<50, released>=today, "category in shoes,bags", "cover exists", "published_at exists"; repeatable',
@@ -269,13 +271,21 @@ export function registerRecords(
       .description(
         "Publish, unpublish, delete, restore or update many records; each gets its own revision"
       )
-      .argument("<action>", "publish, unpublish, delete, restore or update")
+      .addArgument(
+        new Argument("<action>", "what to do to the records").choices([
+          "publish",
+          "unpublish",
+          "delete",
+          "restore",
+          "update",
+        ])
+      )
       .argument("<collection>", "collection slug or ID")
       .argument(
         "[ids...]",
         "record IDs (or select with --status/--filter/--every)"
       )
-      .option("--status <status>", "select records with this status")
+      .addOption(statusOption("select records with this status"))
       .option(
         "--filter <expression>",
         "select records by filter, as in records list; repeatable",
@@ -285,15 +295,12 @@ export function registerRecords(
       .option("--every", "select every record in the collection", false)
   ).action(
     async (
-      action: string,
+      action: RecordBatchRequest["action"],
       collection: string,
       ids: string[],
       options: ListOptions & DataOptions & { every: boolean }
     ) => {
       const ctx = context()
-      const actions = ["publish", "unpublish", "delete", "restore", "update"]
-      if (!actions.includes(action))
-        throw usageError(`action must be one of ${actions.join(", ")}`)
       const selecting =
         Boolean(options.status || options.filter?.length || options.deleted) ||
         options.every
@@ -322,7 +329,7 @@ export function registerRecords(
           ctx.api.records.bulk(
             collection,
             {
-              action: action as RecordBatchRequest["action"],
+              action,
               record_ids: targets.slice(i, i + 100),
               ...(data ? { data } : {}),
             },
@@ -525,17 +532,21 @@ export function registerRecords(
         "List a collection's scheduled publishes, unpublishes and draft merges, soonest first"
       )
       .argument("<collection>", "collection slug or ID")
-      .option("--sort <sort>", "at (soonest first, the default) or -at"),
+      .addOption(
+        new Option(
+          "--sort <sort>",
+          "at: soonest first (the default); -at: latest first"
+        ).choices(["at", "-at"])
+      ),
     "change"
   ).action(
-    async (collection: string, options: PageOptions & { sort?: string }) => {
+    async (
+      collection: string,
+      options: PageOptions & { sort?: "at" | "-at" }
+    ) => {
       const ctx = context()
-      let sort: "at" | "-at" | undefined
-      if (options.sort === "at" || options.sort === "-at") sort = options.sort
-      else if (options.sort !== undefined)
-        throw usageError("--sort must be at or -at")
       const query = {
-        ...(sort && { sort }),
+        ...(options.sort && { sort: options.sort }),
         ...pageQuery(options),
       }
       await printList(
@@ -723,12 +734,16 @@ export function registerRecords(
     .description("Export records as JSON Lines (one API record per line)")
     .argument("<collection>", "collection slug or ID")
     .option("--output <path>", "write to a file instead of stdout")
-    .option("--status <status>", "published or unpublished")
+    .addOption(statusOption("only records with this status"))
     .option("--deleted", "export deleted records instead", false)
     .action(
       async (
         collection: string,
-        options: { output?: string; status?: string; deleted: boolean }
+        options: {
+          output?: string
+          status?: ListOptions["status"]
+          deleted: boolean
+        }
       ) => {
         const ctx = context()
         const all = await allRecords(

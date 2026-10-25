@@ -844,6 +844,21 @@ describe("records", () => {
     expect(t.requests).toHaveLength(2)
   })
 
+  it("refuses an unknown --status before calling the API", async () => {
+    const t = testRuntime()
+
+    expect(
+      await run(
+        ["--json", "records", "list", "posts", "--status", "draft"],
+        t.runtime
+      )
+    ).toBe(ExitCode.Usage)
+    expect(JSON.parse(t.err()).error.message).toBe(
+      "option '--status <status>' argument 'draft' is invalid. Allowed choices are published, unpublished."
+    )
+    expect(t.requests).toHaveLength(0)
+  })
+
   it("writes no export when a later page fails", async () => {
     const t = testRuntime({
       routes: {
@@ -1500,18 +1515,40 @@ describe("field migrations", () => {
   })
 
   it("rejects contradictory flags", async () => {
-    for (const [flags, message] of [
-      [["--multiple", "--single"], "--multiple or --single, not both"],
-      [["--required", "--optional"], "--required or --optional, not both"],
-    ] as const) {
+    for (const [args, message] of [
+      [
+        ["migrate", "products", "price", "--multiple", "--single"],
+        "option '--single' cannot be used with option '--multiple'",
+      ],
+      [
+        ["migrate", "products", "price", "--required", "--optional"],
+        "option '--optional' cannot be used with option '--required'",
+      ],
+      [
+        [
+          "migrate",
+          "products",
+          "price",
+          "--backfill",
+          "",
+          "--backfill-json",
+          "0",
+        ],
+        "option '--backfill-json <json>' cannot be used with option '--backfill <text>'",
+      ],
+      [
+        ["update", "products", "price", "--optional", "--required"],
+        "option '--optional' cannot be used with option '--required'",
+      ],
+    ]) {
       const t = testRuntime()
-      expect(
-        await run(
-          ["fields", "migrate", "products", "price", ...flags],
-          t.runtime
-        )
-      ).toBe(ExitCode.Usage)
-      expect(t.err()).toContain(message)
+      expect(await run(["--json", "fields", ...args], t.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(JSON.parse(t.err()).error).toEqual({
+        type: "invalid_request",
+        message,
+      })
       expect(t.requests).toHaveLength(0)
     }
   })
@@ -2104,19 +2141,17 @@ describe("assets", () => {
     )
     expect(t.requests).toHaveLength(1)
 
-    const other = testRuntime({
-      routes: {
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
-          contractResponse("assets_get", { ...asset(), image_url: image }),
-      },
-    })
+    const other = testRuntime()
     expect(
       await run(
         ["assets", "url", "ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T", "--fit", "crop"],
         other.runtime
       )
     ).toBe(ExitCode.Usage)
-    expect(other.err()).toContain("--fit takes contain, cover or fill")
+    expect(other.err()).toContain(
+      "option '--fit <fit>' argument 'crop' is invalid. Allowed choices are contain, cover, fill."
+    )
+    expect(other.requests).toHaveLength(0)
   })
 
   it("narrows a project-wide search by published_at only", async () => {

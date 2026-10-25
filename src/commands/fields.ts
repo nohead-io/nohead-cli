@@ -1,4 +1,4 @@
-import type { Command } from "commander"
+import { Option, type Command } from "commander"
 
 import type { Field, FieldCreate, FieldUpdate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
@@ -245,7 +245,11 @@ export function registerFields(
         "new key (the old one keeps working as an alias for 6 months)"
       )
       .option("--required", "make the field required")
-      .option("--optional", "make the field optional")
+      .addOption(
+        new Option("--optional", "make the field optional").conflicts(
+          "required"
+        )
+      )
   ).action(
     async (
       collection: string,
@@ -258,9 +262,6 @@ export function registerFields(
       }
     ) => {
       const ctx = context()
-      if (options.required && options.optional)
-        throw usageError("Pass either --required or --optional, not both")
-
       const field = await resolveField(ctx, collection, ref)
       const config = await configuration(ctx, options)
       const body: FieldUpdate = {}
