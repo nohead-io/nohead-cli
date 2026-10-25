@@ -11,7 +11,7 @@ import {
   usageError,
 } from "../input.ts"
 import { details, printResult, table } from "../output.ts"
-import { printList } from "../pages.ts"
+import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 import { withDataFlags, type DataOptions } from "./records.ts"
 
 const IF_REVISION = [
@@ -60,45 +60,31 @@ export function registerDrafts(
       "Changes to a record that wait until they are merged into it, now or later"
     )
 
-  drafts
-    .command("list")
-    .description("List a collection's drafts, most recently changed first")
-    .argument("<collection>", "collection slug or ID")
-    .option(
-      "--record <id>",
-      "this record's draft instead, whatever its collection"
-    )
-    .option("--limit <n>", "page size (1-100)")
-    .option("--cursor <cursor>", "continue from a previous page's next_cursor")
-    .option("--all", "follow cursors and return every draft", false)
-    .action(
-      async (
-        collection: string,
-        options: {
-          record?: string
-          limit?: string
-          cursor?: string
-          all: boolean
-        }
-      ) => {
-        const ctx = context()
-        const query = {
-          limit: options.limit
-            ? positiveInteger(options.limit, "--limit")
-            : 100,
-          cursor: options.cursor,
-        }
-        await printList(
-          ctx,
-          options.all,
-          () =>
-            options.record
-              ? ctx.api.records.drafts(options.record, query)
-              : ctx.api.drafts.list(collection, query),
-          draftTable
-        )
-      }
-    )
+  withPaging(
+    drafts
+      .command("list")
+      .description("List a collection's drafts, most recently changed first")
+      .argument("<collection>", "collection slug or ID")
+      .option(
+        "--record <id>",
+        "this record's draft instead, whatever its collection"
+      ),
+    "draft"
+  ).action(
+    async (collection: string, options: PageOptions & { record?: string }) => {
+      const ctx = context()
+      const query = pageQuery(options)
+      await printList(
+        ctx,
+        options.all,
+        () =>
+          options.record
+            ? ctx.api.records.drafts(options.record, query)
+            : ctx.api.drafts.list(collection, query),
+        draftTable
+      )
+    }
+  )
 
   drafts
     .command("get")

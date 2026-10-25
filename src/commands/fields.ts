@@ -3,9 +3,10 @@ import type { Command } from "commander"
 import type { Field, FieldCreate, FieldUpdate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
 import { FIELD_TYPES, isFieldType, type FieldType } from "../field-types.ts"
-import { unwrap } from "../errors.ts"
+import { unwrap, unwrapFind } from "../errors.ts"
 import { toFieldKey, usageError } from "../input.ts"
 import { printResult, table } from "../output.ts"
+import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
 /** Accepts the spec's dashed spelling too: rich-text -> rich_text. */
 export function fieldType(value: string): FieldType {
@@ -100,10 +101,10 @@ export async function resolveField(
   ref: string,
   deleted = false
 ): Promise<Field> {
-  const page = await unwrap(
-    ctx.api.fields.list(collection, { limit: 100, deleted })
+  const field = await unwrapFind(
+    ctx.api.fields.list(collection, { limit: 100, deleted }),
+    (f) => f.id === ref || f.key === ref
   )
-  const field = page.data.find((f) => f.id === ref || f.key === ref)
   if (!field)
     throw usageError(
       `No ${deleted ? "deleted " : ""}field ${JSON.stringify(ref)} in ${collection}`
@@ -145,34 +146,37 @@ export function registerFields(
     .command("fields")
     .description("Manage a collection's fields")
 
-  fields
-    .command("list")
-    .description("List fields")
-    .argument("<collection>", "collection slug or ID")
-    .option("--deleted", "list deleted fields instead", false)
-    .action(async (collection: string, options: { deleted: boolean }) => {
+  withPaging(
+    fields
+      .command("list")
+      .description("List fields")
+      .argument("<collection>", "collection slug or ID")
+      .option("--deleted", "list deleted fields instead", false),
+    "field"
+  ).action(
+    async (collection: string, options: PageOptions & { deleted: boolean }) => {
       const ctx = context()
-      const page = await unwrap(
-        ctx.api.fields.list(collection, {
-          limit: 100,
-          deleted: options.deleted,
-        })
+      const query = { ...pageQuery(options), deleted: options.deleted }
+      await printList(
+        ctx,
+        options.all,
+        () => ctx.api.fields.list(collection, query),
+        (items) =>
+          table(
+            ["API KEY", "NAME", "TYPE", "RULES", "ID"],
+            items.map((f) => [
+              f.key,
+              f.name,
+              f.type,
+              [f.required && "required", f.multiple && "multiple"]
+                .filter(Boolean)
+                .join(", "),
+              f.id,
+            ])
+          )
       )
-      printResult(ctx, page, () =>
-        table(
-          ["API KEY", "NAME", "TYPE", "RULES", "ID"],
-          page.data.map((f) => [
-            f.key,
-            f.name,
-            f.type,
-            [f.required && "required", f.multiple && "multiple"]
-              .filter(Boolean)
-              .join(", "),
-            f.id,
-          ])
-        )
-      )
-    })
+    }
+  )
 
   withConfigFlags(
     fields

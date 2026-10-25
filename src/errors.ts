@@ -69,6 +69,19 @@ export async function unwrapAll<T>(items: AsyncIterable<T>): Promise<T[]> {
   return all
 }
 
+/** The first item of an SDK list that matches, reading pages until it does. */
+export async function unwrapFind<T>(
+  items: AsyncIterable<T>,
+  match: (item: T) => boolean
+): Promise<T | undefined> {
+  try {
+    for await (const item of items) if (match(item)) return item
+  } catch (error) {
+    throw cliError(error)
+  }
+  return undefined
+}
+
 function cliError(error: unknown): unknown {
   if (error instanceof APIError) {
     if (isErrorEnvelope(error.body)) {
