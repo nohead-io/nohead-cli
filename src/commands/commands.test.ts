@@ -1,4 +1,4 @@
-import { describe, expect, it, onTestFinished, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import { run } from "../cli.ts"
 import { ExitCode } from "../errors.ts"
@@ -19,6 +19,7 @@ import {
   revision,
 } from "../test/fixtures.ts"
 import {
+  fakeTimeouts,
   raw,
   testRuntime,
   withoutWaiting,
@@ -2055,6 +2056,52 @@ describe("assets", () => {
     expect(Object.keys(t.written)).toEqual([`${dotfile.id}.pnpmfile.cjs`])
   })
 
+  it("reports storage that is down or stalls as a network error", async () => {
+    const download = (file: Handler) =>
+      testRuntime({
+        routes: {
+          "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+            contractResponse("assets_get", asset("ready")),
+          "GET /original": file,
+        },
+      })
+    const argv = ["--json", "assets", "download", asset().id]
+
+    const down = download(() => {
+      throw new TypeError("fetch failed")
+    })
+    expect(await run(argv, down.runtime)).toBe(ExitCode.Network)
+    expect(JSON.parse(down.err()).error).toEqual({
+      type: "network_error",
+      message: "Could not reach storage: fetch failed",
+    })
+
+    fakeTimeouts()
+    // Headers, then a body that never ends: as fetch does, reading it
+    // fails with the reason once the signal aborts.
+    const stalled = download(
+      (request) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1]))
+              request.signal.addEventListener("abort", () =>
+                controller.error(request.signal.reason)
+              )
+            },
+          })
+        )
+    )
+    expect(await withoutWaiting(() => run(argv, stalled.runtime))).toBe(
+      ExitCode.Network
+    )
+    expect(JSON.parse(stalled.err()).error).toEqual({
+      type: "network_error",
+      message: "Could not reach storage: The download timed out after 60000 ms",
+    })
+    expect(stalled.written).toEqual({})
+  })
+
   it("has nothing to download for an upload never completed", async () => {
     const pending = asset("pending")
     const t = testRuntime({
@@ -2582,21 +2629,9 @@ describe("transient failures", () => {
   })
 
   it("gives up on an API that never answers with exit code 3", async () => {
-    // The SDK's per-attempt timeout (AbortSignal.timeout, which fake timers
-    // don't drive), on the fake clock withoutWaiting runs. The CLI has no
-    // timeout option to shorten it instead; if the SDK stops using
-    // AbortSignal.timeout, this test times out rather than passing.
-    const timeout = vi
-      .spyOn(AbortSignal, "timeout")
-      .mockImplementation((ms) => {
-        const controller = new AbortController()
-        setTimeout(
-          () => controller.abort(new DOMException("Timed out", "TimeoutError")),
-          ms
-        )
-        return controller.signal
-      })
-    onTestFinished(() => timeout.mockRestore())
+    // The SDK's per-attempt timeout; the CLI has no timeout option to
+    // shorten it instead.
+    fakeTimeouts()
     let calls = 0
     const hanging = testRuntime({
       routes: {
@@ -2728,6 +2763,25 @@ describe("export", () => {
     expect(JSON.parse(t.text("out/manifest.json")).collections).toEqual([
       { slug: "posts", records: 1, drafts: 1 },
     ])
+  })
+
+  it("downloads every asset's file with --include-files", async () => {
+    const t = testRuntime({
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([])),
+        [`GET /v1/projects/${PROJECT_ID}/assets`]: () =>
+          contractResponse("assets_list", page([asset("ready")])),
+        "GET /original": () => new Response(new Uint8Array([1, 2, 3])),
+      },
+    })
+
+    await t.ok(["export", "--output", "out", "--include-files"])
+    expect(
+      Array.from(t.written[`out/assets/${asset().id}`] as Uint8Array)
+    ).toEqual([1, 2, 3])
+    expect(JSON.parse(t.text("out/manifest.json")).assets).toBe(1)
   })
 
   it("exports without drafts for a key that can't read them", async () => {

@@ -43,6 +43,10 @@ release's section is its GitHub release's notes.
   go together (`fields update --required --optional`, and in
   `fields migrate` also `--multiple --single` and `--backfill --backfill-json`)
   say so in the same way: `option '--optional' cannot be used with option '--required'`.
+- `assets download` and `export --include-files` treat storage that cannot
+  be reached like the API: they exit 3 with `network_error` (it was exit 4,
+  `Unexpected error`). A download gives up after the time an upload of the
+  file may take (a minute, longer for a large file), with the same error.
 
 ## 0.3.0
 

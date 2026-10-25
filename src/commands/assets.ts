@@ -6,7 +6,7 @@ import mime from "mime"
 import type { Asset, AssetKind } from "@nohead/sdk"
 import { imageUrl } from "@nohead/sdk/images"
 import type { CommandContext } from "../context.ts"
-import { CliError, ExitCode, unwrap } from "../errors.ts"
+import { CliError, ExitCode, storageUnreachable, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printNotice, printResult, table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
@@ -23,10 +23,10 @@ function size(bytes: number): string {
 }
 
 /**
- * The longest an upload attempt may take: the file at 64 KB/s (a slow
- * connection), and at least a minute. 100 MB gets about 27 minutes.
+ * The longest an upload attempt or a download may take: the file at 64 KB/s
+ * (a slow connection), and at least a minute. 100 MB gets about 27 minutes.
  */
-const uploadTimeout = (bytes: number) => Math.max(60_000, bytes / 64)
+const transferTimeout = (bytes: number) => Math.max(60_000, bytes / 64)
 
 /**
  * Uploads a file the platform way: start the upload, PUT the bytes
@@ -45,10 +45,44 @@ export async function uploadAsset(
       { filename: file.filename, content_type: file.contentType },
       {
         ...ctx.writeOptions(idempotencyKey ?? null),
-        timeout: uploadTimeout(file.bytes.byteLength),
+        timeout: transferTimeout(file.bytes.byteLength),
       }
     )
   )
+}
+
+/**
+ * An asset's file, from its `file_url`, of `size` bytes (its byte_size).
+ * Storage that cannot be reached or stalls is a network error, as for
+ * uploads; one that refuses names the file when there is a `filename`.
+ */
+export async function downloadFile(
+  ctx: CommandContext,
+  url: string,
+  size: number,
+  filename?: string
+): Promise<Uint8Array> {
+  const timeout = transferTimeout(size)
+  try {
+    const response = await ctx.runtime.fetch(
+      new Request(url, { signal: AbortSignal.timeout(timeout) })
+    )
+    if (!response.ok)
+      throw new CliError(ExitCode.ApiError, {
+        type: "download_failed",
+        message: filename
+          ? `${filename}: storage returned ${response.status}`
+          : `Storage returned ${response.status}`,
+      })
+    return await response.bytes()
+  } catch (error) {
+    if (error instanceof CliError) throw error
+    throw storageUnreachable(
+      error instanceof DOMException && error.name === "TimeoutError"
+        ? new Error(`The download timed out after ${timeout} ms`)
+        : error
+    )
+  }
 }
 
 function describe(asset: Asset): string {
@@ -250,12 +284,7 @@ export function registerAssets(
             type: "not_uploaded",
             message: `Asset ${asset.id} has no file yet: its upload was never completed`,
           })
-        const response = await ctx.runtime.fetch(new Request(asset.file_url))
-        if (!response.ok)
-          throw new CliError(ExitCode.ApiError, {
-            type: "download_failed",
-            message: `Storage returned ${response.status}`,
-          })
+        const bytes = await downloadFile(ctx, asset.file_url, asset.byte_size)
         // The filename is anyone's choice, so nothing is replaced without
         // --force, and a dotfile (".pnpmfile.cjs", ".envrc", which tools run
         // from the current directory) is saved under the asset's ID.
@@ -264,11 +293,9 @@ export function registerAssets(
           options.output ??
           (name && !name.startsWith(".") ? name : `${asset.id}${name}`)
         try {
-          await ctx.runtime.writeFile(
-            output,
-            new Uint8Array(await response.arrayBuffer()),
-            { exclusive: !options.force }
-          )
+          await ctx.runtime.writeFile(output, bytes, {
+            exclusive: !options.force,
+          })
         } catch (error) {
           if ((error as { code?: string }).code !== "EEXIST") throw error
           throw usageError(

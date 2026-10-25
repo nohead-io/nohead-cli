@@ -26,7 +26,7 @@ import {
   type CollectionSpec,
 } from "../schema/format.ts"
 import { applicable, describeChange, planChanges } from "../schema/plan.ts"
-import { uploadAsset } from "./assets.ts"
+import { downloadFile, uploadAsset } from "./assets.ts"
 import { allRecords } from "./records.ts"
 import { applyPlan, remoteCollections } from "./schema.ts"
 
@@ -291,21 +291,19 @@ export function registerPortability(
         )
         if (options.includeFiles) {
           for (const asset of assets) {
-            const response = await ctx.runtime.fetch(
-              new Request(asset.file_url)
+            const path = join(
+              options.output,
+              "assets",
+              safeName(ASSET_ID, asset.id, "an asset ID")
             )
-            if (!response.ok)
-              throw new CliError(ExitCode.ApiError, {
-                type: "download_failed",
-                message: `${asset.filename}: storage returned ${response.status}`,
-              })
             await ctx.runtime.writeFile(
-              join(
-                options.output,
-                "assets",
-                safeName(ASSET_ID, asset.id, "an asset ID")
-              ),
-              new Uint8Array(await response.arrayBuffer())
+              path,
+              await downloadFile(
+                ctx,
+                asset.file_url,
+                asset.byte_size,
+                asset.filename
+              )
             )
           }
           printNotice(ctx, `Exported ${assets.length} files`)

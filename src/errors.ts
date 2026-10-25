@@ -90,16 +90,21 @@ function cliError(error: unknown): unknown {
   // Storage could not be reached (the cause), or refused the bytes.
   if (error instanceof UploadError)
     return error.cause
-      ? new CliError(ExitCode.Network, {
-          type: "network_error",
-          message: `Could not reach storage: ${reason(fetchFailure(error.cause))}`,
-        })
+      ? storageUnreachable(error.cause)
       : new CliError(ExitCode.ApiError, {
           type: "upload_failed",
           message: error.message,
         })
   if (error instanceof ConnectionError) return networkError(fetchFailure(error))
   return error
+}
+
+/** Storage, where files go up and come down, could not be reached. */
+export function storageUnreachable(cause: unknown): CliError {
+  return new CliError(ExitCode.Network, {
+    type: "network_error",
+    message: `Could not reach storage: ${reason(fetchFailure(cause))}`,
+  })
 }
 
 function networkError(cause: unknown) {
