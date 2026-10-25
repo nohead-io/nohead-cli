@@ -21,6 +21,12 @@ describe("configPath", () => {
     )
   })
 
+  it("treats empty variables as unset", () => {
+    expect(
+      configPath({ HOME: "/home/ada", XDG_CONFIG_HOME: "", NOHEAD_CONFIG: "" })
+    ).toBe("/home/ada/.config/nohead/config.json")
+  })
+
   it("never falls back to the current directory without $HOME", () => {
     expect(configPath({})).toBe(
       join(homedir(), ".config", "nohead", "config.json")

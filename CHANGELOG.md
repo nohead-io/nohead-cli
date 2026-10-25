@@ -21,6 +21,13 @@ release's section is its GitHub release's notes.
 - Commands that take a field key (`fields update`, `fields delete`,
   `fields restore`, `fields migrate`) find a field in a collection with
   more than 100 fields; they looked in the first 100 only.
+- An empty environment variable counts as unset, as in the SDKs: an empty
+  `NOHEAD_API_KEY`, `NOHEAD_API_URL`, `NOHEAD_PROFILE` or `NOHEAD_PROJECT`
+  (say, `NOHEAD_API_KEY=` in an `.envrc`) no longer hides the saved
+  profile's setting, and an empty `XDG_CONFIG_HOME` no longer moves the
+  config file into the current directory.
+- A list page that says there is more but gives no cursor no longer ends
+  with `More: --cursor null`; like the SDKs, the CLI stops there.
 
 ## 0.3.0
 

@@ -28,6 +28,25 @@ export function requireSecureUrl(url: string) {
   })
 }
 
+/**
+ * An environment variable's value, with an empty one counting as unset (as in
+ * the SDKs): `NOHEAD_API_KEY=` in an .envrc must not hide the saved profile.
+ */
+export function envVar(
+  env: Runtime["env"],
+  name: `NOHEAD_${string}`
+): string | undefined {
+  return env[name] || undefined
+}
+
+/** The profile a command uses: --profile, then NOHEAD_PROFILE, then the default. */
+export function profileName(
+  options: { profile?: string },
+  env: Runtime["env"]
+): string {
+  return options.profile ?? envVar(env, "NOHEAD_PROFILE") ?? DEFAULT_PROFILE
+}
+
 /** Process boundary the CLI runs against, injectable for tests. */
 export interface Runtime {
   stdout: (text: string) => void
@@ -144,16 +163,17 @@ export function createContext(
   options: GlobalOptions,
   config: ConfigFile = { profiles: {} }
 ): CommandContext {
-  const profileName =
-    options.profile ?? runtime.env.NOHEAD_PROFILE ?? DEFAULT_PROFILE
-  const profile = config.profiles[profileName]
+  const envApiKey = envVar(runtime.env, "NOHEAD_API_KEY")
+  const name = profileName(options, runtime.env)
+  const profile = config.profiles[name]
   // A named profile that does not exist yet is fine for `login`, which
   // creates it; any command that needs credentials fails here instead.
   const missingProfile =
-    !profile && Boolean(options.profile || runtime.env.NOHEAD_PROFILE)
+    !profile &&
+    Boolean(options.profile || envVar(runtime.env, "NOHEAD_PROFILE"))
   const baseUrl =
     options.apiUrl ??
-    runtime.env.NOHEAD_API_URL ??
+    envVar(runtime.env, "NOHEAD_API_URL") ??
     profile?.api_url ??
     DEFAULT_API_URL
   // A saved key only goes to the API it was saved for: a NOHEAD_API_URL
@@ -163,26 +183,26 @@ export function createContext(
     savedUrl && origin(savedUrl) === origin(baseUrl)
       ? profile?.api_key
       : undefined
-  const apiKey = runtime.env.NOHEAD_API_KEY ?? profileKey
-  const credentials = runtime.env.NOHEAD_API_KEY
+  const apiKey = envApiKey ?? profileKey
+  const credentials = envApiKey
     ? "NOHEAD_API_KEY"
     : profileKey
-      ? `profile ${profileName}`
+      ? `profile ${name}`
       : "none"
   const fetch = runtime.fetch
   // With --json, stderr carries only the final error document.
   const notify = options.json ? () => {} : runtime.stderr
   const authenticatedKey = () => {
-    if (missingProfile && !runtime.env.NOHEAD_API_KEY) {
+    if (missingProfile && !envApiKey) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message: `No saved profile "${profileName}". Run: nohead login --profile ${profileName}`,
+        message: `No saved profile "${name}". Run: nohead login --profile ${name}`,
       })
     }
     if (!apiKey && profile?.api_key) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message: `Profile "${profileName}" holds a key for ${savedUrl}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
+        message: `Profile "${name}" holds a key for ${savedUrl}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
       })
     }
     if (!apiKey) {
@@ -204,8 +224,8 @@ export function createContext(
     (project ??= (async () => {
       const explicit =
         options.project ??
-        runtime.env.NOHEAD_PROJECT ??
-        (runtime.env.NOHEAD_API_KEY ? undefined : profile?.project_id)
+        envVar(runtime.env, "NOHEAD_PROJECT") ??
+        (envApiKey ? undefined : profile?.project_id)
       if (explicit) return explicit
 
       const me = await unwrap(context.api.me.get())
