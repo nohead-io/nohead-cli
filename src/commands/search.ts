@@ -3,7 +3,7 @@ import type { Command } from "commander"
 import type { SearchIndex } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
 import { unwrap } from "../errors.ts"
-import { usageError } from "../input.ts"
+import { positiveInteger, usageError } from "../input.ts"
 import { parseFilters } from "../filters.ts"
 import { details, formatValue, printResult, table } from "../output.ts"
 import { recordStatus } from "./records.ts"
@@ -53,7 +53,7 @@ export function registerSearch(
         }
       ) => {
         const ctx = context()
-        const limit = Number(options.limit)
+        const limit = positiveInteger(options.limit, "--limit")
         const filter = parseFilters(options.filter)
         let page
         if (options.collection) {

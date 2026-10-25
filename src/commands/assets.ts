@@ -9,7 +9,7 @@ import type { CommandContext } from "../context.ts"
 import { CliError, ExitCode, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printNotice, printResult, table } from "../output.ts"
-import { printList } from "../pages.ts"
+import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
 /** The file's type by its extension, for example image/png for cover.png. */
 export function contentTypeFor(path: string): string {
@@ -73,59 +73,57 @@ export function registerAssets(
     .command("assets")
     .description("Manage the project's files (media)")
 
-  assets
-    .command("list")
-    .description("List assets, newest first")
-    .option("--deleted", "list deleted assets instead", false)
-    .option(
-      "--search <words>",
-      "only assets whose filename or alt text has every word"
-    )
-    .option(
-      "--kind <kinds>",
-      `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`
-    )
-    .option("--cursor <cursor>", "continue from a previous page's next_cursor")
-    .option("--all", "follow cursors and return every asset", false)
-    .action(
-      async (options: {
+  withPaging(
+    assets
+      .command("list")
+      .description("List assets, newest first")
+      .option("--deleted", "list deleted assets instead", false)
+      .option(
+        "--search <words>",
+        "only assets whose filename or alt text has every word"
+      )
+      .option(
+        "--kind <kinds>",
+        `only assets of a kind, or several: ${ASSET_KINDS.join(", ")} (comma-separated)`
+      ),
+    "asset"
+  ).action(
+    async (
+      options: PageOptions & {
         deleted: boolean
         search?: string
         kind?: string
-        cursor?: string
-        all: boolean
-      }) => {
-        const ctx = context()
-        // Checked first, so a typo fails before any request.
-        const kind =
-          options.kind === undefined ? undefined : kinds(options.kind)
-        const query = {
-          limit: 100,
-          deleted: options.deleted,
-          // An empty search (an unset shell variable) means no search.
-          q: options.search || undefined,
-          kind,
-          cursor: options.cursor,
-        }
-        const api = await ctx.project()
-        await printList(
-          ctx,
-          options.all,
-          () => api.assets.list(query),
-          (items) =>
-            table(
-              ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
-              items.map((a) => [
-                a.id,
-                a.filename,
-                a.content_type,
-                size(a.byte_size),
-                a.status,
-              ])
-            )
-        )
       }
-    )
+    ) => {
+      const ctx = context()
+      // Checked first, so a typo fails before any request.
+      const kind = options.kind === undefined ? undefined : kinds(options.kind)
+      const query = {
+        ...pageQuery(options),
+        deleted: options.deleted,
+        // An empty search (an unset shell variable) means no search.
+        q: options.search || undefined,
+        kind,
+      }
+      const api = await ctx.project()
+      await printList(
+        ctx,
+        options.all,
+        () => api.assets.list(query),
+        (items) =>
+          table(
+            ["ID", "FILENAME", "TYPE", "SIZE", "STATUS"],
+            items.map((a) => [
+              a.id,
+              a.filename,
+              a.content_type,
+              size(a.byte_size),
+              a.status,
+            ])
+          )
+      )
+    }
+  )
 
   assets
     .command("upload")

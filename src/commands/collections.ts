@@ -5,6 +5,7 @@ import type { CommandContext } from "../context.ts"
 import { unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printResult, table } from "../output.ts"
+import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
 function summary(collection: Collection): string {
   return [
@@ -39,22 +40,24 @@ export function registerCollections(
     .command("collections")
     .description("Manage collections (data models)")
 
-  collections
-    .command("list")
-    .description("List collections in the project")
-    .option("--deleted", "list deleted collections instead", false)
-    .action(async (options: { deleted: boolean }) => {
-      const ctx = context()
-      const page = await unwrap(
-        (await ctx.project()).collections.list({
-          limit: 100,
-          deleted: options.deleted,
-        })
-      )
-      printResult(ctx, page, () =>
+  withPaging(
+    collections
+      .command("list")
+      .description("List collections in the project")
+      .option("--deleted", "list deleted collections instead", false),
+    "collection"
+  ).action(async (options: PageOptions & { deleted: boolean }) => {
+    const ctx = context()
+    const query = { ...pageQuery(options), deleted: options.deleted }
+    const api = await ctx.project()
+    await printList(
+      ctx,
+      options.all,
+      () => api.collections.list(query),
+      (items) =>
         table(
           ["SLUG", "NAME", "FIELDS", "SCHEMA", "ID"],
-          page.data.map((c) => [
+          items.map((c) => [
             c.slug,
             c.name,
             String(c.fields.length),
@@ -62,8 +65,8 @@ export function registerCollections(
             c.id,
           ])
         )
-      )
-    })
+    )
+  })
 
   collections
     .command("get")
@@ -189,19 +192,23 @@ export function registerCollections(
       printResult(ctx, result, () => `Restored collection ${result.slug}`)
     })
 
-  collections
-    .command("history")
-    .description("Show the collection's schema history, newest first")
-    .argument("<collection>", "collection slug or ID")
-    .action(async (collection: string) => {
-      const ctx = context()
-      const page = await unwrap(
-        ctx.api.collections.schemaChanges.list(collection, { limit: 100 })
-      )
-      printResult(ctx, page, () =>
+  withPaging(
+    collections
+      .command("history")
+      .description("Show the collection's schema history, newest first")
+      .argument("<collection>", "collection slug or ID"),
+    "change"
+  ).action(async (collection: string, options: PageOptions) => {
+    const ctx = context()
+    const query = pageQuery(options)
+    await printList(
+      ctx,
+      options.all,
+      () => ctx.api.collections.schemaChanges.list(collection, query),
+      (items) =>
         table(
           ["VERSION", "OPERATION", "ACTOR", "VIA", "WHEN", "NOTE"],
-          page.data.map((c) => [
+          items.map((c) => [
             `v${c.to_version}`,
             c.operation + (c.payload.breaking === true ? " (breaking)" : ""),
             c.actor.name ?? c.actor.type,
@@ -210,6 +217,6 @@ export function registerCollections(
             c.note ?? "",
           ])
         )
-      )
-    })
+    )
+  })
 }

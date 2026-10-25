@@ -42,16 +42,13 @@ import {
   toJsonLines,
 } from "../output.ts"
 import { parseFilters } from "../filters.ts"
-import { printList } from "../pages.ts"
+import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
-interface ListOptions {
+interface ListOptions extends PageOptions {
   status?: string
   filter?: string[]
   deleted: boolean
   sort?: string
-  limit?: string
-  cursor?: string
-  all: boolean
   expand?: string
 }
 
@@ -88,8 +85,7 @@ function listQuery(options: ListOptions): RecordListParams {
   return {
     filter,
     sort: options.sort,
-    limit: options.limit ? positiveInteger(options.limit, "--limit") : 100,
-    cursor: options.cursor,
+    ...pageQuery(options),
     expand: options.expand?.split(","),
   }
 }
@@ -235,38 +231,37 @@ export function registerRecords(
     .command("records")
     .description("Manage records and their history")
 
-  records
-    .command("list")
-    .description("List records (newest first by default)")
-    .argument("<collection>", "collection slug or ID")
-    .option("--status <status>", "published or unpublished")
-    .option(
-      "--filter <expression>",
-      'filter, e.g. price<50, released>=today, "category in shoes,bags", "cover exists", "published_at exists"; repeatable',
-      collect
-    )
-    .option("--deleted", "list deleted records instead", false)
-    .option(
-      "--sort <sort>",
-      "created_at, updated_at, published_at, id or a field; prefix - for descending"
-    )
-    .option("--limit <n>", "page size (1-100)")
-    .option("--cursor <cursor>", "continue from a previous page's next_cursor")
-    .option("--all", "follow cursors and return every record", false)
-    .option(
-      "--expand <fields>",
-      "relation fields whose records to embed (comma-separated)"
-    )
-    .action(async (collection: string, options: ListOptions) => {
-      const ctx = context()
-      const query = listQuery(options)
-      await printList(
-        ctx,
-        options.all,
-        () => ctx.api.records.list(collection, query),
-        recordTable
+  withPaging(
+    records
+      .command("list")
+      .description("List records (newest first by default)")
+      .argument("<collection>", "collection slug or ID")
+      .option("--status <status>", "published or unpublished")
+      .option(
+        "--filter <expression>",
+        'filter, e.g. price<50, released>=today, "category in shoes,bags", "cover exists", "published_at exists"; repeatable',
+        collect
       )
-    })
+      .option("--deleted", "list deleted records instead", false)
+      .option(
+        "--sort <sort>",
+        "created_at, updated_at, published_at, id or a field; prefix - for descending"
+      )
+      .option(
+        "--expand <fields>",
+        "relation fields whose records to embed (comma-separated)"
+      ),
+    "record"
+  ).action(async (collection: string, options: ListOptions) => {
+    const ctx = context()
+    const query = listQuery(options)
+    await printList(
+      ctx,
+      options.all,
+      () => ctx.api.records.list(collection, query),
+      recordTable
+    )
+  })
 
   withDataFlags(
     records
@@ -523,57 +518,45 @@ export function registerRecords(
       )
     })
 
-  records
-    .command("scheduled")
-    .description(
-      "List a collection's scheduled publishes, unpublishes and draft merges, soonest first"
-    )
-    .argument("<collection>", "collection slug or ID")
-    .option("--sort <sort>", "at (soonest first, the default) or -at")
-    .option("--limit <n>", "page size (1-100)")
-    .option("--cursor <cursor>", "continue from a previous page's next_cursor")
-    .option("--all", "follow cursors and return every change", false)
-    .action(
-      async (
-        collection: string,
-        options: {
-          sort?: string
-          limit?: string
-          cursor?: string
-          all: boolean
-        }
-      ) => {
-        const ctx = context()
-        let sort: "at" | "-at" | undefined
-        if (options.sort === "at" || options.sort === "-at") sort = options.sort
-        else if (options.sort !== undefined)
-          throw usageError("--sort must be at or -at")
-        const query = {
-          ...(sort && { sort }),
-          limit: options.limit
-            ? positiveInteger(options.limit, "--limit")
-            : 100,
-          cursor: options.cursor,
-        }
-        await printList(
-          ctx,
-          options.all,
-          () => ctx.api.records.scheduledChanges(collection, query),
-          (changes: ScheduledChange[]) =>
-            changes.length === 0
-              ? "Nothing is scheduled."
-              : table(
-                  ["WHEN", "ACTION", "RECORD", "DRAFT"],
-                  changes.map((c) => [
-                    c.at,
-                    c.action,
-                    c.record_id,
-                    c.draft_id ?? "",
-                  ])
-                )
-        )
+  withPaging(
+    records
+      .command("scheduled")
+      .description(
+        "List a collection's scheduled publishes, unpublishes and draft merges, soonest first"
+      )
+      .argument("<collection>", "collection slug or ID")
+      .option("--sort <sort>", "at (soonest first, the default) or -at"),
+    "change"
+  ).action(
+    async (collection: string, options: PageOptions & { sort?: string }) => {
+      const ctx = context()
+      let sort: "at" | "-at" | undefined
+      if (options.sort === "at" || options.sort === "-at") sort = options.sort
+      else if (options.sort !== undefined)
+        throw usageError("--sort must be at or -at")
+      const query = {
+        ...(sort && { sort }),
+        ...pageQuery(options),
       }
-    )
+      await printList(
+        ctx,
+        options.all,
+        () => ctx.api.records.scheduledChanges(collection, query),
+        (changes: ScheduledChange[]) =>
+          changes.length === 0
+            ? "Nothing is scheduled."
+            : table(
+                ["WHEN", "ACTION", "RECORD", "DRAFT"],
+                changes.map((c) => [
+                  c.at,
+                  c.action,
+                  c.record_id,
+                  c.draft_id ?? "",
+                ])
+              )
+      )
+    }
+  )
 
   lifecycle(
     records,
@@ -593,72 +576,64 @@ export function registerRecords(
     { guarded: false }
   )
 
-  records
-    .command("history")
-    .description("Show a record's revisions, newest first")
-    .argument("<id>", "record ID")
-    .option("--limit <n>", "page size (1-100)", "100")
-    .option("--cursor <cursor>", "continue from a previous page's next_cursor")
-    .option("--operation <op>", "only this operation (update, publish, ...)")
-    .option(
-      "--actor <id>",
-      "only changes by this user (usr_...) or API key (key_...)"
-    )
-    .option("--since <time>", "only changes at or after this ISO 8601 time")
-    .option("--until <time>", "only changes before this ISO 8601 time")
-    .action(
-      async (
-        id: string,
-        options: {
-          limit: string
-          cursor?: string
-          operation?: RecordRevision["operation"]
-          actor?: string
-          since?: string
-          until?: string
-        }
-      ) => {
-        const ctx = context()
-        const createdAt = {
-          ...(options.since ? { gte: options.since } : {}),
-          ...(options.until ? { lt: options.until } : {}),
-        }
-        const filter = {
-          ...(options.operation ? { operation: options.operation } : {}),
-          ...(options.actor ? { actor_id: options.actor } : {}),
-          ...(Object.keys(createdAt).length ? { created_at: createdAt } : {}),
-        }
-        const page = await unwrap(
-          ctx.api.records.revisions.list(id, {
-            limit: positiveInteger(options.limit, "--limit"),
-            ...(options.cursor ? { cursor: options.cursor } : {}),
-            ...(Object.keys(filter).length ? { filter } : {}),
-          })
-        )
-        printResult(ctx, page, () =>
-          [
-            table(
-              ["REV", "OPERATION", "ACTOR", "VIA", "CHANGED", "WHEN", "NOTE"],
-              page.data.map((r) => [
-                String(r.revision),
-                r.operation +
-                  (r.reverted_to_revision
-                    ? ` to ${r.reverted_to_revision}`
-                    : ""),
-                r.actor.name ?? r.actor.type,
-                r.via,
-                r.changed_fields.join(", "),
-                r.created_at,
-                r.note ?? "",
-              ])
-            ),
-            page.meta.has_more
-              ? `\nMore: --cursor ${page.meta.next_cursor}`
-              : "",
-          ].join("")
-        )
+  withPaging(
+    records
+      .command("history")
+      .description("Show a record's revisions, newest first")
+      .argument("<id>", "record ID")
+      .option("--operation <op>", "only this operation (update, publish, ...)")
+      .option(
+        "--actor <id>",
+        "only changes by this user (usr_...) or API key (key_...)"
+      )
+      .option("--since <time>", "only changes at or after this ISO 8601 time")
+      .option("--until <time>", "only changes before this ISO 8601 time"),
+    "revision"
+  ).action(
+    async (
+      id: string,
+      options: PageOptions & {
+        operation?: RecordRevision["operation"]
+        actor?: string
+        since?: string
+        until?: string
       }
-    )
+    ) => {
+      const ctx = context()
+      const createdAt = {
+        ...(options.since ? { gte: options.since } : {}),
+        ...(options.until ? { lt: options.until } : {}),
+      }
+      const filter = {
+        ...(options.operation ? { operation: options.operation } : {}),
+        ...(options.actor ? { actor_id: options.actor } : {}),
+        ...(Object.keys(createdAt).length ? { created_at: createdAt } : {}),
+      }
+      const query = {
+        ...pageQuery(options),
+        ...(Object.keys(filter).length ? { filter } : {}),
+      }
+      await printList(
+        ctx,
+        options.all,
+        () => ctx.api.records.revisions.list(id, query),
+        (items) =>
+          table(
+            ["REV", "OPERATION", "ACTOR", "VIA", "CHANGED", "WHEN", "NOTE"],
+            items.map((r) => [
+              String(r.revision),
+              r.operation +
+                (r.reverted_to_revision ? ` to ${r.reverted_to_revision}` : ""),
+              r.actor.name ?? r.actor.type,
+              r.via,
+              r.changed_fields.join(", "),
+              r.created_at,
+              r.note ?? "",
+            ])
+          )
+      )
+    }
+  )
 
   records
     .command("revision")

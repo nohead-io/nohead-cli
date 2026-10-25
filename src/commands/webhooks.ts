@@ -4,6 +4,7 @@ import type { WebhookCreate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
 import { unwrap } from "../errors.ts"
 import { printResult, table } from "../output.ts"
+import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 
 export function registerWebhooks(
   program: Command,
@@ -13,26 +14,29 @@ export function registerWebhooks(
     .command("webhooks")
     .description("Send signed HTTP requests when content changes")
 
-  webhooks
-    .command("list")
-    .description("List the project's webhooks")
-    .action(async () => {
-      const ctx = context()
-      const page = await unwrap(
-        (await ctx.project()).webhooks.list({ limit: 100 })
-      )
-      printResult(ctx, page, () =>
+  withPaging(
+    webhooks.command("list").description("List the project's webhooks"),
+    "webhook"
+  ).action(async (options: PageOptions) => {
+    const ctx = context()
+    const query = pageQuery(options)
+    const api = await ctx.project()
+    await printList(
+      ctx,
+      options.all,
+      () => api.webhooks.list(query),
+      (items) =>
         table(
           ["ID", "URL", "EVENTS", "STATUS"],
-          page.data.map((w) => [
+          items.map((w) => [
             w.id,
             w.url,
             w.event_types.join(","),
             w.enabled ? "enabled" : "disabled",
           ])
         )
-      )
-    })
+    )
+  })
 
   webhooks
     .command("create")
@@ -119,27 +123,28 @@ export function registerWebhooks(
       )
     })
 
-  webhooks
-    .command("deliveries")
-    .description("List a webhook's deliveries, newest first")
-    .argument("<id>", "webhook ID (wh_...)")
-    .option("--status <status>", "pending, succeeded or failed")
-    .action(
-      async (
-        id: string,
-        options: { status?: "pending" | "succeeded" | "failed" }
-      ) => {
-        const ctx = context()
-        const page = await unwrap(
-          ctx.api.webhooks.deliveries.list(id, {
-            limit: 100,
-            status: options.status,
-          })
-        )
-        printResult(ctx, page, () =>
+  withPaging(
+    webhooks
+      .command("deliveries")
+      .description("List a webhook's deliveries, newest first")
+      .argument("<id>", "webhook ID (wh_...)")
+      .option("--status <status>", "pending, succeeded or failed"),
+    "delivery"
+  ).action(
+    async (
+      id: string,
+      options: PageOptions & { status?: "pending" | "succeeded" | "failed" }
+    ) => {
+      const ctx = context()
+      const query = { ...pageQuery(options), status: options.status }
+      await printList(
+        ctx,
+        options.all,
+        () => ctx.api.webhooks.deliveries.list(id, query),
+        (items) =>
           table(
             ["DELIVERY", "EVENT", "STATUS", "ATTEMPTS", "LAST"],
-            page.data.map((d) => [
+            items.map((d) => [
               d.id,
               d.event.type,
               d.status,
@@ -147,9 +152,9 @@ export function registerWebhooks(
               String(d.last_status_code ?? d.last_error ?? ""),
             ])
           )
-        )
-      }
-    )
+      )
+    }
+  )
 
   webhooks
     .command("delivery")

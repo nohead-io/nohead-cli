@@ -11,6 +11,7 @@ import type { CommandContext } from "../context.ts"
 import { CliError, ExitCode, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { formatValue, printNotice, printResult, table } from "../output.ts"
+import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 import {
   configuration,
   fieldType,
@@ -230,27 +231,31 @@ export function registerMigrations(
     .command("migrations")
     .description("Follow and cancel field migrations")
 
-  migrations
-    .command("list")
-    .description("List a collection's field migrations, newest first")
-    .argument("<collection>", "collection slug or ID")
-    .action(async (collection: string) => {
-      const ctx = context()
-      const page = await unwrap(
-        ctx.api.migrations.list(collection, { limit: 100 })
-      )
-      printResult(ctx, page, () =>
+  withPaging(
+    migrations
+      .command("list")
+      .description("List a collection's field migrations, newest first")
+      .argument("<collection>", "collection slug or ID"),
+    "migration"
+  ).action(async (collection: string, options: PageOptions) => {
+    const ctx = context()
+    const query = pageQuery(options)
+    await printList(
+      ctx,
+      options.all,
+      () => ctx.api.migrations.list(collection, query),
+      (items) =>
         table(
           ["ID", "STATUS", "CHANGE", "CREATED"],
-          page.data.map((m) => [
+          items.map((m) => [
             m.id,
             m.status,
             `${definition(m.from)} -> ${definition(m.to)}`,
             m.created_at,
           ])
         )
-      )
-    })
+    )
+  })
 
   migrations
     .command("get")

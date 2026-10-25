@@ -450,6 +450,64 @@ describe("fields", () => {
 
     await t.ok(["fields", "restore", "posts", "legacy"])
   })
+
+  it("finds a field by API key on a later page, reading no further", async () => {
+    const title = field({ key: "title" })
+    const others = Array.from({ length: 100 }, (_, i) =>
+      field({
+        key: `other_${i}`,
+        id: `fld_01J9ZQ3F8X5W2K7M4N6P${String(i).padStart(4, "0")}`,
+      })
+    )
+    const t = testRuntime({
+      routes: {
+        "GET /v1/collections/posts/fields": (request) => {
+          const cursor = new URL(request.url).searchParams.get("cursor")
+          if (cursor === "page-3") throw new Error("read past the field")
+          return contractResponse(
+            "fields_list",
+            cursor === "page-2"
+              ? page([title], "page-3")
+              : page(others, "page-2")
+          )
+        },
+        [`PATCH /v1/fields/${title.id}`]: () =>
+          contractResponse("fields_update", { ...title, name: "Headline" }),
+      },
+    })
+
+    await t.ok(["fields", "update", "posts", "title", "--name", "Headline"])
+    expect(
+      t.requests.map((r) => {
+        const url = new URL(r.url)
+        return `${r.method} ${url.pathname} ${url.searchParams.get("cursor")}`
+      })
+    ).toEqual([
+      "GET /v1/collections/posts/fields null",
+      "GET /v1/collections/posts/fields page-2",
+      `PATCH /v1/fields/${title.id} null`,
+    ])
+  })
+
+  it("names a field no page has", async () => {
+    const t = testRuntime({
+      routes: {
+        "GET /v1/collections/posts/fields": (request) =>
+          contractResponse(
+            "fields_list",
+            new URL(request.url).searchParams.get("cursor")
+              ? page([field({ key: "body" })])
+              : page([field({ key: "summary" })], "page-2")
+          ),
+      },
+    })
+
+    expect(await run(["fields", "delete", "posts", "title"], t.runtime)).toBe(
+      ExitCode.Usage
+    )
+    expect(t.err()).toContain('No field "title" in posts')
+    expect(t.requests).toHaveLength(2)
+  })
 })
 
 describe("records", () => {
@@ -1412,6 +1470,35 @@ describe("field migrations", () => {
     expect(t.out()).toContain("rolls back at its next batch")
   })
 
+  it("pages migrations, following cursors with --all", async () => {
+    const api = () =>
+      testRuntime({
+        routes: {
+          "GET /v1/collections/products/migrations": (request) =>
+            contractResponse(
+              "migrations_list",
+              new URL(request.url).searchParams.get("cursor")
+                ? page([migration("complete")])
+                : page([migration("running")], "next-page")
+            ),
+        },
+      })
+
+    const one = api()
+    await one.ok(["migrations", "list", "products"])
+    expect(one.out()).toContain("More: --cursor next-page")
+
+    const all = api()
+    await all.ok(["--json", "migrations", "list", "products", "--all"])
+    expect(all.json().data.map((m: { status: string }) => m.status)).toEqual([
+      "running",
+      "complete",
+    ])
+    expect(new URL(all.requests[1].url).searchParams.get("cursor")).toBe(
+      "next-page"
+    )
+  })
+
   it("rejects contradictory flags", async () => {
     for (const [flags, message] of [
       [["--multiple", "--single"], "--multiple or --single, not both"],
@@ -1965,6 +2052,27 @@ describe("webhooks", () => {
   })
 })
 
+const auditEvent = {
+  id: "evt_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+  object: "event",
+  organization_id: "org_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+  project: { id: PROJECT_ID, name: "Website" },
+  type: "record.published",
+  resource: {
+    type: "record",
+    id: "rec_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+  },
+  actor: {
+    type: "user",
+    id: "usr_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+    name: "Ada",
+  },
+  via: "ui",
+  metadata: { revision: 2 },
+  request_id: null,
+  created_at: NOW,
+}
+
 describe("audit", () => {
   it("lists the project's audit events with filters", async () => {
     const t = testRuntime({
@@ -1972,28 +2080,7 @@ describe("audit", () => {
         "GET /v1/me": me,
         [`GET /v1/projects/${PROJECT_ID}/audit-events`]: () =>
           contractResponse("audit_events_list", {
-            data: [
-              {
-                id: "evt_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-                object: "event",
-                organization_id: "org_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-                project: { id: PROJECT_ID, name: "Website" },
-                type: "record.published",
-                resource: {
-                  type: "record",
-                  id: "rec_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-                },
-                actor: {
-                  type: "user",
-                  id: "usr_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-                  name: "Ada",
-                },
-                via: "ui",
-                metadata: { revision: 2 },
-                request_id: null,
-                created_at: NOW,
-              },
-            ],
+            data: [auditEvent],
             meta: { next_cursor: null, has_more: false },
           }),
       },
@@ -2608,43 +2695,63 @@ describe("import", () => {
   })
 })
 
+const WEBHOOK_ID = "wh_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+const DELIVERY_ID = "whd_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+const webhook = {
+  id: WEBHOOK_ID,
+  object: "webhook",
+  project_id: PROJECT_ID,
+  url: "https://example.com/hook",
+  description: null,
+  event_types: ["record.published"],
+  enabled: true,
+  deleted_at: null,
+  purge_after: null,
+  created_at: NOW,
+  updated_at: NOW,
+}
+const delivery = {
+  id: DELIVERY_ID,
+  object: "webhook_delivery",
+  webhook_id: WEBHOOK_ID,
+  event: {
+    id: "evt_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+    type: "record.published",
+    created_at: NOW,
+  },
+  status: "failed",
+  attempts_count: 1,
+  last_status_code: 500,
+  last_error: null,
+  last_attempt_at: NOW,
+  next_attempt_at: null,
+  succeeded_at: null,
+  created_at: NOW,
+}
+
+const schemaChange = {
+  id: "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+  object: "schema_change",
+  collection_id: COLLECTION_ID,
+  from_version: 1,
+  to_version: 2,
+  operation: "add_field",
+  payload: {},
+  actor: {
+    type: "api_key",
+    id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+    name: "ci",
+  },
+  via: "cli",
+  note: "Titles",
+  request_id: null,
+  created_at: NOW,
+}
+
 // One request each: what the command sends (checked against the contract by
 // the test runtime too) and what it prints.
 describe("commands with a single request", () => {
   const title = field({ key: "title" })
-  const WEBHOOK_ID = "wh_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
-  const DELIVERY_ID = "whd_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
-  const webhook = {
-    id: WEBHOOK_ID,
-    object: "webhook",
-    project_id: PROJECT_ID,
-    url: "https://example.com/hook",
-    description: null,
-    event_types: ["record.published"],
-    enabled: true,
-    deleted_at: null,
-    purge_after: null,
-    created_at: NOW,
-    updated_at: NOW,
-  }
-  const delivery = {
-    id: DELIVERY_ID,
-    object: "webhook_delivery",
-    webhook_id: WEBHOOK_ID,
-    event: {
-      id: "evt_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-      type: "record.published",
-      created_at: NOW,
-    },
-    status: "failed",
-    attempts_count: 1,
-    last_status_code: 500,
-    last_error: null,
-    last_attempt_at: NOW,
-    next_attempt_at: null,
-    succeeded_at: null,
-    created_at: NOW,
-  }
 
   it.each<{
     argv: string[]
@@ -2698,29 +2805,7 @@ describe("commands with a single request", () => {
       argv: ["collections", "history", "posts"],
       request: "GET /v1/collections/posts/schema-changes?limit=100",
       response: () =>
-        contractResponse(
-          "schema_changes_list",
-          page([
-            {
-              id: "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-              object: "schema_change",
-              collection_id: COLLECTION_ID,
-              from_version: 1,
-              to_version: 2,
-              operation: "add_field",
-              payload: {},
-              actor: {
-                type: "api_key",
-                id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-                name: "ci",
-              },
-              via: "cli",
-              note: "Titles",
-              request_id: null,
-              created_at: NOW,
-            },
-          ])
-        ),
+        contractResponse("schema_changes_list", page([schemaChange])),
       output: /v2\s+add_field\s+ci\s+cli\s+\S+\s+Titles/,
     },
     {
@@ -2929,6 +3014,114 @@ describe("commands with a single request", () => {
       const text = await last.text()
       expect(text ? JSON.parse(text) : undefined).toEqual(sent)
       expect(t.out()).toMatch(output)
+    }
+  )
+})
+
+describe("paged lists", () => {
+  it.each<{ argv: string[]; path: string; operation: string; item: unknown }>([
+    {
+      argv: ["collections", "list"],
+      path: `/v1/projects/${PROJECT_ID}/collections`,
+      operation: "collections_list",
+      item: collection(),
+    },
+    {
+      argv: ["collections", "history", "posts"],
+      path: "/v1/collections/posts/schema-changes",
+      operation: "schema_changes_list",
+      item: schemaChange,
+    },
+    {
+      argv: ["fields", "list", "posts"],
+      path: "/v1/collections/posts/fields",
+      operation: "fields_list",
+      item: field({ key: "title" }),
+    },
+    {
+      argv: ["webhooks", "list"],
+      path: `/v1/projects/${PROJECT_ID}/webhooks`,
+      operation: "webhooks_list",
+      item: webhook,
+    },
+    {
+      argv: ["webhooks", "deliveries", WEBHOOK_ID],
+      path: `/v1/webhooks/${WEBHOOK_ID}/deliveries`,
+      operation: "webhook_deliveries_list",
+      item: delivery,
+    },
+    {
+      argv: ["audit"],
+      path: `/v1/projects/${PROJECT_ID}/audit-events`,
+      operation: "audit_events_list",
+      item: auditEvent,
+    },
+    {
+      argv: ["records", "history", REC_A],
+      path: `/v1/records/${REC_A}/revisions`,
+      operation: "record_revisions_list",
+      item: revision(1),
+    },
+  ])(
+    "$argv.0 $argv.1 ends at a page with the next cursor, or follows every page with --all",
+    async ({ argv, path, operation, item }) => {
+      const api = () =>
+        testRuntime({
+          routes: {
+            "GET /v1/me": me,
+            [`GET ${path}`]: (request) =>
+              contractResponse(
+                operation,
+                new URL(request.url).searchParams.get("cursor")
+                  ? page([item])
+                  : page([item], "next-page")
+              ),
+          },
+        })
+      const lists = (t: ReturnType<typeof api>) =>
+        t.requests
+          .map((r) => new URL(r.url))
+          .filter((url) => url.pathname === path)
+          .map((url) => url.searchParams)
+
+      const one = api()
+      await one.ok([...argv, "--limit", "1"])
+      expect(one.out()).toContain("More: --cursor next-page")
+      expect(lists(one).map((q) => q.get("limit"))).toEqual(["1"])
+
+      const json = api()
+      await json.ok(["--json", ...argv])
+      expect(json.json()).toEqual({
+        data: [item],
+        meta: { next_cursor: "next-page", has_more: true },
+      })
+
+      const next = api()
+      await next.ok([...argv, "--cursor", "next-page"])
+      expect(next.out()).not.toContain("More:")
+      expect(lists(next)[0].get("cursor")).toBe("next-page")
+
+      const all = api()
+      await all.ok(["--json", ...argv, "--all"])
+      expect(all.json().data).toHaveLength(2)
+      expect(lists(all).map((q) => q.get("cursor"))).toEqual([
+        null,
+        "next-page",
+      ])
+      // Every page is read anyway, so as few requests as can be.
+      expect(lists(all).map((q) => q.get("limit"))).toEqual(["100", "100"])
+    }
+  )
+
+  it.each([["audit"], ["search", "shoes"]])(
+    "%s refuses a --limit that is not a positive integer before calling the API",
+    async (...argv) => {
+      const t = testRuntime({ routes: {} })
+      expect(await run([...argv, "--limit", "ten"], t.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(t.err()).toContain("--limit must be a positive integer")
+      expect(t.requests).toHaveLength(0)
     }
   )
 })
