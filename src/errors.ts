@@ -22,7 +22,8 @@ export interface ErrorBody {
   type: string
   message: string
   request_id?: string
-  details?: Array<{ field?: string; code: string; message: string }>
+  /** As the API sends them, with any extra keys (usage, current_revision, ...). */
+  details?: APIError["details"]
 }
 
 export class CliError extends Error {
