@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, onTestFinished, vi } from "vitest"
 
 import { run } from "../cli.ts"
 import { ExitCode } from "../errors.ts"
@@ -1705,6 +1705,126 @@ describe("login and profiles", () => {
     expect(insecure.requests).toHaveLength(0)
   })
 
+  describe("precedence: flag, then environment, then profile", () => {
+    const profiles = {
+      default: {
+        api_url: "http://saved.test",
+        api_key: "nohead_sk_saved",
+        project_id: PROJECT_ID,
+      },
+      ci: {
+        api_url: "http://ci.test",
+        api_key: "nohead_sk_ci",
+        project_id: "prj_ci",
+      },
+    }
+    const list = () =>
+      contractResponse("collections_list", page([collection()]))
+    const setup = (vars: Record<string, string>) =>
+      testRuntime({
+        env: { ...env, ...vars },
+        files: saved(profiles),
+        routes: {
+          "GET /v1/me": me,
+          ...Object.fromEntries(
+            [PROJECT_ID, "prj_ci", "prj_env", "prj_flag"].map((id) => [
+              `GET /v1/projects/${id}/collections`,
+              list,
+            ])
+          ),
+        },
+      })
+    // Where each request went, and with which key.
+    const sent = (t: ReturnType<typeof setup>) =>
+      t.requests.map((r) => {
+        const url = new URL(r.url)
+        return `${url.origin}${url.pathname} ${r.headers.get("Authorization")}`
+      })
+
+    it("takes the API URL and key from flags, then the environment, then the profile", async () => {
+      const t = setup({
+        NOHEAD_API_URL: "http://env.test",
+        NOHEAD_API_KEY: "nohead_sk_env",
+      })
+      await t.ok(["whoami"])
+      await t.ok(["--api-url", "http://flag.test", "whoami"])
+      expect(sent(t)).toEqual([
+        "http://env.test/v1/me Bearer nohead_sk_env",
+        "http://flag.test/v1/me Bearer nohead_sk_env",
+      ])
+      expect(t.out()).toContain("from:    NOHEAD_API_KEY")
+    })
+
+    it("takes the profile from --profile, then NOHEAD_PROFILE", async () => {
+      const t = setup({ NOHEAD_PROFILE: "ci" })
+      await t.ok(["whoami"])
+      await t.ok(["--profile", "default", "whoami"])
+      expect(sent(t)).toEqual([
+        "http://ci.test/v1/me Bearer nohead_sk_ci",
+        "http://saved.test/v1/me Bearer nohead_sk_saved",
+      ])
+    })
+
+    it("takes the project from --project, then NOHEAD_PROJECT, then the profile", async () => {
+      const t = setup({})
+      await t.ok(["collections", "list"])
+      t.runtime.env = { ...env, NOHEAD_PROJECT: "prj_env" }
+      await t.ok(["collections", "list"])
+      await t.ok(["--project", "prj_flag", "collections", "list"])
+      t.runtime.env = { ...env, NOHEAD_PROFILE: "ci" }
+      await t.ok(["collections", "list"])
+      expect(sent(t)).toEqual([
+        `http://saved.test/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_saved`,
+        "http://saved.test/v1/projects/prj_env/collections Bearer nohead_sk_saved",
+        "http://saved.test/v1/projects/prj_flag/collections Bearer nohead_sk_saved",
+        "http://ci.test/v1/projects/prj_ci/collections Bearer nohead_sk_ci",
+      ])
+    })
+
+    // The profile's project belongs to the profile's key, not another one.
+    it("asks the API for the project of a key from NOHEAD_API_KEY", async () => {
+      const t = setup({ NOHEAD_API_KEY: "nohead_sk_env" })
+      await t.ok(["collections", "list"])
+      expect(sent(t)).toEqual([
+        "http://saved.test/v1/me Bearer nohead_sk_env",
+        `http://saved.test/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_env`,
+      ])
+    })
+
+    // As in the SDKs: an .envrc's `NOHEAD_API_KEY=` must not hide the profile.
+    it("treats empty environment variables as unset", async () => {
+      const t = setup({
+        NOHEAD_API_URL: "",
+        NOHEAD_API_KEY: "",
+        NOHEAD_PROFILE: "",
+        NOHEAD_PROJECT: "",
+      })
+      await t.ok(["whoami"])
+      expect(t.out()).toContain("from:    profile default")
+      await t.ok(["collections", "list"])
+      expect(sent(t)).toEqual([
+        "http://saved.test/v1/me Bearer nohead_sk_saved",
+        `http://saved.test/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_saved`,
+      ])
+    })
+
+    it("logs in and out of the default profile with an empty NOHEAD_PROFILE", async () => {
+      const t = testRuntime({
+        env: { ...env, NOHEAD_PROFILE: "", NOHEAD_API_URL: "" },
+        stdin: "nohead_sk_new\n",
+        routes: { "GET /v1/me": me },
+      })
+      await t.ok(["login"])
+      expect(t.requests[0].url).toBe("https://api.nohead.io/v1/me")
+      expect(Object.keys(JSON.parse(t.text(configFile)).profiles)).toEqual([
+        "default",
+      ])
+
+      await t.ok(["logout"])
+      expect(JSON.parse(t.text(configFile))).toEqual({ profiles: {} })
+    })
+  })
+
   it("logs in to a new named profile", async () => {
     const t = testRuntime({
       env: { ...env, NOHEAD_API_URL: "http://staging.test" },
@@ -2425,6 +2545,44 @@ describe("transient failures", () => {
     ).toBe(ExitCode.Network)
     expect(JSON.parse(down.err()).error.type).toBe("network_error")
   })
+
+  it("gives up on an API that never answers with exit code 3", async () => {
+    // The SDK's per-attempt timeout, on the fake clock withoutWaiting runs.
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms) => {
+        const controller = new AbortController()
+        setTimeout(
+          () => controller.abort(new DOMException("Timed out", "TimeoutError")),
+          ms
+        )
+        return controller.signal
+      })
+    onTestFinished(() => timeout.mockRestore())
+    let calls = 0
+    const hanging = testRuntime({
+      routes: {
+        "GET /v1/me": (request) => {
+          calls++
+          // As fetch does: rejects with the reason once the signal aborts.
+          return new Promise((_, reject) =>
+            request.signal.addEventListener("abort", () =>
+              reject(request.signal.reason as Error)
+            )
+          )
+        },
+      },
+    })
+
+    expect(
+      await withoutWaiting(() => run(["--json", "whoami"], hanging.runtime))
+    ).toBe(ExitCode.Network)
+    expect(calls).toBe(4)
+    expect(JSON.parse(hanging.err()).error).toEqual({
+      type: "network_error",
+      message: "Could not reach the API: The request timed out after 60000 ms",
+    })
+  })
 })
 
 describe("unexpected errors", () => {
@@ -2749,7 +2907,8 @@ const schemaChange = {
 }
 
 // One request each: what the command sends (checked against the contract by
-// the test runtime too) and what it prints.
+// the test runtime too), what it prints, and what it prints with --json: the
+// response as the API sent it.
 describe("commands with a single request", () => {
   const title = field({ key: "title" })
 
@@ -2999,21 +3158,35 @@ describe("commands with a single request", () => {
   ])(
     "$argv.0 $argv.1",
     async ({ argv, request, body: sent, response, routes, output }) => {
-      const t = testRuntime({
-        routes: {
-          "GET /v1/me": me,
-          ...routes,
-          [request.split("?")[0]]: response,
-        },
-      })
+      const api = () =>
+        testRuntime({
+          routes: {
+            "GET /v1/me": me,
+            ...routes,
+            [request.split("?")[0]]: response,
+          },
+        })
+      const lastRequest = async (t: ReturnType<typeof api>) => {
+        const last = t.requests.at(-1)!
+        const url = new URL(last.url)
+        const text = await last.text()
+        return {
+          request: `${last.method} ${url.pathname}${url.search}`,
+          body: text ? JSON.parse(text) : undefined,
+        }
+      }
 
+      const t = api()
       await t.ok(argv)
-      const last = t.requests.at(-1)!
-      const url = new URL(last.url)
-      expect(`${last.method} ${url.pathname}${url.search}`).toBe(request)
-      const text = await last.text()
-      expect(text ? JSON.parse(text) : undefined).toEqual(sent)
+      expect(await lastRequest(t)).toEqual({ request, body: sent })
       expect(t.out()).toMatch(output)
+
+      const scripted = api()
+      await scripted.ok(["--json", ...argv])
+      const last = scripted.requests.at(-1)!
+      expect(await lastRequest(scripted)).toEqual({ request, body: sent })
+      expect(scripted.json()).toEqual(await (await response(last)).json())
+      expect(scripted.err()).toBe("")
     }
   )
 })
@@ -3112,6 +3285,24 @@ describe("paged lists", () => {
       expect(lists(all).map((q) => q.get("limit"))).toEqual(["100", "100"])
     }
   )
+
+  // The contract allows it; the SDKs stop there, and so does the hint.
+  it("offers no next page when has_more comes without a cursor", async () => {
+    const t = testRuntime({
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", {
+            data: [collection()],
+            meta: { next_cursor: null, has_more: true },
+          }),
+      },
+    })
+
+    await t.ok(["collections", "list"])
+    expect(t.out()).toContain("posts")
+    expect(t.out()).not.toContain("More:")
+  })
 
   it.each([["audit"], ["search", "shoes"]])(
     "%s refuses a --limit that is not a positive integer before calling the API",

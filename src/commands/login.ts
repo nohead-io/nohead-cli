@@ -9,6 +9,7 @@ import {
 import {
   createApi,
   DEFAULT_API_URL,
+  envVar,
   requireSecureUrl,
   type CommandContext,
 } from "../context.ts"
@@ -26,9 +27,13 @@ export function registerLogin(program: Command, context: () => CommandContext) {
       const ctx = context()
       const { runtime, options } = ctx
       const name =
-        options.profile ?? runtime.env.NOHEAD_PROFILE ?? DEFAULT_PROFILE
+        options.profile ??
+        envVar(runtime.env, "NOHEAD_PROFILE") ??
+        DEFAULT_PROFILE
       const apiUrl =
-        options.apiUrl ?? runtime.env.NOHEAD_API_URL ?? DEFAULT_API_URL
+        options.apiUrl ??
+        envVar(runtime.env, "NOHEAD_API_URL") ??
+        DEFAULT_API_URL
 
       // At a terminal the key is read without echo, so it never stays on
       // screen or in scrollback. Piped in (echo $KEY | nohead
@@ -87,7 +92,9 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     .action(async () => {
       const ctx = context()
       const name =
-        ctx.options.profile ?? ctx.runtime.env.NOHEAD_PROFILE ?? DEFAULT_PROFILE
+        ctx.options.profile ??
+        envVar(ctx.runtime.env, "NOHEAD_PROFILE") ??
+        DEFAULT_PROFILE
       const config = await readConfig(ctx.runtime)
       const known = name in config.profiles
       delete config.profiles[name]

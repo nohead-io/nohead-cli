@@ -24,7 +24,8 @@ export const DEFAULT_PROFILE = "default"
  */
 export function configPath(env: Runtime["env"]): string {
   if (env.NOHEAD_CONFIG) return env.NOHEAD_CONFIG
-  const base = env.XDG_CONFIG_HOME ?? join(env.HOME || homedir(), ".config")
+  // Empty counts as unset, as the XDG spec says.
+  const base = env.XDG_CONFIG_HOME || join(env.HOME || homedir(), ".config")
   return join(base, "nohead", "config.json")
 }
 

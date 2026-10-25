@@ -72,6 +72,7 @@ export async function printList<T>(
     page,
     () =>
       render(page.data) +
-      (page.meta.has_more ? `\nMore: --cursor ${page.meta.next_cursor}` : "")
+      // has_more with a null cursor is a last page too, as the SDK reads it.
+      (page.hasNextPage() ? `\nMore: --cursor ${page.meta.next_cursor}` : "")
   )
 }
