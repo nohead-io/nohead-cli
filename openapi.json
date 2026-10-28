@@ -445,7 +445,7 @@
       "post": {
         "operationId": "records_bulk",
         "summary": "Change many records",
-        "description": "Publishes, unpublishes, deletes, restores or updates\n(`update` with `data`, applied to each) up to 100 records. Each record\nis changed as if by its own request: one revision per effective\nchange, with its own audit event, webhook and search update. Records\nthat fail (not found, invalid, over a plan limit, a live record with\na pending draft for `publish`) are reported without stopping the\nothers. Publishing needs `records:publish` (an API key's `records:write`); the rest `records:write`.\n",
+        "description": "Publishes, unpublishes, deletes, restores or updates\n(`update` with `data`, applied to each) up to 100 records. Each record\nis changed as if by its own request: one revision per effective\nchange, with its own audit event, webhook and search update. Records\nthat fail (not found, invalid, over a plan limit, a live record with\na pending draft for `publish`) are reported without stopping the\nothers. Needs `records:write`.\n",
         "tags": [
           "records"
         ],
@@ -607,7 +607,7 @@
       "post": {
         "operationId": "records_publish",
         "summary": "Publish a record",
-        "description": "Makes the record's current content live (`records:publish`; an API key's `records:write`), as a\n`publish` revision. Publishing a published record changes nothing,\nbut a live record with a pending draft is `409` with detail code\n`draft_pending` and its `draft_id`: publishing never merges a draft\n(`POST /v1/drafts/{id}/merge` does). An unpublished record goes live\nwith its current content and keeps its draft.\n",
+        "description": "Makes the record's current content live (`records:write`), as a\n`publish` revision. Publishing a published record changes nothing,\nbut a live record with a pending draft is `409` with detail code\n`draft_pending` and its `draft_id`: publishing never merges a draft\n(`POST /v1/drafts/{id}/merge` does). An unpublished record goes live\nwith its current content and keeps its draft.\n",
         "tags": [
           "publishing"
         ],
@@ -655,7 +655,7 @@
       "delete": {
         "operationId": "records_unpublish",
         "summary": "Unpublish a record",
-        "description": "Takes the record offline (`records:publish`; an API key's `records:write`), as an `unpublish`\nrevision; its content is kept. Unpublishing an unpublished record\nchanges nothing.\n",
+        "description": "Takes the record offline (`records:write`), as an `unpublish`\nrevision; its content is kept. Unpublishing an unpublished record\nchanges nothing.\n",
         "tags": [
           "publishing"
         ],
@@ -738,7 +738,7 @@
       "put": {
         "operationId": "records_schedule",
         "summary": "Schedule publishing or unpublishing",
-        "description": "Publishes (`publish_at`) or unpublishes (`unpublish_at`) the record at\na future time (`records:publish`; an API key's `records:write`). The change is made within a minute of\nthe time, like a manual publish from the scheduler: it has its own\nrevision (`via: scheduler`), webhooks and audit event. `publish_at`\nneeds an unpublished record; `unpublish_at` needs a published record or a\n`publish_at` before it. Setting or cancelling a schedule is audited but\nmakes no revision. `409` with detail code `deleted` while the record is\nsoft-deleted.\n\nReplaces the whole schedule: a time left out, or null, is none, so\nboth left out cancel it as `DELETE` does. Setting the schedule the\nrecord already has changes nothing and records no event. Publishing\nthe record by hand clears `publish_at`, and unpublishing it clears\n`unpublish_at`.\n\nA scheduled change that can't be made when it is due (the record is\nlive with a pending draft, say) is dropped: its time is cleared, the\nschedule's `last_error` says why, and `record.schedule_failed` is\nrecorded. One due while a field migration runs on the collection is\nmade once the migration finishes.\n",
+        "description": "Publishes (`publish_at`) or unpublishes (`unpublish_at`) the record at\na future time (`records:write`). The change is made within a minute of\nthe time, like a manual publish from the scheduler: it has its own\nrevision (`via: scheduler`), webhooks and audit event. `publish_at`\nneeds an unpublished record; `unpublish_at` needs a published record or a\n`publish_at` before it. Setting or cancelling a schedule is audited but\nmakes no revision. `409` with detail code `deleted` while the record is\nsoft-deleted.\n\nReplaces the whole schedule: a time left out, or null, is none, so\nboth left out cancel it as `DELETE` does. Setting the schedule the\nrecord already has changes nothing and records no event. Publishing\nthe record by hand clears `publish_at`, and unpublishing it clears\n`unpublish_at`.\n\nA scheduled change that can't be made when it is due (the record is\nlive with a pending draft, say) is dropped: its time is cleared, the\nschedule's `last_error` says why, and `record.schedule_failed` is\nrecorded. One due while a field migration runs on the collection is\nmade once the migration finishes.\n",
         "tags": [
           "publishing"
         ],
@@ -9474,7 +9474,7 @@
       },
       "ApiKeyScope": {
         "type": "string",
-        "description": "What a project API key may do. `records:write` also publishes, unpublishes and schedules records (the `records:publish` permission). `webhooks:read` includes delivery payloads and `webhooks:write` can subscribe an endpoint to every event, so both give access to the record, schema and asset data in events, unpublished records included; published-only keys cannot have them.",
+        "description": "What a project API key may do. `records:write` also publishes, unpublishes and schedules records. `webhooks:read` includes delivery payloads and `webhooks:write` can subscribe an endpoint to every event, so both give access to the record, schema and asset data in events, unpublished records included; published-only keys cannot have them.",
         "enum": [
           "records:read",
           "records:write",
