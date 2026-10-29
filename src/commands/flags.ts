@@ -7,7 +7,7 @@ import { printResult, table } from "../output.ts"
 export function registerFlags(program: Command, context: () => CommandContext) {
   program
     .command("flags")
-    .description("Show feature flags as evaluated for your API key's project")
+    .description("Show feature flags as evaluated for the project")
     .action(async () => {
       const ctx = context()
       const result = await unwrap(ctx.api.featureFlags.list())

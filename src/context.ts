@@ -2,6 +2,7 @@ import { Nohead, type RequestOptions } from "@nohead/sdk"
 
 import { DEFAULT_PROFILE, type ConfigFile } from "./config.ts"
 import { CliError, ExitCode, unwrap } from "./errors.ts"
+import { usageError } from "./input.ts"
 import { VERSION } from "./version.ts"
 
 export const DEFAULT_API_URL = "https://api.nohead.io"
@@ -9,7 +10,17 @@ export const DEFAULT_API_URL = "https://api.nohead.io"
 const origin = (url: string) => URL.parse(url)?.origin ?? url
 
 /**
- * API keys travel over https, except to this machine or a development host
+ * A person's CLI session (`nohead login` in the browser), which acts as them
+ * in every project they belong to, rather than a project's API key.
+ */
+export const isCliSession = (token: string) => token.startsWith("nohead_cli_")
+
+/** A CLI session's project-scoped command, with no project chosen. */
+export const NO_PROJECT =
+  "No project chosen. Run `nohead use <project>` to choose a default (`nohead projects list` shows yours), or pass --project."
+
+/**
+ * Tokens travel over https, except to this machine or a development host
  * (localhost, *.localhost, *.test): anyone on the path could read them.
  */
 export function requireSecureUrl(url: string) {
@@ -24,7 +35,7 @@ export function requireSecureUrl(url: string) {
   if (protocol === "https:" || (protocol === "http:" && local)) return
   throw new CliError(ExitCode.Usage, {
     type: "invalid_request",
-    message: `Refusing to send an API key to ${url}: use https`,
+    message: `Refusing to send credentials to ${url}: use https`,
   })
 }
 
@@ -77,6 +88,14 @@ export interface Runtime {
   sleep: (ms: number) => Promise<void>
   /** The current time (injectable so relative times are testable). */
   now: () => Date
+  /**
+   * Opens `url` in the default browser without waiting for it, ignoring
+   * failures. False when there is no browser to open it in (an SSH session,
+   * no display), so the user opens it themselves.
+   */
+  openUrl: (url: string) => boolean
+  /** This machine's name, to tell its CLI sessions apart (`nohead login`). */
+  hostname: () => string
 }
 
 export interface GlobalOptions {
@@ -92,8 +111,10 @@ export interface CommandContext {
   runtime: Runtime
   options: GlobalOptions
   /**
-   * The API client. Reading it checks the credentials, so commands that make
-   * no request never fail for want of a key.
+   * The API client, for a project's records, fields, drafts and the like.
+   * Reading it checks the credentials, so commands that make no request
+   * never fail for want of a key. A CLI session's names the project to work
+   * in on every request (`Nohead-Project`), and fails without one.
    */
   readonly api: Nohead
   /**
@@ -101,13 +122,28 @@ export interface CommandContext {
    * the project: its collections, assets, webhooks, search and activity log.
    */
   project: () => Promise<Nohead>
+  /**
+   * The client for requests about the credentials themselves (`whoami`),
+   * which name no project.
+   */
+  readonly accountApi: Nohead
   /** The client for public operations (`health`), without the API key. */
   readonly publicApi: Nohead
   /** The API's base URL. */
   baseUrl: string
-  /** Where the API key comes from, for `whoami`. */
+  /** Where the credentials come from, for `whoami`. */
   credentials: string
-  /** The project to work in: --project, $NOHEAD_PROJECT, or the API key's own. */
+  /** Whether the credentials are a CLI session rather than an API key. */
+  session: boolean
+  /** The token to send, once checked as `api` checks it. */
+  token: () => string
+  /**
+   * The project chosen without asking the API: --project, $NOHEAD_PROJECT,
+   * or the profile's (the default from `nohead use`, or a saved API key's
+   * own). A CLI session works in it, and has none without it.
+   */
+  chosenProjectId: string | undefined
+  /** The project to work in: --project, $NOHEAD_PROJECT, the profile's, or the API key's own. */
   projectId: () => Promise<string>
   /**
    * Options for mutations: the --note, recorded in history, and an
@@ -135,7 +171,15 @@ export function createApi(options: {
     ...client,
     // The runtime's fetch takes a Request.
     fetch: (input, init) => options.fetch(new Request(input, init)),
-    headers: { "Nohead-Client": `cli/${VERSION}` },
+    headers: {
+      "Nohead-Client": `cli/${VERSION}`,
+      // A CLI session reaches every project of its person's: each request
+      // names the one it is for, which also lets it name collections by slug.
+      // (Only API requests carry it, not uploads to storage.)
+      ...(options.projectId && isCliSession(options.apiKey)
+        ? { "Nohead-Project": options.projectId }
+        : {}),
+    },
     // The SDK's per-attempt timeout (60 s) for API calls; uploads set their
     // own from the file's size (uploadAsset).
     maxRetries: 3,
@@ -176,14 +220,21 @@ export function createContext(
     envVar(runtime.env, "NOHEAD_API_URL") ??
     profile?.api_url ??
     DEFAULT_API_URL
-  // A saved key only goes to the API it was saved for: a NOHEAD_API_URL
+  // A saved token only goes to the API it was saved for: a NOHEAD_API_URL
   // from some project's .envrc must not receive it.
   const savedUrl = profile ? (profile.api_url ?? DEFAULT_API_URL) : undefined
   const profileKey =
     savedUrl && origin(savedUrl) === origin(baseUrl)
-      ? profile?.api_key
+      ? profile?.token
       : undefined
   const apiKey = envApiKey ?? profileKey
+  const session = apiKey !== undefined && isCliSession(apiKey)
+  // The profile's project belongs to the profile's token, not to one from
+  // NOHEAD_API_KEY.
+  const chosenProjectId =
+    options.project ??
+    envVar(runtime.env, "NOHEAD_PROJECT") ??
+    (envApiKey ? undefined : profile?.project_id)
   const credentials = envApiKey
     ? "NOHEAD_API_KEY"
     : profileKey
@@ -199,17 +250,16 @@ export function createContext(
         message: `No saved profile "${name}". Run: nohead login --profile ${name}`,
       })
     }
-    if (!apiKey && profile?.api_key) {
+    if (!apiKey && profile?.token) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message: `Profile "${name}" holds a key for ${savedUrl}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
+        message: `Profile "${name}" holds credentials for ${savedUrl}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
       })
     }
     if (!apiKey) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message:
-          "Not logged in. Run `nohead login` with an API key from the web app (API keys), or set NOHEAD_API_KEY.",
+        message: "Not logged in. Run `nohead login`, or set NOHEAD_API_KEY.",
       })
     }
     requireSecureUrl(baseUrl)
@@ -217,18 +267,22 @@ export function createContext(
   }
 
   let api: Nohead | undefined
+  let accountApi: Nohead | undefined
   let publicApi: Nohead | undefined
   let projectApi: Promise<Nohead> | undefined
   let project: Promise<string> | undefined
+  // A CLI session's project is the one chosen; it has no project of its own.
+  const sessionProjectId = () => {
+    if (!chosenProjectId) throw usageError(NO_PROJECT)
+    return chosenProjectId
+  }
   const projectId = () =>
     (project ??= (async () => {
-      const explicit =
-        options.project ??
-        envVar(runtime.env, "NOHEAD_PROJECT") ??
-        (envApiKey ? undefined : profile?.project_id)
-      if (explicit) return explicit
+      if (chosenProjectId) return chosenProjectId
+      authenticatedKey()
+      if (session) throw usageError(NO_PROJECT)
 
-      const me = await unwrap(context.api.me.get())
+      const me = await unwrap(context.accountApi.me.get())
       if (!me.api_key) {
         throw new CliError(ExitCode.Usage, {
           type: "invalid_request",
@@ -251,6 +305,15 @@ export function createContext(
     options,
     get api() {
       return (api ??= createApi({
+        baseUrl,
+        apiKey: authenticatedKey(),
+        fetch,
+        notify,
+        ...(session ? { projectId: sessionProjectId() } : {}),
+      }))
+    },
+    get accountApi() {
+      return (accountApi ??= createApi({
         baseUrl,
         apiKey: authenticatedKey(),
         fetch,
@@ -279,6 +342,9 @@ export function createContext(
     },
     baseUrl,
     credentials,
+    session,
+    token: authenticatedKey,
+    chosenProjectId,
     projectId,
     writeOptions,
   }

@@ -21,6 +21,12 @@ export function raw(response: Response): Response {
   return response
 }
 
+/**
+ * /v1 operations of the web app's that a CLI session calls too, outside the
+ * public contract: their stubs are plain JSON in the shape the API sends.
+ */
+const OUTSIDE_CONTRACT = new Set(["GET /v1/projects"])
+
 /** Throws like Node's fs: with the error code and the path. */
 function fsError(code: string, path: string) {
   return Object.assign(new Error(`${code}: ${path}`), { code, path })
@@ -67,12 +73,14 @@ export function testRuntime({
   const fetch = vi.fn(async (request: Request) => {
     requests.push(request.clone())
     const url = new URL(request.url)
-    const handler = routes[`${request.method} ${url.pathname}`]
+    const route = `${request.method} ${url.pathname}`
+    const handler = routes[route]
     if (!handler)
       return mismatch(
         `Unexpected request: ${request.method} ${url.pathname}${url.search}`
       )
-    if (!url.pathname.startsWith("/v1/")) return handler(request)
+    if (!url.pathname.startsWith("/v1/") || OUTSIDE_CONTRACT.has(route))
+      return handler(request)
 
     let operationId: string
     try {
@@ -138,6 +146,10 @@ export function testRuntime({
     },
     sleep: async () => {},
     now: () => new Date("2026-09-27T12:00:00.000Z"),
+    openUrl: () => {
+      throw new Error("openUrl is only for browser sign-in (stub it)")
+    },
+    hostname: () => "ada-laptop",
   }
 
   return {

@@ -1648,7 +1648,7 @@ describe("login and profiles", () => {
       profiles: {
         default: {
           api_url: "http://api.test",
-          api_key: "nohead_sk_test0000000_secret",
+          token: "nohead_sk_test0000000_secret",
           project_id: PROJECT_ID,
         },
       },
@@ -1657,7 +1657,7 @@ describe("login and profiles", () => {
   })
 
   // Pasted at a terminal, the key must not stay on screen.
-  it("reads the key without echo at a terminal, ending on Enter", async () => {
+  it("reads the key without echo at a terminal with --with-token, ending on Enter", async () => {
     const t = testRuntime({
       env: { ...env, NOHEAD_API_URL: "http://api.test" },
       routes: { "GET /v1/me": me },
@@ -1672,7 +1672,7 @@ describe("login and profiles", () => {
       return "nohead_sk_test0000000_secret\n"
     }
 
-    await t.ok(["login"])
+    await t.ok(["login", "--with-token"])
 
     expect(prompts).toEqual([expect.stringContaining("then press Enter")])
     expect(t.requests[0].headers.get("Authorization")).toBe(
@@ -1690,7 +1690,7 @@ describe("login and profiles", () => {
       return "nohead_sk_test0000000_secret"
     }
 
-    await t.ok(["--json", "login"])
+    await t.ok(["--json", "login", "--with-token"])
     expect(prompts).toEqual([""])
     expect(t.err()).toBe("")
   })
@@ -1700,7 +1700,7 @@ describe("login and profiles", () => {
     t.runtime.stdinIsTTY = true
     t.runtime.readSecret = async () => "  "
 
-    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
+    expect(await run(["login", "--with-token"], t.runtime)).toBe(ExitCode.Usage)
     expect(t.err()).toContain("No API key given")
     expect(t.err()).not.toContain("on stdin")
   })
@@ -1709,10 +1709,10 @@ describe("login and profiles", () => {
     const profiles = {
       default: {
         api_url: "http://saved.test",
-        api_key: "nohead_sk_saved",
+        token: "nohead_sk_saved",
         project_id: PROJECT_ID,
       },
-      ci: { api_url: "http://ci.test", api_key: "nohead_sk_ci" },
+      ci: { api_url: "http://ci.test", token: "nohead_sk_ci" },
     }
     const t = testRuntime({ env, files: saved(profiles), routes: {} })
     t.runtime.fetch = (async (request: Request) => {
@@ -1739,7 +1739,7 @@ describe("login and profiles", () => {
 
   it("never sends a saved key to another API, or any key over plain http", async () => {
     const profiles = {
-      default: { api_url: "https://saved.example", api_key: "nohead_sk_saved" },
+      default: { api_url: "https://saved.example", token: "nohead_sk_saved" },
     }
     const elsewhere = testRuntime({
       env: { ...env, NOHEAD_API_URL: "https://attacker.example" },
@@ -1747,7 +1747,7 @@ describe("login and profiles", () => {
     })
     expect(await run(["whoami"], elsewhere.runtime)).toBe(ExitCode.Usage)
     expect(elsewhere.err()).toContain(
-      'Profile "default" holds a key for https://saved.example, not https://attacker.example'
+      'Profile "default" holds credentials for https://saved.example, not https://attacker.example'
     )
     expect(elsewhere.requests).toHaveLength(0)
 
@@ -1761,7 +1761,7 @@ describe("login and profiles", () => {
       )
     ).toBe(ExitCode.Usage)
     expect(insecure.err()).toContain(
-      "Refusing to send an API key to http://api.example.com: use https"
+      "Refusing to send credentials to http://api.example.com: use https"
     )
     expect(insecure.requests).toHaveLength(0)
   })
@@ -1770,12 +1770,12 @@ describe("login and profiles", () => {
     const profiles = {
       default: {
         api_url: "http://saved.test",
-        api_key: "nohead_sk_saved",
+        token: "nohead_sk_saved",
         project_id: PROJECT_ID,
       },
       ci: {
         api_url: "http://ci.test",
-        api_key: "nohead_sk_ci",
+        token: "nohead_sk_ci",
         project_id: "prj_ci",
       },
     }
@@ -1889,22 +1889,22 @@ describe("login and profiles", () => {
   it("logs in to a new named profile", async () => {
     const t = testRuntime({
       env: { ...env, NOHEAD_API_URL: "http://staging.test" },
-      files: saved({ default: { api_url: "http://x.test", api_key: "k" } }),
+      files: saved({ default: { api_url: "http://x.test", token: "k" } }),
       stdin: "nohead_sk_staging\n",
       routes: { "GET /v1/me": me },
     })
 
     await t.ok(["--profile", "staging", "login"])
     expect(JSON.parse(t.text(configFile)).profiles).toMatchObject({
-      default: { api_key: "k" },
-      staging: { api_url: "http://staging.test", api_key: "nohead_sk_staging" },
+      default: { token: "k" },
+      staging: { api_url: "http://staging.test", token: "nohead_sk_staging" },
     })
   })
 
   it("explains unknown profiles and logs out", async () => {
     const t = testRuntime({
       env,
-      files: saved({ default: { api_url: "http://x.test", api_key: "k" } }),
+      files: saved({ default: { api_url: "http://x.test", token: "k" } }),
     })
 
     expect(await run(["--profile", "nope", "whoami"], t.runtime)).toBe(

@@ -9,6 +9,26 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- `nohead login` at a terminal signs in with the browser: it shows a code,
+  opens the web app's sign-in page, and once you check the code and choose
+  Allow, saves a CLI session for this machine as the profile. The session
+  acts as you, with your role, in every project you belong to; the project
+  you pick in the browser becomes the profile's default. `--no-browser`
+  prints the page's URL instead of opening it (as over SSH), and `--web`
+  uses the browser flow without a terminal, for coding agents. **Breaking:**
+  to paste an API key at a terminal, run `nohead login --with-token`; a key
+  piped in (`echo "$KEY" | nohead login`) is read as before.
+- `nohead projects list` lists your projects, marking the one commands use,
+  and `nohead use <project>` (an ID or a slug) sets the profile's default
+  project. Signed in with the browser, a project's commands work in
+  `--project`, then `NOHEAD_PROJECT`, then the default; with none, they say
+  to choose one. An API key still works in its own project.
+- `nohead whoami` with a CLI session shows you, the API and the project.
+- `nohead logout` ends a CLI session on the API too, before forgetting the
+  profile (a saved API key stays valid, as before).
+- **Breaking:** a profile keeps its credentials as `token` (it was
+  `api_key`): log in again after upgrading.
+
 - `--api-url` is no longer in `--help`: there is one API,
   `https://api.nohead.io`. It and `NOHEAD_API_URL` still work, for a local
   or test API.

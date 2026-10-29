@@ -15,7 +15,7 @@
     },
     {
       "flags": "--project <id>",
-      "description": "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
+      "description": "project ID (default: $NOHEAD_PROJECT, else the default from nohead use, or the API key's project)"
     },
     {
       "flags": "--profile <name>",
@@ -42,7 +42,7 @@
     {
       "name": "whoami",
       "usage": "[options]",
-      "description": "Show the credentials in use (API key, project, scopes)",
+      "description": "Show the credentials in use: you and your project (a CLI session), or an API key's project and scopes",
       "arguments": [],
       "options": [],
       "commands": []
@@ -50,16 +50,75 @@
     {
       "name": "login",
       "usage": "[options]",
-      "description": "Save an API key for later commands; reads the key from stdin (echo $KEY | nohead login)",
+      "description": "Sign in with the browser, acting as you in your projects; or save an API key (echo $KEY | nohead login)",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "flags": "--with-token",
+          "description": "paste an API key from the web app instead of signing in with the browser"
+        },
+        {
+          "flags": "--web",
+          "description": "sign in with the browser even without a terminal (a coding agent shows you the code to approve)"
+        },
+        {
+          "flags": "--no-browser",
+          "description": "print the sign-in page's URL instead of opening the browser"
+        }
+      ],
       "commands": []
     },
     {
       "name": "logout",
       "usage": "[options]",
-      "description": "Forget a saved API key (the key itself stays valid; revoke it in the web app)",
+      "description": "Sign out: end the CLI session and forget the saved profile (a saved API key stays valid; revoke it in the web app)",
       "arguments": [],
+      "options": [],
+      "commands": []
+    },
+    {
+      "name": "projects",
+      "usage": "[options] [command]",
+      "description": "The projects you can work in, signed in with the browser",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options]",
+          "description": "List your projects; * marks the one commands use (nohead use)",
+          "arguments": [],
+          "options": [
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every project",
+              "default": false
+            }
+          ],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "use",
+      "usage": "[options] <project>",
+      "description": "Choose the project commands work in by default (signed in with the browser)",
+      "arguments": [
+        {
+          "name": "project",
+          "description": "project ID or slug (nohead projects list)",
+          "required": true,
+          "variadic": false
+        }
+      ],
       "options": [],
       "commands": []
     },
@@ -1757,7 +1816,7 @@
     {
       "name": "flags",
       "usage": "[options]",
-      "description": "Show feature flags as evaluated for your API key's project",
+      "description": "Show feature flags as evaluated for the project",
       "arguments": [],
       "options": [],
       "commands": []

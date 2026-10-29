@@ -4,10 +4,14 @@ import { join } from "node:path"
 import type { Runtime } from "./context.ts"
 import { usageError } from "./input.ts"
 
-/** Saved credentials (`nohead login`). */
-interface Profile {
+/**
+ * Saved credentials (`nohead login`): a CLI session's token (`nohead_cli_…`,
+ * from the browser) or an API key, the API it is for, and the project
+ * commands work in unless told otherwise (`nohead use`).
+ */
+export interface Profile {
   api_url: string
-  api_key: string
+  token: string
   project_id?: string
 }
 
@@ -45,7 +49,7 @@ export async function readConfig(runtime: Runtime): Promise<ConfigFile> {
   }
 }
 
-/** Written with owner-only permissions: it holds API keys. */
+/** Written with owner-only permissions: it holds tokens. */
 export async function writeConfig(runtime: Runtime, config: ConfigFile) {
   const path = configPath(runtime.env)
   await runtime.writePrivateFile(path, `${JSON.stringify(config, null, 2)}\n`)

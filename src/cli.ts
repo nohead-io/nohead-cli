@@ -8,6 +8,7 @@ import { registerFields } from "./commands/fields.ts"
 import { registerFlags } from "./commands/flags.ts"
 import { registerHealth } from "./commands/health.ts"
 import { registerMigrations } from "./commands/migrations.ts"
+import { registerProjects } from "./commands/projects.ts"
 import { registerPortability } from "./commands/portability.ts"
 import { registerRecords } from "./commands/records.ts"
 import { registerSchema } from "./commands/schema.ts"
@@ -48,7 +49,7 @@ function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
     )
     .option(
       "--project <id>",
-      "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
+      "project ID (default: $NOHEAD_PROJECT, else the default from nohead use, or the API key's project)"
     )
     .option(
       "--profile <name>",
@@ -78,6 +79,7 @@ function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
   registerHealth(program, context)
   registerWhoami(program, context)
   registerLogin(program, context)
+  registerProjects(program, context)
   registerCollections(program, context)
   registerFields(program, context)
   registerMigrations(program, context)
@@ -203,6 +205,8 @@ export function describeCommands(): DescribedCommand {
     writePrivateFile: refuse,
     sleep: () => Promise.resolve(),
     now: () => new Date(0),
+    openUrl: () => false,
+    hostname: () => "",
   }
   return describe(buildProgram(inert, { profiles: {} }, false))
 }

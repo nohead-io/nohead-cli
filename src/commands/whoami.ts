@@ -10,10 +10,29 @@ export function registerWhoami(
 ) {
   program
     .command("whoami")
-    .description("Show the credentials in use (API key, project, scopes)")
+    .description(
+      "Show the credentials in use: you and your project (a CLI session), or an API key's project and scopes"
+    )
     .action(async () => {
       const ctx = context()
-      const me = await unwrap(ctx.api.me.get())
+      const me = await unwrap(ctx.accountApi.me.get())
+      if (ctx.session) {
+        const project = ctx.chosenProjectId ?? null
+        printResult(
+          ctx,
+          { ...me, api_url: ctx.baseUrl, project_id: project },
+          () =>
+            details([
+              ["user", me.user?.name ?? me.user?.email],
+              ["email", me.user?.email],
+              ["signed in", "CLI session (acts as you)"],
+              ["api", ctx.baseUrl],
+              ["project", project ?? "none (choose one: nohead use <project>)"],
+              ["from", ctx.credentials],
+            ])
+        )
+        return
+      }
       printResult(ctx, me, () =>
         me.api_key
           ? details([
