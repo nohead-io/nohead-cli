@@ -98,7 +98,7 @@ export interface CommandContext {
   readonly api: Nohead
   /**
    * The client for the project to work in (`projectId`), for operations on
-   * the project: its collections, assets, webhooks, search and audit log.
+   * the project: its collections, assets, webhooks, search and activity log.
    */
   project: () => Promise<Nohead>
   /** The client for public operations (`health`), without the API key. */
