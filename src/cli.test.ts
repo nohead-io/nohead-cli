@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs"
+
 import { VERSION as SDK_VERSION } from "@nohead/sdk"
 import { describe, expect, it } from "vitest"
 
-import { run, VERSION } from "./cli.ts"
+import { describeCommands, run, VERSION } from "./cli.ts"
 import { ExitCode } from "./errors.ts"
 import { contractResponse } from "./test/contract.ts"
 import { testRuntime, withoutWaiting } from "./test/runtime.ts"
@@ -158,6 +160,8 @@ describe("usage", () => {
     await t.ok(["--help"])
     expect(t.out()).toContain("Usage: nohead")
     expect(t.out()).toContain("collections")
+    // Only for a local or test API: it works, but isn't offered.
+    expect(t.out()).not.toContain("--api-url")
   })
 
   it("prints its version and the SDK's for --version", async () => {
@@ -165,5 +169,30 @@ describe("usage", () => {
 
     await t.ok(["--version"])
     expect(t.out()).toBe(`${VERSION} (SDK ${SDK_VERSION})\n`)
+  })
+})
+
+describe("commands.json", () => {
+  // The docs' CLI reference is built from it.
+  it("describes the commands as they are: run `npm run commands` if not", () => {
+    const written = JSON.parse(
+      readFileSync(new URL("../commands.json", import.meta.url), "utf8")
+    )
+    expect(written).toEqual(JSON.parse(JSON.stringify(describeCommands())))
+  })
+
+  it("has a description for every command and argument", () => {
+    const missing: string[] = []
+    const walk = (
+      command: ReturnType<typeof describeCommands>,
+      path: string
+    ) => {
+      if (!command.description) missing.push(path)
+      for (const argument of command.arguments)
+        if (!argument.description) missing.push(`${path} <${argument.name}>`)
+      for (const sub of command.commands) walk(sub, `${path} ${sub.name}`)
+    }
+    walk(describeCommands(), "nohead")
+    expect(missing).toEqual([])
   })
 })

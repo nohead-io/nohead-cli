@@ -1,5 +1,5 @@
 import { VERSION as SDK_VERSION } from "@nohead/sdk"
-import { Command, CommanderError } from "commander"
+import { Command, CommanderError, Option } from "commander"
 
 import { registerAssets } from "./commands/assets.ts"
 import { registerCollections } from "./commands/collections.ts"
@@ -39,7 +39,13 @@ function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
     // version comes first, so scripts can read the first word.
     .version(`${VERSION} (SDK ${SDK_VERSION})`)
     .option("--json", "print machine-readable JSON on stdout", false)
-    .option("--api-url <url>", "API base URL (default: $NOHEAD_API_URL)")
+    // For a local or test API: customers have only https://api.nohead.io.
+    .addOption(
+      new Option(
+        "--api-url <url>",
+        "API base URL (default: $NOHEAD_API_URL)"
+      ).hideHelp()
+    )
     .option(
       "--project <id>",
       "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
@@ -150,4 +156,81 @@ function unexpected(error: unknown): CliError {
     type: "internal_error",
     message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
   })
+}
+
+/** An argument, an option or a command, as `commands.json` describes it. */
+export interface DescribedArgument {
+  name: string
+  description: string
+  required: boolean
+  variadic: boolean
+  choices?: string[]
+}
+export interface DescribedOption {
+  flags: string
+  description: string
+  default?: unknown
+  choices?: string[]
+}
+export interface DescribedCommand {
+  name: string
+  usage: string
+  description: string
+  arguments: DescribedArgument[]
+  options: DescribedOption[]
+  commands: DescribedCommand[]
+}
+
+/**
+ * Every command, with its arguments and options, as commander knows them:
+ * what `commands.json` holds for the docs' CLI reference. Built with an inert
+ * runtime, so nothing is read, fetched or written.
+ */
+export function describeCommands(): DescribedCommand {
+  const refuse = () =>
+    Promise.reject(new Error("describeCommands does no input or output"))
+  const inert: Runtime = {
+    stdout: () => {},
+    stderr: () => {},
+    env: {},
+    fetch: refuse,
+    readFile: refuse,
+    readBinaryFile: refuse,
+    writeFile: refuse,
+    readStdin: refuse,
+    stdinIsTTY: false,
+    readSecret: refuse,
+    writePrivateFile: refuse,
+    sleep: () => Promise.resolve(),
+    now: () => new Date(0),
+  }
+  return describe(buildProgram(inert, { profiles: {} }, false))
+}
+
+function describe(command: Command): DescribedCommand {
+  return {
+    name: command.name(),
+    usage: command.usage(),
+    description: command.description(),
+    arguments: command.registeredArguments.map((argument) => ({
+      name: argument.name(),
+      description: argument.description,
+      required: argument.required,
+      variadic: argument.variadic,
+      ...(argument.argChoices ? { choices: argument.argChoices } : {}),
+    })),
+    options: command.options
+      .filter((option) => !option.hidden)
+      .map((option) => ({
+        flags: option.flags,
+        description: option.description,
+        ...(option.defaultValue === undefined
+          ? {}
+          : { default: option.defaultValue as unknown }),
+        ...(option.argChoices ? { choices: option.argChoices } : {}),
+      })),
+    commands: command.commands
+      .filter((sub) => sub.name() !== "help")
+      .map(describe),
+  }
 }

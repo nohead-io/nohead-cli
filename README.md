@@ -25,6 +25,8 @@ nohead records revert rec_... 1 --dry-run
 
 ## Commands
 
+The docs' [CLI reference](https://docs.nohead.io/cli/overview) has every command with its arguments and options, generated from `commands.json`. `nohead <command> --help` prints the same for one command.
+
 | Group         | Commands                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 |               | `health`, `whoami`, `flags`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -49,7 +51,7 @@ Paging flags work on every list: a list prints one page of 100 (`audit`: 20, or 
 
 `--filter` takes `key=value`, `key!=value`, `key<value` (and `>`, `<=`, `>=`), `"key in a,b"` (`\,` for a comma in a value), `"key exists"` and `"key !exists"`; several on one key combine (`--filter price>=10 --filter price<50`). Dates take `today`, and dates with a time `now`. `records list --status published` (or `unpublished`) filters by `published_at`; across a whole project, `search` filters by `"published_at exists"` (or `!exists`) only.
 
-`fields migrate` changes a field in a way that rewrites record values (type, single/multiple, a stricter configuration, or required with a backfill). Run it with `--dry-run` first to see how every record converts. Without `--no-wait` it waits for the background migration and exits non-zero if it fails or is cancelled. The collection is read-only while it runs.
+`fields migrate` changes a field in a way that rewrites record values (type, single/multiple, a stricter configuration, or required with a backfill). Run it with `--dry-run` first to see how every record converts. Without `--no-wait` it waits for the background migration and exits non-zero if it fails or is cancelled. While it runs, the collection's fields can't change, and once it is running its records can't either.
 
 `echo "$KEY" | nohead login` checks the key and saves it, with its API URL and project, as a profile (file mode 0600). Run at a terminal, `nohead login` asks for the key and reads it without echoing it, so it doesn't stay on screen or in scrollback. Flags win over environment variables, which win over the profile.
 
@@ -71,13 +73,12 @@ Record data comes from `--set key=text`, `--set key:=json` (numbers, booleans, n
 
 ## Configuration
 
-| Setting      | Flag                      | Environment                                                                            |
-| ------------ | ------------------------- | -------------------------------------------------------------------------------------- |
-| API key      | —                         | `NOHEAD_API_KEY`                                                                       |
-| API base URL | `--api-url <url>`         | `NOHEAD_API_URL` (default `https://api.nohead.io`)                                     |
-| Project      | `--project <id>`          | `NOHEAD_PROJECT` (default: the API key's project, from `GET /v1/me`)                   |
-| Change note  | `--note <text>`           | — (kept with record revisions, merges and schema changes; other writes ignore it)      |
-| Idempotency  | `--idempotency-key <key>` | — (sent with mutations; the same key and request return the first result for 24 hours) |
+| Setting     | Flag                      | Environment                                                                            |
+| ----------- | ------------------------- | -------------------------------------------------------------------------------------- |
+| API key     | —                         | `NOHEAD_API_KEY`                                                                       |
+| Project     | `--project <id>`          | `NOHEAD_PROJECT` (default: the API key's project, from `GET /v1/me`)                   |
+| Change note | `--note <text>`           | — (kept with record revisions, merges and schema changes; other writes ignore it)      |
+| Idempotency | `--idempotency-key <key>` | — (sent with mutations; the same key and request return the first result for 24 hours) |
 
 ## Output contract
 
@@ -90,6 +91,8 @@ Scripts and agents depend on this, so it is covered by unit and E2E tests:
 - Deleting a collection requires `--yes`. Everything else is soft-deleted and recoverable.
 
 ## Development
+
+`commands.json` describes every command for the docs' CLI reference; run `npm run commands` after changing a command (a test fails while it is stale).
 
 The CLI calls the API through [`@nohead/sdk`](https://github.com/nohead-io/nohead-typescript), so a command that needs an operation the SDK lacks waits for the SDK release that adds it.
 

@@ -1,3 +1,4 @@
 dist
 openapi.json
 package-lock.json
+commands.json
