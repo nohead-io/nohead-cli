@@ -160,6 +160,8 @@ describe("usage", () => {
     await t.ok(["--help"])
     expect(t.out()).toContain("Usage: nohead")
     expect(t.out()).toContain("collections")
+    // Only for a local or test API: it works, but isn't offered.
+    expect(t.out()).not.toContain("--api-url")
   })
 
   it("prints its version and the SDK's for --version", async () => {
