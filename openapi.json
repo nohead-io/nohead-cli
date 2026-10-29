@@ -93,7 +93,7 @@
     },
     {
       "name": "audit",
-      "x-group": "Audit log",
+      "x-group": "Activity log",
       "description": "The append-only trail of who changed what, through which client."
     },
     {
@@ -995,7 +995,7 @@
       "get": {
         "operationId": "revisions_get",
         "summary": "Get a revision by ID",
-        "description": "The same revision `GET /v1/records/{record_id}/revisions/{revision}`\nreturns, by the `rev_` ID that webhooks and the audit log give\n(`revision_id`). Also for a deleted record's revisions.\n",
+        "description": "The same revision `GET /v1/records/{record_id}/revisions/{revision}`\nreturns, by the `rev_` ID that webhooks and the activity log give\n(`revision_id`). Also for a deleted record's revisions.\n",
         "tags": [
           "revisions"
         ],
