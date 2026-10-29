@@ -14,10 +14,6 @@
       "default": false
     },
     {
-      "flags": "--api-url <url>",
-      "description": "API base URL (default: $NOHEAD_API_URL)"
-    },
-    {
       "flags": "--project <id>",
       "description": "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
     },

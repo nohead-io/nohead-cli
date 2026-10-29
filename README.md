@@ -73,13 +73,12 @@ Record data comes from `--set key=text`, `--set key:=json` (numbers, booleans, n
 
 ## Configuration
 
-| Setting      | Flag                      | Environment                                                                            |
-| ------------ | ------------------------- | -------------------------------------------------------------------------------------- |
-| API key      | —                         | `NOHEAD_API_KEY`                                                                       |
-| API base URL | `--api-url <url>`         | `NOHEAD_API_URL` (default `https://api.nohead.io`)                                     |
-| Project      | `--project <id>`          | `NOHEAD_PROJECT` (default: the API key's project, from `GET /v1/me`)                   |
-| Change note  | `--note <text>`           | — (kept with record revisions, merges and schema changes; other writes ignore it)      |
-| Idempotency  | `--idempotency-key <key>` | — (sent with mutations; the same key and request return the first result for 24 hours) |
+| Setting     | Flag                      | Environment                                                                            |
+| ----------- | ------------------------- | -------------------------------------------------------------------------------------- |
+| API key     | —                         | `NOHEAD_API_KEY`                                                                       |
+| Project     | `--project <id>`          | `NOHEAD_PROJECT` (default: the API key's project, from `GET /v1/me`)                   |
+| Change note | `--note <text>`           | — (kept with record revisions, merges and schema changes; other writes ignore it)      |
+| Idempotency | `--idempotency-key <key>` | — (sent with mutations; the same key and request return the first result for 24 hours) |
 
 ## Output contract
 

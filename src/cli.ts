@@ -1,5 +1,5 @@
 import { VERSION as SDK_VERSION } from "@nohead/sdk"
-import { Command, CommanderError } from "commander"
+import { Command, CommanderError, Option } from "commander"
 
 import { registerAssets } from "./commands/assets.ts"
 import { registerCollections } from "./commands/collections.ts"
@@ -39,7 +39,13 @@ function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
     // version comes first, so scripts can read the first word.
     .version(`${VERSION} (SDK ${SDK_VERSION})`)
     .option("--json", "print machine-readable JSON on stdout", false)
-    .option("--api-url <url>", "API base URL (default: $NOHEAD_API_URL)")
+    // For a local or test API: customers have only https://api.nohead.io.
+    .addOption(
+      new Option(
+        "--api-url <url>",
+        "API base URL (default: $NOHEAD_API_URL)"
+      ).hideHelp()
+    )
     .option(
       "--project <id>",
       "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
