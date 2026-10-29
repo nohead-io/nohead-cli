@@ -1,0 +1,2093 @@
+{
+  "name": "nohead",
+  "usage": "[options] [command]",
+  "description": "Manage Nohead collections, fields and records from the command line",
+  "arguments": [],
+  "options": [
+    {
+      "flags": "-V, --version",
+      "description": "output the version number"
+    },
+    {
+      "flags": "--json",
+      "description": "print machine-readable JSON on stdout",
+      "default": false
+    },
+    {
+      "flags": "--api-url <url>",
+      "description": "API base URL (default: $NOHEAD_API_URL)"
+    },
+    {
+      "flags": "--project <id>",
+      "description": "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
+    },
+    {
+      "flags": "--profile <name>",
+      "description": "saved credentials to use (default: $NOHEAD_PROFILE or default)"
+    },
+    {
+      "flags": "--note <text>",
+      "description": "reason for the change, kept in the history of records and the schema"
+    },
+    {
+      "flags": "--idempotency-key <key>",
+      "description": "makes retrying a mutation safe: the same key and request return the first result"
+    }
+  ],
+  "commands": [
+    {
+      "name": "health",
+      "usage": "[options]",
+      "description": "Check that the API is reachable and healthy",
+      "arguments": [],
+      "options": [],
+      "commands": []
+    },
+    {
+      "name": "whoami",
+      "usage": "[options]",
+      "description": "Show the credentials in use (API key, project, scopes)",
+      "arguments": [],
+      "options": [],
+      "commands": []
+    },
+    {
+      "name": "login",
+      "usage": "[options]",
+      "description": "Save an API key for later commands; reads the key from stdin (echo $KEY | nohead login)",
+      "arguments": [],
+      "options": [],
+      "commands": []
+    },
+    {
+      "name": "logout",
+      "usage": "[options]",
+      "description": "Forget a saved API key (the key itself stays valid; revoke it in the web app)",
+      "arguments": [],
+      "options": [],
+      "commands": []
+    },
+    {
+      "name": "collections",
+      "usage": "[options] [command]",
+      "description": "Manage collections (data models)",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options]",
+          "description": "List collections in the project",
+          "arguments": [],
+          "options": [
+            {
+              "flags": "--deleted",
+              "description": "list deleted collections instead",
+              "default": false
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every collection",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "get",
+          "usage": "[options] <collection>",
+          "description": "Show a collection and its fields",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "create",
+          "usage": "[options] <slug>",
+          "description": "Create a collection",
+          "arguments": [
+            {
+              "name": "slug",
+              "description": "collection slug, e.g. posts",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--name <name>",
+              "description": "display name (default: from the slug)"
+            },
+            {
+              "flags": "--description <text>",
+              "description": "description"
+            },
+            {
+              "flags": "--public-search",
+              "description": "include its published records in public search (search tokens)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "update",
+          "usage": "[options] <collection>",
+          "description": "Update a collection's name, slug, description or public search",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--name <name>",
+              "description": "new display name"
+            },
+            {
+              "flags": "--slug <slug>",
+              "description": "new slug (breaks clients that use the old one)"
+            },
+            {
+              "flags": "--description <text>",
+              "description": "new description"
+            },
+            {
+              "flags": "--public-search",
+              "description": "include its published records in public search (search tokens)"
+            },
+            {
+              "flags": "--no-public-search",
+              "description": "remove it from public search"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "delete",
+          "usage": "[options] <collection>",
+          "description": "Delete a collection (recoverable with restore)",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--yes",
+              "description": "confirm the deletion",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "restore",
+          "usage": "[options] <collection>",
+          "description": "Restore a deleted collection",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "history",
+          "usage": "[options] <collection>",
+          "description": "Show the collection's schema history, newest first",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every change",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "search-index",
+          "usage": "[options] <collection>",
+          "description": "Show a collection's search index status, or rebuild it",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--rebuild",
+              "description": "rebuild the index from the collection's records",
+              "default": false
+            }
+          ],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "fields",
+      "usage": "[options] [command]",
+      "description": "Manage a collection's fields",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options] <collection>",
+          "description": "List fields",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--deleted",
+              "description": "list deleted fields instead",
+              "default": false
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every field",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "add",
+          "usage": "[options] <collection> <name>",
+          "description": "Add a field, e.g. nohead fields add posts title --type text --required",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "name",
+              "description": "field name; the key is derived from it unless --key is given",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--type <type>",
+              "description": "one of: text, long_text, rich_text, integer, decimal, date, boolean, enum, asset, relation, json"
+            },
+            {
+              "flags": "--key <key>",
+              "description": "field key (default: snake_case of the name)"
+            },
+            {
+              "flags": "--required",
+              "description": "every record must have a value",
+              "default": false
+            },
+            {
+              "flags": "--multiple",
+              "description": "store a list of values",
+              "default": false
+            },
+            {
+              "flags": "--options <list>",
+              "description": "enum options, comma-separated"
+            },
+            {
+              "flags": "--target <collection>",
+              "description": "relation target collection (slug or ID)"
+            },
+            {
+              "flags": "--max-length <n>",
+              "description": "maximum length for plain text fields"
+            },
+            {
+              "flags": "--min <n>",
+              "description": "minimum for number fields"
+            },
+            {
+              "flags": "--max <n>",
+              "description": "maximum for number fields"
+            },
+            {
+              "flags": "--description <text>",
+              "description": "help text shown to editors"
+            },
+            {
+              "flags": "--include-time",
+              "description": "date fields: a date and a time, not a day"
+            },
+            {
+              "flags": "--no-include-time",
+              "description": "date fields: a day, with no time"
+            },
+            {
+              "flags": "--time-zone <zone>",
+              "description": "date fields with a time: the IANA zone values are written in"
+            },
+            {
+              "flags": "--format <format>",
+              "description": "text fields: slug, url or email"
+            },
+            {
+              "flags": "--no-format",
+              "description": "text fields: plain text"
+            },
+            {
+              "flags": "--unique",
+              "description": "no two records share a value (text, integer)"
+            },
+            {
+              "flags": "--no-unique",
+              "description": "let records share a value"
+            },
+            {
+              "flags": "--searchable",
+              "description": "match search words in this field"
+            },
+            {
+              "flags": "--no-searchable",
+              "description": "leave this field out of search matching"
+            },
+            {
+              "flags": "--filterable",
+              "description": "allow filter[<field>] in search"
+            },
+            {
+              "flags": "--no-filterable",
+              "description": "disallow filtering in search"
+            },
+            {
+              "flags": "--sortable",
+              "description": "allow sorting search results by this field"
+            },
+            {
+              "flags": "--no-sortable",
+              "description": "disallow sorting search results"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "update",
+          "usage": "[options] <collection> <field>",
+          "description": "Update a field's settings (type, multiple and a date's time: nohead fields migrate)",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "field",
+              "description": "field key or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--name <name>",
+              "description": "new display name"
+            },
+            {
+              "flags": "--key <key>",
+              "description": "new key (the old one keeps working as an alias for 6 months)"
+            },
+            {
+              "flags": "--required",
+              "description": "make the field required"
+            },
+            {
+              "flags": "--optional",
+              "description": "make the field optional"
+            },
+            {
+              "flags": "--options <list>",
+              "description": "enum options, comma-separated"
+            },
+            {
+              "flags": "--target <collection>",
+              "description": "relation target collection (slug or ID)"
+            },
+            {
+              "flags": "--max-length <n>",
+              "description": "maximum length for plain text fields"
+            },
+            {
+              "flags": "--min <n>",
+              "description": "minimum for number fields"
+            },
+            {
+              "flags": "--max <n>",
+              "description": "maximum for number fields"
+            },
+            {
+              "flags": "--description <text>",
+              "description": "help text shown to editors"
+            },
+            {
+              "flags": "--include-time",
+              "description": "date fields: a date and a time, not a day"
+            },
+            {
+              "flags": "--no-include-time",
+              "description": "date fields: a day, with no time"
+            },
+            {
+              "flags": "--time-zone <zone>",
+              "description": "date fields with a time: the IANA zone values are written in"
+            },
+            {
+              "flags": "--format <format>",
+              "description": "text fields: slug, url or email"
+            },
+            {
+              "flags": "--no-format",
+              "description": "text fields: plain text"
+            },
+            {
+              "flags": "--unique",
+              "description": "no two records share a value (text, integer)"
+            },
+            {
+              "flags": "--no-unique",
+              "description": "let records share a value"
+            },
+            {
+              "flags": "--searchable",
+              "description": "match search words in this field"
+            },
+            {
+              "flags": "--no-searchable",
+              "description": "leave this field out of search matching"
+            },
+            {
+              "flags": "--filterable",
+              "description": "allow filter[<field>] in search"
+            },
+            {
+              "flags": "--no-filterable",
+              "description": "disallow filtering in search"
+            },
+            {
+              "flags": "--sortable",
+              "description": "allow sorting search results by this field"
+            },
+            {
+              "flags": "--no-sortable",
+              "description": "disallow sorting search results"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "delete",
+          "usage": "[options] <collection> <field>",
+          "description": "Delete a field (values are kept and come back on restore)",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "field",
+              "description": "field key or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "restore",
+          "usage": "[options] <collection> <field>",
+          "description": "Restore a deleted field",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "field",
+              "description": "deleted field key or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "migrate",
+          "usage": "[options] <collection> <field>",
+          "description": "Change a field in a way that rewrites record values, e.g. nohead fields migrate products price --type decimal --dry-run",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "field",
+              "description": "field key or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--type <type>",
+              "description": "new field type"
+            },
+            {
+              "flags": "--multiple",
+              "description": "store a list of values"
+            },
+            {
+              "flags": "--single",
+              "description": "store a single value"
+            },
+            {
+              "flags": "--required",
+              "description": "make the field required (see --backfill)"
+            },
+            {
+              "flags": "--optional",
+              "description": "make the field optional"
+            },
+            {
+              "flags": "--backfill <text>",
+              "description": "value for records that have none"
+            },
+            {
+              "flags": "--backfill-json <json>",
+              "description": "value for records that have none, as JSON"
+            },
+            {
+              "flags": "--clear-invalid",
+              "description": "clear values that cannot be converted instead of refusing",
+              "default": false
+            },
+            {
+              "flags": "--days-in <zone>",
+              "description": "removing a date's time: the IANA zone whose day each moment falls on (default: the field's, else UTC)"
+            },
+            {
+              "flags": "--dry-run",
+              "description": "preview the outcome for every record",
+              "default": false
+            },
+            {
+              "flags": "--no-wait",
+              "description": "return once the migration is accepted"
+            },
+            {
+              "flags": "--options <list>",
+              "description": "enum options, comma-separated"
+            },
+            {
+              "flags": "--target <collection>",
+              "description": "relation target collection (slug or ID)"
+            },
+            {
+              "flags": "--max-length <n>",
+              "description": "maximum length for plain text fields"
+            },
+            {
+              "flags": "--min <n>",
+              "description": "minimum for number fields"
+            },
+            {
+              "flags": "--max <n>",
+              "description": "maximum for number fields"
+            },
+            {
+              "flags": "--description <text>",
+              "description": "help text shown to editors"
+            },
+            {
+              "flags": "--include-time",
+              "description": "date fields: a date and a time, not a day"
+            },
+            {
+              "flags": "--no-include-time",
+              "description": "date fields: a day, with no time"
+            },
+            {
+              "flags": "--time-zone <zone>",
+              "description": "date fields with a time: the IANA zone values are written in"
+            },
+            {
+              "flags": "--format <format>",
+              "description": "text fields: slug, url or email"
+            },
+            {
+              "flags": "--no-format",
+              "description": "text fields: plain text"
+            },
+            {
+              "flags": "--unique",
+              "description": "no two records share a value (text, integer)"
+            },
+            {
+              "flags": "--no-unique",
+              "description": "let records share a value"
+            },
+            {
+              "flags": "--searchable",
+              "description": "match search words in this field"
+            },
+            {
+              "flags": "--no-searchable",
+              "description": "leave this field out of search matching"
+            },
+            {
+              "flags": "--filterable",
+              "description": "allow filter[<field>] in search"
+            },
+            {
+              "flags": "--no-filterable",
+              "description": "disallow filtering in search"
+            },
+            {
+              "flags": "--sortable",
+              "description": "allow sorting search results by this field"
+            },
+            {
+              "flags": "--no-sortable",
+              "description": "disallow sorting search results"
+            }
+          ],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "migrations",
+      "usage": "[options] [command]",
+      "description": "Follow and cancel field migrations",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options] <collection>",
+          "description": "List a collection's field migrations, newest first",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every migration",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "get",
+          "usage": "[options] <migration>",
+          "description": "Show a field migration",
+          "arguments": [
+            {
+              "name": "migration",
+              "description": "migration ID (mig_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--wait",
+              "description": "wait until it finishes",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "cancel",
+          "usage": "[options] <migration>",
+          "description": "Cancel a pending or running field migration",
+          "arguments": [
+            {
+              "name": "migration",
+              "description": "migration ID (mig_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "records",
+      "usage": "[options] [command]",
+      "description": "Manage records and their history",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options] <collection>",
+          "description": "List records (newest first by default)",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--status <status>",
+              "description": "only records with this status"
+            },
+            {
+              "flags": "--filter <expression>",
+              "description": "filter, e.g. price<50, released>=today, \"category in shoes,bags\", \"cover exists\", \"published_at exists\"; repeatable"
+            },
+            {
+              "flags": "--deleted",
+              "description": "list deleted records instead",
+              "default": false
+            },
+            {
+              "flags": "--sort <sort>",
+              "description": "created_at, updated_at, published_at, id or a field; prefix - for descending"
+            },
+            {
+              "flags": "--expand <fields>",
+              "description": "relation fields whose records to embed (comma-separated)"
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every record",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "bulk",
+          "usage": "[options] <action> <collection> [ids...]",
+          "description": "Publish, unpublish, delete, restore or update many records; each gets its own revision",
+          "arguments": [
+            {
+              "name": "action",
+              "description": "what to do to the records",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "ids",
+              "description": "record IDs (or select with --status/--filter/--every)",
+              "required": false,
+              "variadic": true
+            }
+          ],
+          "options": [
+            {
+              "flags": "--status <status>",
+              "description": "select records with this status"
+            },
+            {
+              "flags": "--filter <expression>",
+              "description": "select records by filter, as in records list; repeatable"
+            },
+            {
+              "flags": "--deleted",
+              "description": "select deleted records (for restore)",
+              "default": false
+            },
+            {
+              "flags": "--every",
+              "description": "select every record in the collection",
+              "default": false
+            },
+            {
+              "flags": "--set <key=value>",
+              "description": "set a field (key=text or key:=json); repeatable"
+            },
+            {
+              "flags": "--data <json>",
+              "description": "record data as a JSON object"
+            },
+            {
+              "flags": "--data-file <path>",
+              "description": "read record data from a JSON file (- for stdin)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "get",
+          "usage": "[options] <id>",
+          "description": "Show a record",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--expand <fields>",
+              "description": "relation fields whose records to embed (comma-separated)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "create",
+          "usage": "[options] <collection>",
+          "description": "Create an unpublished record",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--set <key=value>",
+              "description": "set a field (key=text or key:=json); repeatable"
+            },
+            {
+              "flags": "--data <json>",
+              "description": "record data as a JSON object"
+            },
+            {
+              "flags": "--data-file <path>",
+              "description": "read record data from a JSON file (- for stdin)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "update",
+          "usage": "[options] <id>",
+          "description": "Update a record; only the given fields change (null clears one)",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the record is still at this revision"
+            },
+            {
+              "flags": "--set <key=value>",
+              "description": "set a field (key=text or key:=json); repeatable"
+            },
+            {
+              "flags": "--data <json>",
+              "description": "record data as a JSON object"
+            },
+            {
+              "flags": "--data-file <path>",
+              "description": "read record data from a JSON file (- for stdin)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "publish",
+          "usage": "[options] <id>",
+          "description": "Publish a record",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the record is still at this revision"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "unpublish",
+          "usage": "[options] <id>",
+          "description": "Unpublish a record",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the record is still at this revision"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "schedule",
+          "usage": "[options] <id>",
+          "description": "Publish or unpublish a record later (the change happens within a minute of the time)",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--publish-at <time>",
+              "description": "ISO 8601 time, +2h / +3d, or none; left out, it stays as it is"
+            },
+            {
+              "flags": "--unpublish-at <time>",
+              "description": "ISO 8601 time, +2h / +3d, or none; left out, it stays as it is"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "unschedule",
+          "usage": "[options] <id>",
+          "description": "Cancel a record's scheduled publish and unpublish",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "scheduled",
+          "usage": "[options] <collection>",
+          "description": "List a collection's scheduled publishes, unpublishes and draft merges, soonest first",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--sort <sort>",
+              "description": "at: soonest first (the default); -at: latest first"
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every change",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "delete",
+          "usage": "[options] <id>",
+          "description": "Delete a record (values and history are kept)",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the record is still at this revision"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "restore",
+          "usage": "[options] <id>",
+          "description": "Restore a deleted record",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "history",
+          "usage": "[options] <id>",
+          "description": "Show a record's revisions, newest first",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--operation <op>",
+              "description": "only this operation (update, publish, ...)"
+            },
+            {
+              "flags": "--actor <id>",
+              "description": "only changes by this user (usr_...) or API key (key_...)"
+            },
+            {
+              "flags": "--since <time>",
+              "description": "only changes at or after this ISO 8601 time"
+            },
+            {
+              "flags": "--until <time>",
+              "description": "only changes before this ISO 8601 time"
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every revision",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "revision",
+          "usage": "[options] <id> <revision>",
+          "description": "Show one revision: the record as it was, and what changed",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "revision",
+              "description": "revision number",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "diff",
+          "usage": "[options] <id>",
+          "description": "Compare two revisions",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--from <revision>",
+              "description": "older revision"
+            },
+            {
+              "flags": "--to <revision>",
+              "description": "newer revision"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "revert",
+          "usage": "[options] <id> <revision>",
+          "description": "Revert a record to an earlier revision (writes a new revision)",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "revision",
+              "description": "revision to revert to",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--dry-run",
+              "description": "show what would change without writing",
+              "default": false
+            },
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the record is still at this revision"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "export",
+          "usage": "[options] <collection>",
+          "description": "Export records as JSON Lines (one API record per line)",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--output <path>",
+              "description": "write to a file instead of stdout"
+            },
+            {
+              "flags": "--status <status>",
+              "description": "only records with this status"
+            },
+            {
+              "flags": "--deleted",
+              "description": "export deleted records instead",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "import",
+          "usage": "[options] <collection> <file>",
+          "description": "Create records from JSON Lines (API records or plain data objects); - reads stdin",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            },
+            {
+              "name": "file",
+              "description": "JSON Lines file, or - for stdin",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--publish",
+              "description": "publish records whose line is an exported record with published_at",
+              "default": false
+            }
+          ],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "drafts",
+      "usage": "[options] [command]",
+      "description": "Changes to a record that wait until they are merged into it, now or later",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options] <collection>",
+          "description": "List a collection's drafts, most recently changed first",
+          "arguments": [
+            {
+              "name": "collection",
+              "description": "collection slug or ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--record <id>",
+              "description": "this record's draft instead, whatever its collection"
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every draft",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "get",
+          "usage": "[options] <draft>",
+          "description": "Show a draft, with the record's values as they read after the merge",
+          "arguments": [
+            {
+              "name": "draft",
+              "description": "draft ID (drf_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--expand <fields>",
+              "description": "relation fields whose records to embed (comma-separated)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "create",
+          "usage": "[options] <record>",
+          "description": "Start a record's draft from its values (the given fields over them), or from an earlier revision",
+          "arguments": [
+            {
+              "name": "record",
+              "description": "record ID",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--from-revision <n>",
+              "description": "start from this revision's values instead of the record's"
+            },
+            {
+              "flags": "--set <key=value>",
+              "description": "set a field (key=text or key:=json); repeatable"
+            },
+            {
+              "flags": "--data <json>",
+              "description": "record data as a JSON object"
+            },
+            {
+              "flags": "--data-file <path>",
+              "description": "read record data from a JSON file (- for stdin)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "update",
+          "usage": "[options] <draft>",
+          "description": "Change a draft; only the given fields change (null clears one)",
+          "arguments": [
+            {
+              "name": "draft",
+              "description": "draft ID (drf_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the draft is still at this revision"
+            },
+            {
+              "flags": "--set <key=value>",
+              "description": "set a field (key=text or key:=json); repeatable"
+            },
+            {
+              "flags": "--data <json>",
+              "description": "record data as a JSON object"
+            },
+            {
+              "flags": "--data-file <path>",
+              "description": "read record data from a JSON file (- for stdin)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "merge",
+          "usage": "[options] <draft>",
+          "description": "Apply a draft to its record now, as one revision (the record stays live or not)",
+          "arguments": [
+            {
+              "name": "draft",
+              "description": "draft ID (drf_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the draft is still at this revision"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "discard",
+          "usage": "[options] <draft>",
+          "description": "Delete a draft for good (the record is unchanged)",
+          "arguments": [
+            {
+              "name": "draft",
+              "description": "draft ID (drf_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--if-revision <n>",
+              "description": "fail with 412 unless the draft is still at this revision"
+            },
+            {
+              "flags": "--yes",
+              "description": "confirm: a discarded draft cannot be restored",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "schedule",
+          "usage": "[options] <draft>",
+          "description": "Merge a draft later (within a minute of the time)",
+          "arguments": [
+            {
+              "name": "draft",
+              "description": "draft ID (drf_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--merge-at <time>",
+              "description": "ISO 8601 time, or +2h / +3d"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "unschedule",
+          "usage": "[options] <draft>",
+          "description": "Cancel a draft's scheduled merge",
+          "arguments": [
+            {
+              "name": "draft",
+              "description": "draft ID (drf_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "assets",
+      "usage": "[options] [command]",
+      "description": "Manage the project's files (media)",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options]",
+          "description": "List assets, newest first",
+          "arguments": [],
+          "options": [
+            {
+              "flags": "--deleted",
+              "description": "list deleted assets instead",
+              "default": false
+            },
+            {
+              "flags": "--search <words>",
+              "description": "only assets whose filename or alt text has every word"
+            },
+            {
+              "flags": "--kind <kinds>",
+              "description": "only assets of a kind, or several: image, video, audio, document, other (comma-separated)"
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every asset",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "upload",
+          "usage": "[options] <files...>",
+          "description": "Upload files; prints their asset IDs for use in records",
+          "arguments": [
+            {
+              "name": "files",
+              "description": "files to upload",
+              "required": true,
+              "variadic": true
+            }
+          ],
+          "options": [
+            {
+              "flags": "--content-type <type>",
+              "description": "override the type guessed from the extension"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "get",
+          "usage": "[options] <id>",
+          "description": "Show an asset",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "asset ID (ast_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "update",
+          "usage": "[options] <id>",
+          "description": "Rename an asset or set its alt text",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "asset ID (ast_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--filename <name>",
+              "description": "new filename (downloads use it)"
+            },
+            {
+              "flags": "--alt <text>",
+              "description": "alt text: what the image shows, the default wherever it is used (\"\" clears it)"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "url",
+          "usage": "[options] <id>",
+          "description": "Print an image's URL, resized, cropped or converted",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "asset ID (ast_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--width <px>",
+              "description": "width in pixels"
+            },
+            {
+              "flags": "--height <px>",
+              "description": "height in pixels"
+            },
+            {
+              "flags": "--fit <fit>",
+              "description": "how the image fills width and height",
+              "default": "contain"
+            },
+            {
+              "flags": "--format <format>",
+              "description": "the image format",
+              "default": "original"
+            },
+            {
+              "flags": "--quality <n>",
+              "description": "1-100"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "download",
+          "usage": "[options] <id>",
+          "description": "Download the original file",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "asset ID (ast_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--output <file>",
+              "description": "where to save it (default: its filename)"
+            },
+            {
+              "flags": "--force",
+              "description": "replace the file if it exists"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "delete",
+          "usage": "[options] <id>",
+          "description": "Delete an asset (kept for 30 days; restore brings it back)",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "asset ID (ast_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "restore",
+          "usage": "[options] <id>",
+          "description": "Restore a deleted asset",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "asset ID (ast_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "flags",
+      "usage": "[options]",
+      "description": "Show feature flags as evaluated for your API key's project",
+      "arguments": [],
+      "options": [],
+      "commands": []
+    },
+    {
+      "name": "schema",
+      "usage": "[options] [command]",
+      "description": "Keep the project's collections and fields in a file (schema as code)",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "pull",
+          "usage": "[options]",
+          "description": "Write the project's schema to a file (default nohead.schema.yaml; - for stdout)",
+          "arguments": [],
+          "options": [
+            {
+              "flags": "--output <file>",
+              "description": "where to write it",
+              "default": "nohead.schema.yaml"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "diff",
+          "usage": "[options] [file]",
+          "description": "Show what push would change",
+          "arguments": [
+            {
+              "name": "file",
+              "description": "schema file",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--exit-code",
+              "description": "exit 1 when there are changes",
+              "default": false
+            },
+            {
+              "flags": "--no-preview",
+              "description": "skip dry runs of field migrations"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "push",
+          "usage": "[options] [file]",
+          "description": "Change the project's schema to match the file (never deletes anything)",
+          "arguments": [
+            {
+              "name": "file",
+              "description": "schema file",
+              "required": false,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--yes",
+              "description": "apply the changes (without it, push only shows them)",
+              "default": false
+            },
+            {
+              "flags": "--allow-migrations",
+              "description": "allow type and multiple changes, which rewrite record values",
+              "default": false
+            },
+            {
+              "flags": "--clear-invalid",
+              "description": "in migrations, clear values that cannot be converted",
+              "default": false
+            }
+          ],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "search",
+      "usage": "[options] [query]",
+      "description": "Search records: in one collection with --collection, else across the project",
+      "arguments": [
+        {
+          "name": "query",
+          "description": "words to search for",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [
+        {
+          "flags": "--collection <c>",
+          "description": "search one collection (slug or ID)"
+        },
+        {
+          "flags": "--filter <expression>",
+          "description": "filter on a filterable field or \"published_at exists\", as in records list; repeatable"
+        },
+        {
+          "flags": "--sort <sort>",
+          "description": "created_at, updated_at, published_at or a sortable field; - for descending"
+        },
+        {
+          "flags": "--limit <n>",
+          "description": "results (1-100)",
+          "default": 20
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "webhooks",
+      "usage": "[options] [command]",
+      "description": "Send signed HTTP requests when content changes",
+      "arguments": [],
+      "options": [],
+      "commands": [
+        {
+          "name": "list",
+          "usage": "[options]",
+          "description": "List the project's webhooks",
+          "arguments": [],
+          "options": [
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every webhook",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "create",
+          "usage": "[options]",
+          "description": "Create a webhook; prints its signing secret (shown only now)",
+          "arguments": [],
+          "options": [
+            {
+              "flags": "--url <url>",
+              "description": "https URL to send events to"
+            },
+            {
+              "flags": "--events <types>",
+              "description": "comma-separated event types, or * for all",
+              "default": "*"
+            },
+            {
+              "flags": "--description <text>",
+              "description": "what it is for"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "delete",
+          "usage": "[options] <id>",
+          "description": "Delete a webhook",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "webhook ID (wh_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "rotate-secret",
+          "usage": "[options] <id>",
+          "description": "Add a new signing secret; the old ones keep signing for 24 hours",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "webhook ID (wh_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "test",
+          "usage": "[options] <id>",
+          "description": "Send a webhook.test event",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "webhook ID (wh_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "deliveries",
+          "usage": "[options] <id>",
+          "description": "List a webhook's deliveries, newest first",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "webhook ID (wh_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--status <status>",
+              "description": "only deliveries with this status"
+            },
+            {
+              "flags": "--limit <n>",
+              "description": "page size (1-100, default 100)"
+            },
+            {
+              "flags": "--cursor <cursor>",
+              "description": "continue from a previous page's next_cursor"
+            },
+            {
+              "flags": "--all",
+              "description": "follow cursors and return every delivery",
+              "default": false
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "delivery",
+          "usage": "[options] <delivery>",
+          "description": "Show a delivery with its attempts",
+          "arguments": [
+            {
+              "name": "delivery",
+              "description": "delivery ID (whd_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "retry",
+          "usage": "[options] <delivery>",
+          "description": "Attempt a delivery again now",
+          "arguments": [
+            {
+              "name": "delivery",
+              "description": "delivery ID (whd_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "usage": "[options]",
+      "description": "Show who changed what in the project, newest first (needs audit:read)",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--type <type>",
+          "description": "an event type, or a prefix like record.*"
+        },
+        {
+          "flags": "--resource <id>",
+          "description": "one resource's events (rec_..., col_...)"
+        },
+        {
+          "flags": "--actor <id>",
+          "description": "a user (usr_...) or API key (key_...)"
+        },
+        {
+          "flags": "--since <time>",
+          "description": "only events at or after this ISO 8601 time"
+        },
+        {
+          "flags": "--until <time>",
+          "description": "only events before this ISO 8601 time"
+        },
+        {
+          "flags": "--limit <n>",
+          "description": "page size (1-100, default 20)"
+        },
+        {
+          "flags": "--cursor <cursor>",
+          "description": "continue from a previous page's next_cursor"
+        },
+        {
+          "flags": "--all",
+          "description": "follow cursors and return every event",
+          "default": false
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "export",
+      "usage": "[options]",
+      "description": "Export the project's schema and records to a directory",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--output <dir>",
+          "description": "directory to write (created if needed)"
+        },
+        {
+          "flags": "--include-history",
+          "description": "also export every record's revisions",
+          "default": false
+        },
+        {
+          "flags": "--include-deleted",
+          "description": "also export deleted records",
+          "default": false
+        },
+        {
+          "flags": "--include-files",
+          "description": "also download every asset's original file",
+          "default": false
+        }
+      ],
+      "commands": []
+    },
+    {
+      "name": "import",
+      "usage": "[options] <dir>",
+      "description": "Import an export into the project: schema first, then records (re-runnable for 24 hours)",
+      "arguments": [
+        {
+          "name": "dir",
+          "description": "a directory written by nohead export",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [],
+      "commands": []
+    }
+  ]
+}

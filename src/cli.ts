@@ -151,3 +151,76 @@ function unexpected(error: unknown): CliError {
     message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
   })
 }
+
+/** An argument, an option or a command, as `commands.json` describes it. */
+export interface DescribedArgument {
+  name: string
+  description: string
+  required: boolean
+  variadic: boolean
+}
+export interface DescribedOption {
+  flags: string
+  description: string
+  default?: unknown
+}
+export interface DescribedCommand {
+  name: string
+  usage: string
+  description: string
+  arguments: DescribedArgument[]
+  options: DescribedOption[]
+  commands: DescribedCommand[]
+}
+
+/**
+ * Every command, with its arguments and options, as commander knows them:
+ * what `commands.json` holds for the docs' CLI reference. Built with an inert
+ * runtime, so nothing is read, fetched or written.
+ */
+export function describeCommands(): DescribedCommand {
+  const refuse = () =>
+    Promise.reject(new Error("describeCommands does no input or output"))
+  const inert: Runtime = {
+    stdout: () => {},
+    stderr: () => {},
+    env: {},
+    fetch: refuse,
+    readFile: refuse,
+    readBinaryFile: refuse,
+    writeFile: refuse,
+    readStdin: refuse,
+    stdinIsTTY: false,
+    readSecret: refuse,
+    writePrivateFile: refuse,
+    sleep: () => Promise.resolve(),
+    now: () => new Date(0),
+  }
+  return describe(buildProgram(inert, { profiles: {} }, false))
+}
+
+function describe(command: Command): DescribedCommand {
+  return {
+    name: command.name(),
+    usage: command.usage(),
+    description: command.description(),
+    arguments: command.registeredArguments.map((argument) => ({
+      name: argument.name(),
+      description: argument.description,
+      required: argument.required,
+      variadic: argument.variadic,
+    })),
+    options: command.options
+      .filter((option) => !option.hidden)
+      .map((option) => ({
+        flags: option.flags,
+        description: option.description,
+        ...(option.defaultValue === undefined
+          ? {}
+          : { default: option.defaultValue as unknown }),
+      })),
+    commands: command.commands
+      .filter((sub) => sub.name() !== "help")
+      .map(describe),
+  }
+}
