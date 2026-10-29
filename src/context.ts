@@ -77,6 +77,14 @@ export interface Runtime {
   sleep: (ms: number) => Promise<void>
   /** The current time (injectable so relative times are testable). */
   now: () => Date
+  /**
+   * Opens `url` in the default browser without waiting for it, ignoring
+   * failures. False when there is no browser to open it in (an SSH session,
+   * no display), so the user opens it themselves.
+   */
+  openUrl: (url: string) => boolean
+  /** This machine's name, to tell its API keys apart (`nohead login`). */
+  hostname: () => string
 }
 
 export interface GlobalOptions {
@@ -208,8 +216,7 @@ export function createContext(
     if (!apiKey) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message:
-          "Not logged in. Run `nohead login` with an API key from the web app (API keys), or set NOHEAD_API_KEY.",
+        message: "Not logged in. Run `nohead login`, or set NOHEAD_API_KEY.",
       })
     }
     requireSecureUrl(baseUrl)

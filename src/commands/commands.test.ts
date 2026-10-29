@@ -1657,7 +1657,7 @@ describe("login and profiles", () => {
   })
 
   // Pasted at a terminal, the key must not stay on screen.
-  it("reads the key without echo at a terminal, ending on Enter", async () => {
+  it("reads the key without echo at a terminal with --with-token, ending on Enter", async () => {
     const t = testRuntime({
       env: { ...env, NOHEAD_API_URL: "http://api.test" },
       routes: { "GET /v1/me": me },
@@ -1672,7 +1672,7 @@ describe("login and profiles", () => {
       return "nohead_sk_test0000000_secret\n"
     }
 
-    await t.ok(["login"])
+    await t.ok(["login", "--with-token"])
 
     expect(prompts).toEqual([expect.stringContaining("then press Enter")])
     expect(t.requests[0].headers.get("Authorization")).toBe(
@@ -1690,7 +1690,7 @@ describe("login and profiles", () => {
       return "nohead_sk_test0000000_secret"
     }
 
-    await t.ok(["--json", "login"])
+    await t.ok(["--json", "login", "--with-token"])
     expect(prompts).toEqual([""])
     expect(t.err()).toBe("")
   })
@@ -1700,7 +1700,7 @@ describe("login and profiles", () => {
     t.runtime.stdinIsTTY = true
     t.runtime.readSecret = async () => "  "
 
-    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
+    expect(await run(["login", "--with-token"], t.runtime)).toBe(ExitCode.Usage)
     expect(t.err()).toContain("No API key given")
     expect(t.err()).not.toContain("on stdin")
   })

@@ -138,6 +138,10 @@ export function testRuntime({
     },
     sleep: async () => {},
     now: () => new Date("2026-09-27T12:00:00.000Z"),
+    openUrl: () => {
+      throw new Error("openUrl is only for browser sign-in (stub it)")
+    },
+    hostname: () => "ada-laptop",
   }
 
   return {

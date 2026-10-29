@@ -50,9 +50,18 @@
     {
       "name": "login",
       "usage": "[options]",
-      "description": "Save an API key for later commands; reads the key from stdin (echo $KEY | nohead login)",
+      "description": "Sign in and save an API key: approve the CLI in the browser, or pipe a key in (echo $KEY | nohead login)",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "flags": "--with-token",
+          "description": "paste an API key from the web app instead of signing in with the browser"
+        },
+        {
+          "flags": "--no-browser",
+          "description": "print the sign-in page's URL instead of opening the browser"
+        }
+      ],
       "commands": []
     },
     {

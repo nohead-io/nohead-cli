@@ -112,7 +112,8 @@ export function storageUnreachable(cause: unknown): CliError {
   })
 }
 
-function networkError(cause: unknown) {
+/** The API could not be reached. */
+export function networkError(cause: unknown) {
   return new CliError(ExitCode.Network, {
     type: "network_error",
     message: `Could not reach the API: ${reason(cause)}`,

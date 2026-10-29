@@ -203,6 +203,8 @@ export function describeCommands(): DescribedCommand {
     writePrivateFile: refuse,
     sleep: () => Promise.resolve(),
     now: () => new Date(0),
+    openUrl: () => false,
+    hostname: () => "",
   }
   return describe(buildProgram(inert, { profiles: {} }, false))
 }
