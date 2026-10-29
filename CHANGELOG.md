@@ -12,7 +12,8 @@ release's section is its GitHub release's notes.
 - `nohead login` at a terminal signs in with the browser: it shows a code,
   opens the web app's sign-in page, and once you check the code and choose
   Allow, saves a new API key for this machine as the profile. `--no-browser`
-  prints the page's URL instead of opening it (as over SSH). **Breaking:** to
+  prints the page's URL instead of opening it (as over SSH), and `--web`
+  uses the browser flow without a terminal, for coding agents. **Breaking:** to
   paste a key at a terminal, run `nohead login --with-token`; a key piped in
   (`echo "$KEY" | nohead login`) is read as before.
 - `--api-url` is no longer in `--help`: there is one API,

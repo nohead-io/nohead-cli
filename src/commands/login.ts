@@ -16,6 +16,7 @@ import { printNotice, printResult } from "../output.ts"
 
 interface LoginFlags {
   withToken?: boolean
+  web?: boolean
   browser: boolean
 }
 
@@ -28,6 +29,10 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     .option(
       "--with-token",
       "paste an API key from the web app instead of signing in with the browser"
+    )
+    .option(
+      "--web",
+      "sign in with the browser even without a terminal (a coding agent shows you the code to approve)"
     )
     .option(
       "--no-browser",
@@ -43,7 +48,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
         DEFAULT_API_URL
 
       const { apiKey, key, project } =
-        runtime.stdinIsTTY && !flags.withToken
+        flags.web || (runtime.stdinIsTTY && !flags.withToken)
           ? await signInWithBrowser(ctx, apiUrl, flags.browser)
           : await pastedKey(ctx, apiUrl)
 

@@ -156,6 +156,19 @@ describe("login in the browser", () => {
     expect(t.out() + t.err()).not.toContain(TOKEN)
   })
 
+  // A coding agent runs the CLI without a terminal: --web still signs in
+  // through the browser, and the agent shows its person the code.
+  it("signs in through the browser without a terminal when asked with --web", async () => {
+    const t = browserLogin([approved])
+    t.runtime.stdinIsTTY = false
+
+    await t.ok(["login", "--web", "--no-browser"])
+
+    expect(t.openUrl).not.toHaveBeenCalled()
+    expect(t.err()).toContain("Your code: WXYZ-4821")
+    expect(JSON.parse(t.text(CONFIG)).profiles.default.api_key).toBe(TOKEN)
+  })
+
   it("saves the key as the --profile named", async () => {
     const t = browserLogin([approved])
     await t.ok(["--profile", "staging", "login"])

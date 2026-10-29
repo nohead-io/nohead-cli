@@ -58,6 +58,10 @@
           "description": "paste an API key from the web app instead of signing in with the browser"
         },
         {
+          "flags": "--web",
+          "description": "sign in with the browser even without a terminal (a coding agent shows you the code to approve)"
+        },
+        {
           "flags": "--no-browser",
           "description": "print the sign-in page's URL instead of opening the browser"
         }
