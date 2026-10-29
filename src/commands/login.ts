@@ -211,7 +211,9 @@ async function pastedKey(
   ).trim()
   if (!apiKey)
     throw usageError(
-      runtime.stdinIsTTY ? "No API key given" : "No API key given on stdin"
+      runtime.stdinIsTTY
+        ? "No API key given"
+        : "No API key given on stdin. To sign in with the browser instead, run: nohead login --web"
     )
   requireSecureUrl(apiUrl)
 

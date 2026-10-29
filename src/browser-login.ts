@@ -7,9 +7,9 @@
 // These endpoints are outside the /v1 API, so the SDK does not call them.
 
 import type { Runtime } from "./context.ts"
-import { CliError, ExitCode } from "./errors.ts"
+import { apiAnswerError, CliError, ExitCode } from "./errors.ts"
 import { isObject } from "./input.ts"
-import { apiError, send } from "./web-api.ts"
+import { send, sendRetrying, seconds, TRANSIENT } from "./web-api.ts"
 
 /** A started sign-in request (POST /auth/cli-logins). */
 interface CliLogin {
@@ -30,19 +30,6 @@ export interface ApprovedLogin {
   session: { id: string; name: string; expires_at: string | null }
   user: { id: string; email: string; name: string | null }
   project: { id: string; name: string } | null
-}
-
-/** Statuses worth asking again: the API is busy or briefly unavailable. */
-const TRANSIENT = [429, 500, 502, 503, 504]
-
-/** The longest wait between two requests, whatever the API asks for. */
-const MAX_WAIT_SECONDS = 60
-
-/** Seconds to wait, from 1 to MAX_WAIT_SECONDS; `fallback` if not a number. */
-function seconds(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.min(Math.max(value, 1), MAX_WAIT_SECONDS)
-    : fallback
 }
 
 /** The same error, told in the CLI's words. */
@@ -75,7 +62,7 @@ function isApproved(body: unknown): body is ApprovedLogin {
   )
 }
 
-/** Starts a sign-in request, asking again (up to 3 times) when the API is busy. */
+/** Starts a sign-in request, asking again when the API is busy. */
 async function start(
   runtime: Runtime,
   apiUrl: string,
@@ -83,31 +70,17 @@ async function start(
 ): Promise<CliLogin> {
   // The session the API makes is named after this machine.
   const client_name = runtime.hostname().slice(0, 100) || "unknown"
-  for (let attempt = 1; ; attempt++) {
-    const answer = await send(runtime, apiUrl, "POST", "/auth/cli-logins", {
-      body: { client_name },
-    })
-    const transient =
-      "unreachable" in answer || TRANSIENT.includes(answer.status)
-    if (transient && attempt <= 3) {
-      const wait = seconds(
-        "unreachable" in answer ? undefined : answer.retryAfter,
-        2 ** (attempt - 1)
-      )
-      notify(
-        "unreachable" in answer
-          ? "Could not reach the API; retrying"
-          : answer.status === 429
-            ? `Rate limited; retrying in ${Math.ceil(wait)}s`
-            : `API unavailable (HTTP ${answer.status}); retrying`
-      )
-      await runtime.sleep(wait * 1000)
-      continue
-    }
-    if ("unreachable" in answer) throw answer.unreachable
-    if (answer.status === 201 && isCliLogin(answer.body)) return answer.body
-    throw apiError(answer.status, answer.body)
-  }
+  const answer = await sendRetrying(
+    runtime,
+    apiUrl,
+    "POST",
+    "/auth/cli-logins",
+    { body: { client_name } },
+    notify
+  )
+  if ("unreachable" in answer) throw answer.unreachable
+  if (answer.status === 201 && isCliLogin(answer.body)) return answer.body
+  throw apiAnswerError(answer.status, answer.body)
 }
 
 /**
@@ -187,7 +160,7 @@ export async function browserLogin({
       continue
     }
     if (status === 201 && isApproved(body)) return body
-    const error = apiError(status, body)
+    const error = apiAnswerError(status, body)
     if (status === 404) throw reworded(error, EXPIRED)
     if (
       status === 403 &&

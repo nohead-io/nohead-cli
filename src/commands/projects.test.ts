@@ -248,6 +248,31 @@ describe("projects list", () => {
     expect(t.err()).toContain("Not logged in")
   })
 
+  it("asks again when the API is briefly unavailable, as the SDK does", async () => {
+    let calls = 0
+    const t = signedIn({
+      routes: {
+        "GET /v1/projects": () =>
+          ++calls === 1
+            ? Response.json(
+                {
+                  error: {
+                    type: "service_unavailable",
+                    message: "Try again shortly",
+                  },
+                },
+                { status: 503 }
+              )
+            : Response.json({
+                data: [],
+                meta: { next_cursor: null, has_more: false },
+              }),
+      },
+    })
+    await t.ok(["projects", "list"])
+    expect(calls).toBe(2)
+  })
+
   it("shows the API's errors as they are", async () => {
     const t = signedIn({
       routes: {

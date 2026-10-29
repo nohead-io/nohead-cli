@@ -42,8 +42,17 @@ export async function readConfig(runtime: Runtime): Promise<ConfigFile> {
     return { profiles: {} }
   }
   try {
-    const parsed = JSON.parse(text) as Partial<ConfigFile>
-    return { profiles: parsed.profiles ?? {} }
+    const parsed = JSON.parse(text) as {
+      profiles?: Record<string, Profile & { api_key?: string }>
+    }
+    // Profiles saved before CLI sessions kept their API key as `api_key`.
+    const profiles = Object.fromEntries(
+      Object.entries(parsed.profiles ?? {}).map(([name, profile]) => {
+        const { api_key, ...rest } = profile
+        return [name, { ...rest, token: profile.token ?? api_key ?? "" }]
+      })
+    )
+    return { profiles }
   } catch {
     throw usageError(`${path} is not valid JSON; fix or delete it`)
   }

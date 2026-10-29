@@ -46,6 +46,11 @@ export async function unwrap<T>(call: PromiseLike<T>): Promise<T> {
   }
 }
 
+/** An API error answer the CLI read without the SDK, told as `unwrap` tells one. */
+export function apiAnswerError(status: number, body: unknown): CliError {
+  return cliError(new APIError(status, body, new Headers())) as CliError
+}
+
 /** The API key may not do this (authorization_error); some commands go on without it. */
 export function isForbidden(error: unknown): error is CliError {
   return error instanceof CliError && error.body.type === "authorization_error"

@@ -1695,6 +1695,14 @@ describe("login and profiles", () => {
     expect(t.err()).toBe("")
   })
 
+  it("points to browser sign-in when no key is piped in", async () => {
+    const t = testRuntime({ env, routes: {} })
+    t.runtime.readStdin = async () => ""
+
+    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("nohead login --web")
+  })
+
   it("refuses an empty key typed at a terminal", async () => {
     const t = testRuntime({ env, routes: {} })
     t.runtime.stdinIsTTY = true

@@ -4,7 +4,7 @@
 // through the runtime's fetch directly.
 
 import type { Runtime } from "./context.ts"
-import { CliError, ExitCode, networkError, type ErrorBody } from "./errors.ts"
+import { apiAnswerError, networkError, type CliError } from "./errors.ts"
 import { isObject } from "./input.ts"
 import { VERSION } from "./version.ts"
 
@@ -61,25 +61,50 @@ export async function send(
   }
 }
 
-/** The API's error envelope as the CLI reports it (as errors.ts does). */
-export function apiError(status: number, body: unknown): CliError {
-  const error = isObject(body) ? body.error : undefined
-  if (!isObject(error) || typeof error.type !== "string")
-    return new CliError(ExitCode.ApiError, {
-      type: "internal_error",
-      message: `Unexpected API response (HTTP ${status})`,
-    })
-  const details = Array.isArray(error.details)
-    ? (error.details as NonNullable<ErrorBody["details"]>)
-    : []
-  return new CliError(ExitCode.ApiError, {
-    type: error.type,
-    message: typeof error.message === "string" ? error.message : "",
-    ...(typeof error.request_id === "string" && {
-      request_id: error.request_id,
-    }),
-    ...(details.length > 0 && { details }),
-  })
+/** Statuses worth asking again: the API is busy or briefly unavailable. */
+export const TRANSIENT = [429, 500, 502, 503, 504]
+
+/** The longest wait between two requests, whatever the API asks for. */
+const MAX_WAIT_SECONDS = 60
+
+/** Seconds to wait, from 1 to MAX_WAIT_SECONDS; `fallback` if not a number. */
+export function seconds(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(Math.max(value, 1), MAX_WAIT_SECONDS)
+    : fallback
+}
+
+/**
+ * `send`, asking again (up to 3 times, as the SDK does) when the API can't
+ * be reached or is busy, saying so through `notify`. Other answers, and
+ * the last one, are returned as they come.
+ */
+export async function sendRetrying(
+  runtime: Runtime,
+  apiUrl: string,
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  options: { token?: string; body?: unknown } = {},
+  notify: (message: string) => void = () => {}
+): Promise<Answer> {
+  for (let attempt = 1; ; attempt++) {
+    const answer = await send(runtime, apiUrl, method, path, options)
+    const transient =
+      "unreachable" in answer || TRANSIENT.includes(answer.status)
+    if (!transient || attempt > 3) return answer
+    const wait = seconds(
+      "unreachable" in answer ? undefined : answer.retryAfter,
+      2 ** (attempt - 1)
+    )
+    notify(
+      "unreachable" in answer
+        ? "Could not reach the API; retrying"
+        : answer.status === 429
+          ? `Rate limited; retrying in ${Math.ceil(wait)}s`
+          : `API unavailable (HTTP ${answer.status}); retrying`
+    )
+    await runtime.sleep(wait * 1000)
+  }
 }
 
 /** A project the person belongs to (GET /v1/projects). */
@@ -122,10 +147,10 @@ export async function projectPage(
   const params = new URLSearchParams({ limit: String(query.limit) })
   if (query.cursor) params.set("cursor", query.cursor)
   const path = `/v1/projects?${params.toString()}`
-  const answer = await send(runtime, apiUrl, "GET", path, { token })
+  const answer = await sendRetrying(runtime, apiUrl, "GET", path, { token })
   if ("unreachable" in answer) throw answer.unreachable
   if (answer.status === 200 && isProjectPage(answer.body)) return answer.body
-  throw apiError(answer.status, answer.body)
+  throw apiAnswerError(answer.status, answer.body)
 }
 
 /** Every project of the person's, following the cursors. */

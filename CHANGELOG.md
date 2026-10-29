@@ -26,8 +26,8 @@ release's section is its GitHub release's notes.
 - `nohead whoami` with a CLI session shows you, the API and the project.
 - `nohead logout` ends a CLI session on the API too, before forgetting the
   profile (a saved API key stays valid, as before).
-- **Breaking:** a profile keeps its credentials as `token` (it was
-  `api_key`): log in again after upgrading.
+- A profile keeps its credentials as `token` (an API key or a CLI session).
+  Profiles saved by earlier versions, with `api_key`, keep working.
 
 - `--api-url` is no longer in `--help`: there is one API,
   `https://api.nohead.io`. It and `NOHEAD_API_URL` still work, for a local
