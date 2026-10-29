@@ -823,7 +823,11 @@
           "options": [
             {
               "flags": "--status <status>",
-              "description": "only records with this status"
+              "description": "only records with this status",
+              "choices": [
+                "published",
+                "unpublished"
+              ]
             },
             {
               "flags": "--filter <expression>",
@@ -867,7 +871,14 @@
               "name": "action",
               "description": "what to do to the records",
               "required": true,
-              "variadic": false
+              "variadic": false,
+              "choices": [
+                "publish",
+                "unpublish",
+                "delete",
+                "restore",
+                "update"
+              ]
             },
             {
               "name": "collection",
@@ -885,7 +896,11 @@
           "options": [
             {
               "flags": "--status <status>",
-              "description": "select records with this status"
+              "description": "select records with this status",
+              "choices": [
+                "published",
+                "unpublished"
+              ]
             },
             {
               "flags": "--filter <expression>",
@@ -1090,7 +1105,11 @@
           "options": [
             {
               "flags": "--sort <sort>",
-              "description": "at: soonest first (the default); -at: latest first"
+              "description": "at: soonest first (the default); -at: latest first",
+              "choices": [
+                "at",
+                "-at"
+              ]
             },
             {
               "flags": "--limit <n>",
@@ -1283,7 +1302,11 @@
             },
             {
               "flags": "--status <status>",
-              "description": "only records with this status"
+              "description": "only records with this status",
+              "choices": [
+                "published",
+                "unpublished"
+              ]
             },
             {
               "flags": "--deleted",
@@ -1653,12 +1676,24 @@
             {
               "flags": "--fit <fit>",
               "description": "how the image fills width and height",
-              "default": "contain"
+              "default": "contain",
+              "choices": [
+                "contain",
+                "cover",
+                "fill"
+              ]
             },
             {
               "flags": "--format <format>",
               "description": "the image format",
-              "default": "original"
+              "default": "original",
+              "choices": [
+                "original",
+                "webp",
+                "avif",
+                "jpeg",
+                "png"
+              ]
             },
             {
               "flags": "--quality <n>",
@@ -1954,7 +1989,12 @@
           "options": [
             {
               "flags": "--status <status>",
-              "description": "only deliveries with this status"
+              "description": "only deliveries with this status",
+              "choices": [
+                "pending",
+                "succeeded",
+                "failed"
+              ]
             },
             {
               "flags": "--limit <n>",

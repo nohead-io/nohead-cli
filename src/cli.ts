@@ -158,11 +158,13 @@ export interface DescribedArgument {
   description: string
   required: boolean
   variadic: boolean
+  choices?: string[]
 }
 export interface DescribedOption {
   flags: string
   description: string
   default?: unknown
+  choices?: string[]
 }
 export interface DescribedCommand {
   name: string
@@ -209,6 +211,7 @@ function describe(command: Command): DescribedCommand {
       description: argument.description,
       required: argument.required,
       variadic: argument.variadic,
+      ...(argument.argChoices ? { choices: argument.argChoices } : {}),
     })),
     options: command.options
       .filter((option) => !option.hidden)
@@ -218,6 +221,7 @@ function describe(command: Command): DescribedCommand {
         ...(option.defaultValue === undefined
           ? {}
           : { default: option.defaultValue as unknown }),
+        ...(option.argChoices ? { choices: option.argChoices } : {}),
       })),
     commands: command.commands
       .filter((sub) => sub.name() !== "help")
