@@ -9,6 +9,9 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- `--api-url` is no longer in `--help`: there is one API,
+  `https://api.nohead.io`. It and `NOHEAD_API_URL` still work, for a local
+  or test API.
 - Every list command pages: `collections list`, `collections history`,
   `fields list`, `migrations list`, `webhooks list`, `webhooks deliveries`
   and `audit` stopped at the first 100 (`audit`: its `--limit`) without
