@@ -7,6 +7,12 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- Runs on `@nohead/sdk` 0.9.0: a redirect from the API is an error that
+  says to check the API's address, never followed with your key, and a
+  slow response that keeps arriving no longer times out.
+
 ## 0.4.0
 
 - `BROWSER=none` keeps `nohead login` from opening a browser: it only
