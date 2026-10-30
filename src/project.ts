@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path"
 
-import type { ConfigFile } from "./config.ts"
+import { savedKey, type ConfigFile } from "./config.ts"
 import { envVar, origin, type GlobalOptions, type Runtime } from "./context.ts"
 import { usageError } from "./input.ts"
 
@@ -67,6 +67,18 @@ export type ProjectSource =
   | "only_saved_key"
   | "NOHEAD_API_KEY"
 
+/** Where the project in use came from, for a person. */
+export function describeSource({ source, linkFile }: ProjectChoice): string {
+  switch (source) {
+    case "nohead.json":
+      return linkFile ?? source
+    case "only_saved_key":
+      return "the only saved key"
+    default:
+      return source
+  }
+}
+
 export interface ProjectChoice {
   source: ProjectSource
   /** Unset for NOHEAD_API_KEY's own project, which only the API knows. */
@@ -132,7 +144,7 @@ export function chooseProject({
 
 /** The saved key for a chosen project, or why there is none. */
 export function savedKeyFor(config: ConfigFile, choice: ProjectChoice) {
-  const key = choice.project ? config.keys[choice.project] : undefined
+  const key = choice.project ? savedKey(config, choice.project) : undefined
   if (key) return key
   const linked = choice.linkFile ? `, which ${choice.linkFile} links to` : ""
   throw usageError(

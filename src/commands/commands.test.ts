@@ -2087,6 +2087,7 @@ describe("login and saved keys", () => {
       await json.ok(["--json", "whoami"])
       expect(json.json()).toEqual({
         ...ME,
+        project_id: PROJECT_ID,
         project_source: "nohead.json",
         link_file: "/work/nohead.json",
       })
@@ -2105,6 +2106,77 @@ describe("login and saved keys", () => {
       expect(await sources([], {})).toBe("only_saved_key")
       expect(await sources([], { NOHEAD_API_KEY: "nohead_sk_env" })).toBe(
         "NOHEAD_API_KEY"
+      )
+    })
+  })
+
+  describe("a folder's link that isn't used, and odd project names", () => {
+    const keys = {
+      [PROJECT_ID]: { api_url: "http://api.test", api_key: "nohead_sk_saved" },
+    }
+
+    it("says in whoami when NOHEAD_API_KEY overrides the folder's nohead.json", async () => {
+      const t = testRuntime({
+        env: {
+          ...env,
+          NOHEAD_API_KEY: "nohead_sk_env",
+          NOHEAD_API_URL: "http://api.test",
+        },
+        files: {
+          ...saved(keys),
+          "/work/nohead.json": JSON.stringify({ project: "prj_linked" }),
+        },
+        routes: { "GET /v1/me": me },
+      })
+      await t.ok(["whoami"])
+      expect(t.out()).toContain(
+        "not used: /work/nohead.json (NOHEAD_API_KEY wins)"
+      )
+
+      const json = testRuntime({
+        env: {
+          ...env,
+          NOHEAD_API_KEY: "nohead_sk_env",
+          NOHEAD_API_URL: "http://api.test",
+        },
+        files: {
+          ...saved(keys),
+          "/work/nohead.json": JSON.stringify({ project: "prj_linked" }),
+        },
+        routes: { "GET /v1/me": me },
+      })
+      await json.ok(["--json", "whoami"])
+      expect(json.json()).toMatchObject({
+        project_id: PROJECT_ID,
+        project_source: "NOHEAD_API_KEY",
+        unused_link_file: "/work/nohead.json",
+      })
+    })
+
+    it("has no saved key for a project named like an object's own members", async () => {
+      for (const name of ["constructor", "__proto__", "toString"]) {
+        const t = testRuntime({ env, files: saved(keys), routes: {} })
+        expect(
+          await run(["--project", name, "collections", "list"], t.runtime)
+        ).toBe(ExitCode.Usage)
+        expect(t.err()).toContain(`No API key saved for project ${name}`)
+        expect(t.requests).toHaveLength(0)
+      }
+    })
+
+    it("says when the key logged in with isn't for the project this folder uses", async () => {
+      const t = testRuntime({
+        env: { ...env, NOHEAD_API_URL: "http://api.test" },
+        files: {
+          "/work/nohead.json": JSON.stringify({ project: "prj_linked" }),
+        },
+        stdin: "nohead_sk_test0000000_secret\n",
+        routes: { "GET /v1/me": me },
+      })
+      await t.ok(["login"])
+      expect(config(t).keys).toHaveProperty(PROJECT_ID)
+      expect(t.err()).toContain(
+        `Commands here use project prj_linked (from /work/nohead.json), not ${PROJECT_ID}`
       )
     })
   })

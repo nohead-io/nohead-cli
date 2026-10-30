@@ -67,6 +67,17 @@ function fromProfiles(profiles: Record<string, Profile> = {}) {
   return keys
 }
 
+/**
+ * The key saved for a project, if any. Own properties only: a project named
+ * `constructor` or `__proto__` (from --project or a nohead.json) has no key.
+ */
+export function savedKey(
+  config: ConfigFile,
+  project: string
+): SavedKey | undefined {
+  return Object.hasOwn(config.keys, project) ? config.keys[project] : undefined
+}
+
 /** Written with owner-only permissions: it holds API keys. */
 export async function writeConfig(runtime: Runtime, config: ConfigFile) {
   const path = configPath(runtime.env)

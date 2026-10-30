@@ -2,7 +2,7 @@ import { join } from "node:path"
 
 import type { Command } from "commander"
 
-import { readConfig } from "../config.ts"
+import { readConfig, savedKey } from "../config.ts"
 import type { CommandContext } from "../context.ts"
 import { usageError } from "../input.ts"
 import { printNotice, printResult } from "../output.ts"
@@ -36,7 +36,7 @@ export function registerLink(program: Command, context: () => CommandContext) {
 
       // Linking comes first in a fresh checkout, so a missing key is only
       // a reminder here; commands that need it say so too.
-      const saved = project in (await readConfig(runtime)).keys
+      const saved = savedKey(await readConfig(runtime), project) !== undefined
       printResult(
         ctx,
         { project, link_file: path, saved_key: saved },

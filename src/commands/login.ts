@@ -1,6 +1,6 @@
 import type { Command } from "commander"
 
-import { configPath, readConfig, writeConfig } from "../config.ts"
+import { configPath, readConfig, savedKey, writeConfig } from "../config.ts"
 import {
   createApi,
   DEFAULT_API_URL,
@@ -11,7 +11,7 @@ import {
 import { unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { printNotice, printResult } from "../output.ts"
-import { chooseProject } from "../project.ts"
+import { describeSource } from "../project.ts"
 
 export function registerLogin(program: Command, context: () => CommandContext) {
   program
@@ -57,7 +57,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
       const project = me.api_key.project_id
       const config = await readConfig(runtime)
       // One key per project: logging in again for it replaces the old one.
-      const replaced = project in config.keys
+      const replaced = savedKey(config, project) !== undefined
       config.keys[project] = {
         api_url: apiUrl,
         api_key: apiKey,
@@ -77,6 +77,14 @@ export function registerLogin(program: Command, context: () => CommandContext) {
           `${replaced ? "Replaced the saved key" : "Saved the key"} for project ${project} in ${path}.`,
         ].join("\n")
       )
+      // The key went under its own project, which may not be the one this
+      // folder (or --project, NOHEAD_PROJECT) asks for.
+      const wanted = wantedProject(ctx)
+      if (wanted && wanted.project !== project && !options.json)
+        printNotice(
+          ctx,
+          `Commands here use project ${wanted.project} (from ${describeSource(wanted)}), not ${project}: log in with one of its keys too, or choose ${project} with --project.`
+        )
       if (envVar(runtime.env, "NOHEAD_API_KEY") && !options.json)
         printNotice(
           ctx,
@@ -91,18 +99,10 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     )
     .action(async () => {
       const ctx = context()
-      const { runtime, options } = ctx
+      const { runtime } = ctx
       const config = await readConfig(runtime)
-      // The project a command would use its saved key for, whatever
-      // NOHEAD_API_KEY says.
-      const project = chooseProject({
-        options,
-        env: runtime.env,
-        config,
-        link: ctx.link,
-        apiUrl: options.apiUrl ?? envVar(runtime.env, "NOHEAD_API_URL"),
-      })?.project
-      const key = project ? config.keys[project] : undefined
+      const project = ctx.savedProjectChoice()?.project
+      const key = project ? savedKey(config, project) : undefined
       if (project && key) {
         delete config.keys[project]
         await writeConfig(runtime, config)
@@ -118,4 +118,14 @@ export function registerLogin(program: Command, context: () => CommandContext) {
               : `No API key saved for project ${project}.`
       )
     })
+}
+
+/** The project chosen for this folder, if one is, before this login. */
+function wantedProject(ctx: CommandContext) {
+  try {
+    const choice = ctx.savedProjectChoice()
+    return choice?.source === "only_saved_key" ? undefined : choice
+  } catch {
+    return undefined // several keys, none chosen: nothing asked for yet
+  }
 }

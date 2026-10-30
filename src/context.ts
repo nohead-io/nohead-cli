@@ -1,6 +1,6 @@
 import { Nohead, type RequestOptions } from "@nohead/sdk"
 
-import type { ConfigFile } from "./config.ts"
+import { savedKey, type ConfigFile } from "./config.ts"
 import { CliError, ExitCode, unwrap } from "./errors.ts"
 import {
   chooseProject,
@@ -113,6 +113,11 @@ export interface CommandContext {
   projectId: () => Promise<string>
   /** Where the project comes from (chooseProject), for `whoami`. */
   projectChoice: () => ProjectChoice | undefined
+  /**
+   * The project whose saved key a command would use, whatever
+   * NOHEAD_API_KEY says (`login`, `logout`).
+   */
+  savedProjectChoice: () => ProjectChoice | undefined
   /** The nearest nohead.json, unchecked. */
   link?: LinkFile
   /**
@@ -174,17 +179,19 @@ export function createContext(
   const apiUrl = options.apiUrl ?? envVar(runtime.env, "NOHEAD_API_URL")
   // Chosen now, so the API URL can follow the saved key, but only reported
   // when a command needs it: `health` works whatever is saved.
-  let choice: ProjectChoice | undefined
-  let choiceError: Error | undefined
-  try {
-    choice = chooseProject({
+  const choose = (withEnvKey: boolean) =>
+    chooseProject({
       options,
       env: runtime.env,
       config,
       link,
       apiUrl,
-      envApiKey,
+      envApiKey: withEnvKey ? envApiKey : undefined,
     })
+  let choice: ProjectChoice | undefined
+  let choiceError: Error | undefined
+  try {
+    choice = choose(true)
   } catch (error) {
     choiceError = error as Error
   }
@@ -193,7 +200,7 @@ export function createContext(
     return choice
   }
   const saved =
-    !envApiKey && choice?.project ? config.keys[choice.project] : undefined
+    !envApiKey && choice?.project ? savedKey(config, choice.project) : undefined
   const baseUrl = apiUrl ?? saved?.api_url ?? DEFAULT_API_URL
   const credentials = envApiKey
     ? "NOHEAD_API_KEY"
@@ -293,6 +300,7 @@ export function createContext(
     credentials,
     projectId,
     projectChoice,
+    savedProjectChoice: () => choose(false),
     link,
     writeOptions,
   }

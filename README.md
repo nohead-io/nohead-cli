@@ -73,7 +73,7 @@ With keys saved for several projects and none chosen, a command stops and asks f
 
 `nohead logout` forgets the saved key of the project in use, chosen as above. The key itself stays valid until you revoke it in the web app.
 
-In CI and for coding agents, set `NOHEAD_API_KEY` instead of logging in. It wins over saved keys and works in its own project (or the one given with `--project` or `NOHEAD_PROJECT`); `nohead.json` doesn't apply to it.
+A coding agent working in your checkout uses your saved keys and the folder's `nohead.json` just as you do, so it stays in the project the folder is linked to. In CI, or for an agent that should act with a key of its own, set `NOHEAD_API_KEY` instead of logging in. It wins over saved keys and works in its own project (or the one given with `--project` or `NOHEAD_PROJECT`); `nohead.json` doesn't apply to it, and `nohead whoami` says when a folder's link isn't used.
 
 ### Schema as code
 
