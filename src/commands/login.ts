@@ -33,7 +33,17 @@ export function registerLogin(program: Command, context: () => CommandContext) {
       // coding agent), the person signs in with the browser, which makes a
       // key for the project they choose: suggested here, if this folder (or
       // --project, NOHEAD_PROJECT) uses one.
-      const piped = runtime.stdinIsTTY ? "" : (await runtime.readStdin()).trim()
+      const raw = runtime.stdinIsTTY ? "" : await runtime.readStdin()
+      const piped = raw.trim()
+      // Something piped in that holds no key is a mistake (an unset
+      // variable in `echo "$KEY"`), not a person waiting to sign in; and
+      // in CI there is no one to approve a browser sign-in.
+      if (raw && !piped)
+        throw usageError("No API key given on stdin (is the variable set?)")
+      if (!piped && runtime.env.CI)
+        throw usageError(
+          "No API key given: in CI, set NOHEAD_API_KEY (or pipe a key in) instead of signing in with the browser"
+        )
       requireSecureUrl(apiUrl)
       const { token, api_key } = piped
         ? await checkKey(apiUrl, piped, runtime.fetch)

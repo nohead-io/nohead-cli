@@ -544,4 +544,18 @@ describe("login with a piped key", () => {
       "nohead_sk_test0000000_secret"
     )
   })
+
+  it("refuses an empty pipe (an unset variable) instead of waiting for a browser", async () => {
+    const t = testRuntime({ env: { HOME }, stdin: "\n", routes: {} })
+    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("No API key given on stdin")
+    expect(t.requests).toHaveLength(0)
+  })
+
+  it("refuses to wait for a browser sign-in in CI", async () => {
+    const t = testRuntime({ env: { HOME, CI: "true" }, stdin: "", routes: {} })
+    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("in CI, set NOHEAD_API_KEY")
+    expect(t.requests).toHaveLength(0)
+  })
 })

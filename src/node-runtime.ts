@@ -52,7 +52,8 @@ export function nodeRuntime(): Runtime {
       }
       return true
     },
-    hostname: () => hostname(),
+    // macOS adds .local, which says nothing about the machine.
+    hostname: () => hostname().replace(/\.local$/, ""),
   }
 }
 

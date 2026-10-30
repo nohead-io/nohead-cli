@@ -21,9 +21,10 @@ release's section is its GitHub release's notes.
   (`echo "$KEY" | nohead login`) is checked and saved as before.
 - **Breaking:** `nohead login` at a terminal no longer asks you to paste an
   API key: it signs you in with the browser. To save a key you already
-  have, pipe it in. An empty stdin no longer fails with exit code 2 ("No API
-  key given on stdin"): it signs in with the browser too, so a script that
-  pipes in an unset variable waits for a sign-in until the code expires.
+  have, pipe it in. With nothing on stdin it signs in with the browser too;
+  something piped in that holds no key (an unset variable in
+  `echo "$KEY"`) still fails with exit code 2, and so does a login with no
+  key in CI (`CI` set), which can't wait for a browser.
 - **Breaking:** API keys are saved by project, and profiles are gone:
   `--profile` and `NOHEAD_PROFILE` no longer exist. An API key belongs to
   one project, so choosing a project now chooses its saved key: a command
