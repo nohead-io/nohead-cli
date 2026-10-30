@@ -15,11 +15,7 @@
     },
     {
       "flags": "--project <id>",
-      "description": "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
-    },
-    {
-      "flags": "--profile <name>",
-      "description": "saved credentials to use (default: $NOHEAD_PROFILE or default)"
+      "description": "project to work in, and so its saved API key (default: $NOHEAD_PROJECT, then the nearest nohead.json, then the only saved key)"
     },
     {
       "flags": "--note <text>",
@@ -42,7 +38,7 @@
     {
       "name": "whoami",
       "usage": "[options]",
-      "description": "Show the credentials in use (API key, project, scopes)",
+      "description": "Show the credentials in use (API key, project and where it came from, scopes)",
       "arguments": [],
       "options": [],
       "commands": []
@@ -50,7 +46,7 @@
     {
       "name": "login",
       "usage": "[options]",
-      "description": "Save an API key for later commands; reads the key from stdin (echo $KEY | nohead login)",
+      "description": "Save an API key for its project, for later commands; reads the key from stdin (echo $KEY | nohead login)",
       "arguments": [],
       "options": [],
       "commands": []
@@ -58,8 +54,23 @@
     {
       "name": "logout",
       "usage": "[options]",
-      "description": "Forget a saved API key (the key itself stays valid; revoke it in the web app)",
+      "description": "Forget the API key saved for the project in use (the key itself stays valid; revoke it in the web app)",
       "arguments": [],
+      "options": [],
+      "commands": []
+    },
+    {
+      "name": "link",
+      "usage": "[options] <project>",
+      "description": "Use a project in this folder and the folders below it: writes nohead.json, which holds no secret, so it can be committed",
+      "arguments": [
+        {
+          "name": "project",
+          "description": "project ID (prj_...)",
+          "required": true,
+          "variadic": false
+        }
+      ],
       "options": [],
       "commands": []
     },

@@ -1625,14 +1625,24 @@ describe("idempotency", () => {
   })
 })
 
-describe("login and profiles", () => {
+describe("login and saved keys", () => {
   const env = { HOME: "/home/ada" }
   const configFile = "/home/ada/.config/nohead/config.json"
-  const saved = (profiles: Record<string, unknown>) => ({
-    [configFile]: JSON.stringify({ profiles }),
+  const saved = (keys: Record<string, unknown>) => ({
+    [configFile]: JSON.stringify({ keys }),
   })
+  const config = (t: ReturnType<typeof testRuntime>) =>
+    JSON.parse(t.text(configFile))
+  // GET /v1/me for another project's key.
+  const meOf =
+    (project_id: string, name = "ci") =>
+    () =>
+      contractResponse("me_get", {
+        ...ME,
+        api_key: { ...ME.api_key, project_id, name },
+      })
 
-  it("checks the key from stdin and saves it as a profile", async () => {
+  it("checks the key from stdin and saves it under its project", async () => {
     const t = testRuntime({
       env: { ...env, NOHEAD_API_URL: "http://api.test" },
       stdin: "nohead_sk_test0000000_secret\n",
@@ -1644,16 +1654,85 @@ describe("login and profiles", () => {
     expect(t.requests[0].headers.get("Authorization")).toBe(
       "Bearer nohead_sk_test0000000_secret"
     )
-    expect(JSON.parse(t.text(configFile))).toEqual({
-      profiles: {
-        default: {
+    expect(config(t)).toEqual({
+      keys: {
+        [PROJECT_ID]: {
           api_url: "http://api.test",
           api_key: "nohead_sk_test0000000_secret",
-          project_id: PROJECT_ID,
+          name: "ci",
         },
       },
     })
-    expect(t.out()).toContain('Saved as profile "default"')
+    expect(t.out()).toContain(`Saved the key for project ${PROJECT_ID}`)
+    expect(t.err()).toBe("")
+  })
+
+  it("adds another project's key, and replaces a project's key on a new login", async () => {
+    const t = testRuntime({
+      env: { ...env, NOHEAD_API_URL: "http://api.test" },
+      files: saved({
+        [PROJECT_ID]: { api_url: "http://api.test", api_key: "nohead_sk_a" },
+      }),
+      stdin: "nohead_sk_b\n",
+      routes: { "GET /v1/me": meOf("prj_two", "local") },
+    })
+
+    await t.ok(["login"])
+    expect(Object.keys(config(t).keys)).toEqual([PROJECT_ID, "prj_two"])
+    expect(config(t).keys.prj_two).toEqual({
+      api_url: "http://api.test",
+      api_key: "nohead_sk_b",
+      name: "local",
+    })
+    expect(t.out()).toContain("with API key local (project prj_two)")
+
+    t.runtime.readStdin = async () => "nohead_sk_c\n"
+    await t.ok(["login"])
+    expect(config(t).keys.prj_two.api_key).toBe("nohead_sk_c")
+    expect(config(t).keys[PROJECT_ID].api_key).toBe("nohead_sk_a")
+    expect(t.out()).toContain("Replaced the saved key for project prj_two")
+  })
+
+  it("refuses a key that is not a project API key", async () => {
+    const t = testRuntime({
+      env,
+      stdin: "nohead_sk_user\n",
+      routes: {
+        "GET /v1/me": () =>
+          contractResponse("me_get", {
+            object: "principal",
+            type: "user",
+            user: {
+              id: "usr_1",
+              email: "ada@example.com",
+              name: "Ada",
+              staff: false,
+            },
+            api_key: null,
+          }),
+      },
+    })
+
+    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("That is not a project API key")
+    expect(t.written).toEqual({})
+  })
+
+  // The saved key would be ignored, which would be a surprise.
+  it("says NOHEAD_API_KEY wins over the key it saves", async () => {
+    const t = testRuntime({
+      env: { ...env, NOHEAD_API_KEY: "nohead_sk_env" },
+      stdin: "nohead_sk_new\n",
+      routes: { "GET /v1/me": me },
+    })
+
+    await t.ok(["login"])
+    expect(t.requests[0].headers.get("Authorization")).toBe(
+      "Bearer nohead_sk_new"
+    )
+    expect(t.err()).toContain(
+      "NOHEAD_API_KEY is set, so commands use it rather than the saved key"
+    )
   })
 
   // Pasted at a terminal, the key must not stay on screen.
@@ -1705,49 +1784,74 @@ describe("login and profiles", () => {
     expect(t.err()).not.toContain("on stdin")
   })
 
-  it("uses a saved profile, with environment variables taking precedence", async () => {
-    const profiles = {
-      default: {
-        api_url: "http://saved.test",
-        api_key: "nohead_sk_saved",
-        project_id: PROJECT_ID,
+  it("reads profiles saved by earlier versions as keys by project", async () => {
+    const t = testRuntime({
+      env: { ...env, NOHEAD_API_URL: "http://api.test" },
+      files: {
+        [configFile]: JSON.stringify({
+          profiles: {
+            default: {
+              api_url: "http://saved.test",
+              api_key: "nohead_sk_saved",
+              project_id: PROJECT_ID,
+            },
+            ci: {
+              api_url: "http://api.test",
+              api_key: "nohead_sk_ci",
+              project_id: "prj_ci",
+            },
+            // Nothing to save it under.
+            old: { api_url: "http://api.test", api_key: "nohead_sk_old" },
+          },
+        }),
       },
-      ci: { api_url: "http://ci.test", api_key: "nohead_sk_ci" },
-    }
-    const t = testRuntime({ env, files: saved(profiles), routes: {} })
-    t.runtime.fetch = (async (request: Request) => {
-      t.requests.push(request)
-      return contractResponse("me_get", ME)
-    }) as typeof fetch
+      stdin: "nohead_sk_two\n",
+      routes: { "GET /v1/me": meOf("prj_two") },
+    })
 
-    await t.ok(["whoami"])
-    expect(t.requests[0].url).toBe("http://saved.test/v1/me")
+    await t.ok(["--project", "prj_ci", "whoami"])
     expect(t.requests[0].headers.get("Authorization")).toBe(
-      "Bearer nohead_sk_saved"
+      "Bearer nohead_sk_ci"
     )
-    expect(t.out()).toContain("from:    profile default")
 
-    await t.ok(["--profile", "ci", "whoami"])
-    expect(t.requests[1].url).toBe("http://ci.test/v1/me")
-
-    t.runtime.env = { ...env, NOHEAD_API_KEY: "nohead_sk_env" }
-    await t.ok(["whoami"])
-    expect(t.requests[2].headers.get("Authorization")).toBe(
-      "Bearer nohead_sk_env"
-    )
+    // Writing saves the new shape only.
+    await t.ok(["login"])
+    expect(config(t)).toEqual({
+      keys: {
+        [PROJECT_ID]: {
+          api_url: "http://saved.test",
+          api_key: "nohead_sk_saved",
+        },
+        prj_ci: { api_url: "http://api.test", api_key: "nohead_sk_ci" },
+        prj_two: {
+          api_url: "http://api.test",
+          api_key: "nohead_sk_two",
+          name: "ci",
+        },
+      },
+    })
   })
 
   it("never sends a saved key to another API, or any key over plain http", async () => {
-    const profiles = {
-      default: { api_url: "https://saved.example", api_key: "nohead_sk_saved" },
-    }
     const elsewhere = testRuntime({
       env: { ...env, NOHEAD_API_URL: "https://attacker.example" },
-      files: saved(profiles),
+      files: saved({
+        [PROJECT_ID]: {
+          api_url: "https://saved.example",
+          api_key: "nohead_sk_saved",
+        },
+      }),
     })
+    expect(
+      await run(["--project", PROJECT_ID, "whoami"], elsewhere.runtime)
+    ).toBe(ExitCode.Usage)
+    expect(elsewhere.err()).toContain(
+      `The API key saved for project ${PROJECT_ID} is for https://saved.example, not https://attacker.example`
+    )
+    // Not chosen, the key is not this API's only key either.
     expect(await run(["whoami"], elsewhere.runtime)).toBe(ExitCode.Usage)
     expect(elsewhere.err()).toContain(
-      'Profile "default" holds a key for https://saved.example, not https://attacker.example'
+      "No API key saved for https://attacker.example"
     )
     expect(elsewhere.requests).toHaveLength(0)
 
@@ -1766,25 +1870,25 @@ describe("login and profiles", () => {
     expect(insecure.requests).toHaveLength(0)
   })
 
-  describe("precedence: flag, then environment, then profile", () => {
-    const profiles = {
-      default: {
+  describe("choosing the project, and with it the key", () => {
+    const keys = {
+      [PROJECT_ID]: {
         api_url: "http://saved.test",
         api_key: "nohead_sk_saved",
-        project_id: PROJECT_ID,
+        name: "laptop",
       },
-      ci: {
-        api_url: "http://ci.test",
-        api_key: "nohead_sk_ci",
-        project_id: "prj_ci",
-      },
+      prj_ci: { api_url: "http://ci.test", api_key: "nohead_sk_ci" },
     }
     const list = () =>
       contractResponse("collections_list", page([collection()]))
-    const setup = (vars: Record<string, string>) =>
+    const setup = (
+      vars: Record<string, string>,
+      options: { files?: Record<string, string>; cwd?: string } = {}
+    ) =>
       testRuntime({
         env: { ...env, ...vars },
-        files: saved(profiles),
+        files: { ...saved(keys), ...options.files },
+        cwd: options.cwd,
         routes: {
           "GET /v1/me": me,
           ...Object.fromEntries(
@@ -1795,6 +1899,7 @@ describe("login and profiles", () => {
           ),
         },
       })
+    const linked = (project: string) => JSON.stringify({ project })
     // Where each request went, and with which key.
     const sent = (t: ReturnType<typeof setup>) =>
       t.requests.map((r) => {
@@ -1802,7 +1907,138 @@ describe("login and profiles", () => {
         return `${url.origin}${url.pathname} ${r.headers.get("Authorization")}`
       })
 
-    it("takes the API URL and key from flags, then the environment, then the profile", async () => {
+    it("takes --project, then NOHEAD_PROJECT, then nohead.json", async () => {
+      const t = setup({}, { files: { "/work/nohead.json": linked("prj_ci") } })
+      await t.ok(["collections", "list"])
+      t.runtime.env = { ...env, NOHEAD_PROJECT: PROJECT_ID }
+      await t.ok(["collections", "list"])
+      await t.ok(["--project", "prj_ci", "collections", "list"])
+      expect(sent(t)).toEqual([
+        "http://ci.test/v1/projects/prj_ci/collections Bearer nohead_sk_ci",
+        `http://saved.test/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_saved`,
+        "http://ci.test/v1/projects/prj_ci/collections Bearer nohead_sk_ci",
+      ])
+    })
+
+    it("finds the nearest nohead.json in a parent folder", async () => {
+      const t = setup(
+        {},
+        {
+          cwd: "/work/site/src/pages",
+          files: {
+            "/work/nohead.json": linked("prj_ci"),
+            "/work/site/nohead.json": linked(PROJECT_ID),
+          },
+        }
+      )
+      await t.ok(["collections", "list"])
+      t.runtime.cwd = () => "/work/docs"
+      await t.ok(["collections", "list"])
+      expect(sent(t)).toEqual([
+        `http://saved.test/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_saved`,
+        "http://ci.test/v1/projects/prj_ci/collections Bearer nohead_sk_ci",
+      ])
+    })
+
+    it("uses the only saved key, for the API URL when one is set", async () => {
+      const only = testRuntime({
+        env,
+        files: saved({ prj_ci: keys.prj_ci }),
+        routes: { "GET /v1/projects/prj_ci/collections": list },
+      })
+      await only.ok(["collections", "list"])
+      expect(sent(only)).toEqual([
+        "http://ci.test/v1/projects/prj_ci/collections Bearer nohead_sk_ci",
+      ])
+
+      const t = setup({ NOHEAD_API_URL: "http://ci.test" })
+      await t.ok(["collections", "list"])
+      expect(sent(t)).toEqual([
+        "http://ci.test/v1/projects/prj_ci/collections Bearer nohead_sk_ci",
+      ])
+    })
+
+    it("asks which project with several saved keys and none chosen", async () => {
+      const t = setup({})
+      expect(await run(["collections", "list"], t.runtime)).toBe(ExitCode.Usage)
+      expect(t.err()).toContain(
+        `API keys are saved for several projects: ${PROJECT_ID} (laptop), prj_ci. Choose one: pass --project, set NOHEAD_PROJECT, or run \`nohead link <project>\` in this folder.`
+      )
+      expect(t.requests).toHaveLength(0)
+
+      // A command that needs no key still runs.
+      t.runtime.fetch = async () =>
+        contractResponse("health_check", {
+          status: "ok",
+          version: "v1",
+          time: NOW,
+        })
+      await t.ok(["health"])
+    })
+
+    it("says to log in when the chosen project has no saved key", async () => {
+      const flag = setup({})
+      expect(
+        await run(["--project", "prj_new", "collections", "list"], flag.runtime)
+      ).toBe(ExitCode.Usage)
+      expect(flag.err()).toContain(
+        "No API key saved for project prj_new. Run `nohead login` with one of that project's API keys"
+      )
+
+      const link = setup(
+        {},
+        { cwd: "/work/app", files: { "/work/nohead.json": linked("prj_new") } }
+      )
+      expect(await run(["collections", "list"], link.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(link.err()).toContain(
+        "No API key saved for project prj_new, which /work/nohead.json links to. Run `nohead login`"
+      )
+      expect([...flag.requests, ...link.requests]).toHaveLength(0)
+    })
+
+    it("refuses a nohead.json that is not JSON or names no project", async () => {
+      const broken = setup({}, { files: { "/work/nohead.json": "{" } })
+      expect(await run(["collections", "list"], broken.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(broken.err()).toContain(
+        "/work/nohead.json is not valid JSON; fix or delete it"
+      )
+      // Given a project, the CLI never reads it.
+      await broken.ok(["--project", "prj_ci", "collections", "list"])
+
+      const empty = setup(
+        {},
+        { files: { "/work/nohead.json": '{ "project": 42 }' } }
+      )
+      expect(await run(["collections", "list"], empty.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(empty.err()).toContain(
+        "/work/nohead.json names no project; run `nohead link <project>` or delete it"
+      )
+    })
+
+    // A key from the environment brings its own project; a folder's
+    // nohead.json is for saved keys.
+    it("ignores nohead.json for NOHEAD_API_KEY, asking the API for its project", async () => {
+      const t = setup(
+        { NOHEAD_API_KEY: "nohead_sk_env" },
+        { files: { "/work/nohead.json": linked("prj_ci") } }
+      )
+      await t.ok(["collections", "list"])
+      t.runtime.env = { ...t.runtime.env, NOHEAD_PROJECT: "prj_env" }
+      await t.ok(["collections", "list"])
+      expect(sent(t)).toEqual([
+        "https://api.nohead.io/v1/me Bearer nohead_sk_env",
+        `https://api.nohead.io/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_env`,
+        "https://api.nohead.io/v1/projects/prj_env/collections Bearer nohead_sk_env",
+      ])
+    })
+
+    it("takes the API URL and key from flags, then the environment", async () => {
       const t = setup({
         NOHEAD_API_URL: "http://env.test",
         NOHEAD_API_KEY: "nohead_sk_env",
@@ -1816,52 +2052,14 @@ describe("login and profiles", () => {
       expect(t.out()).toContain("from:    NOHEAD_API_KEY")
     })
 
-    it("takes the profile from --profile, then NOHEAD_PROFILE", async () => {
-      const t = setup({ NOHEAD_PROFILE: "ci" })
-      await t.ok(["whoami"])
-      await t.ok(["--profile", "default", "whoami"])
-      expect(sent(t)).toEqual([
-        "http://ci.test/v1/me Bearer nohead_sk_ci",
-        "http://saved.test/v1/me Bearer nohead_sk_saved",
-      ])
-    })
-
-    it("takes the project from --project, then NOHEAD_PROJECT, then the profile", async () => {
-      const t = setup({})
-      await t.ok(["collections", "list"])
-      t.runtime.env = { ...env, NOHEAD_PROJECT: "prj_env" }
-      await t.ok(["collections", "list"])
-      await t.ok(["--project", "prj_flag", "collections", "list"])
-      t.runtime.env = { ...env, NOHEAD_PROFILE: "ci" }
-      await t.ok(["collections", "list"])
-      expect(sent(t)).toEqual([
-        `http://saved.test/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_saved`,
-        "http://saved.test/v1/projects/prj_env/collections Bearer nohead_sk_saved",
-        "http://saved.test/v1/projects/prj_flag/collections Bearer nohead_sk_saved",
-        "http://ci.test/v1/projects/prj_ci/collections Bearer nohead_sk_ci",
-      ])
-    })
-
-    // The profile's project belongs to the profile's key, not another one.
-    it("asks the API for the project of a key from NOHEAD_API_KEY", async () => {
-      const t = setup({ NOHEAD_API_KEY: "nohead_sk_env" })
-      await t.ok(["collections", "list"])
-      expect(sent(t)).toEqual([
-        "http://saved.test/v1/me Bearer nohead_sk_env",
-        `http://saved.test/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_env`,
-      ])
-    })
-
-    // As in the SDKs: an .envrc's `NOHEAD_API_KEY=` must not hide the profile.
+    // As in the SDKs: an .envrc's `NOHEAD_API_KEY=` must not hide the key.
     it("treats empty environment variables as unset", async () => {
-      const t = setup({
-        NOHEAD_API_URL: "",
-        NOHEAD_API_KEY: "",
-        NOHEAD_PROFILE: "",
-        NOHEAD_PROJECT: "",
-      })
+      const t = setup(
+        { NOHEAD_API_URL: "", NOHEAD_API_KEY: "", NOHEAD_PROJECT: "" },
+        { files: { "/work/nohead.json": linked(PROJECT_ID) } }
+      )
       await t.ok(["whoami"])
-      expect(t.out()).toContain("from:    profile default")
+      expect(t.out()).toContain("from:    saved key")
       await t.ok(["collections", "list"])
       expect(sent(t)).toEqual([
         "http://saved.test/v1/me Bearer nohead_sk_saved",
@@ -1869,51 +2067,179 @@ describe("login and profiles", () => {
       ])
     })
 
-    it("logs in and out of the default profile with an empty NOHEAD_PROFILE", async () => {
-      const t = testRuntime({
-        env: { ...env, NOHEAD_PROFILE: "", NOHEAD_API_URL: "" },
-        stdin: "nohead_sk_new\n",
-        routes: { "GET /v1/me": me },
+    it("says where the project came from in whoami", async () => {
+      const t = setup(
+        {},
+        {
+          cwd: "/work/app",
+          files: { "/work/nohead.json": linked(PROJECT_ID) },
+        }
+      )
+      await t.ok(["whoami"])
+      expect(t.out()).toContain(
+        `project: ${PROJECT_ID} (from /work/nohead.json)`
+      )
+
+      const json = setup(
+        {},
+        { cwd: "/work/app", files: { "/work/nohead.json": linked(PROJECT_ID) } }
+      )
+      await json.ok(["--json", "whoami"])
+      expect(json.json()).toEqual({
+        ...ME,
+        project_source: "nohead.json",
+        link_file: "/work/nohead.json",
       })
-      await t.ok(["login"])
-      expect(t.requests[0].url).toBe("https://api.nohead.io/v1/me")
-      expect(Object.keys(JSON.parse(t.text(configFile)).profiles)).toEqual([
-        "default",
-      ])
 
-      await t.ok(["logout"])
-      expect(JSON.parse(t.text(configFile))).toEqual({ profiles: {} })
+      const sources = async (argv: string[], vars: Record<string, string>) => {
+        const s = setup(vars, {
+          files: saved({ [PROJECT_ID]: keys[PROJECT_ID] }),
+        })
+        await s.ok(["--json", ...argv, "whoami"])
+        return s.json().project_source
+      }
+      expect(await sources(["--project", PROJECT_ID], {})).toBe("--project")
+      expect(await sources([], { NOHEAD_PROJECT: PROJECT_ID })).toBe(
+        "NOHEAD_PROJECT"
+      )
+      expect(await sources([], {})).toBe("only_saved_key")
+      expect(await sources([], { NOHEAD_API_KEY: "nohead_sk_env" })).toBe(
+        "NOHEAD_API_KEY"
+      )
     })
   })
 
-  it("logs in to a new named profile", async () => {
-    const t = testRuntime({
-      env: { ...env, NOHEAD_API_URL: "http://staging.test" },
-      files: saved({ default: { api_url: "http://x.test", api_key: "k" } }),
-      stdin: "nohead_sk_staging\n",
-      routes: { "GET /v1/me": me },
+  describe("logout", () => {
+    const keys = {
+      [PROJECT_ID]: {
+        api_url: "http://saved.test",
+        api_key: "nohead_sk_saved",
+        name: "laptop",
+      },
+      prj_ci: { api_url: "http://ci.test", api_key: "nohead_sk_ci" },
+    }
+
+    it("forgets the key of the chosen project only", async () => {
+      const t = testRuntime({ env, files: saved(keys) })
+
+      await t.ok(["--project", PROJECT_ID, "logout"])
+      expect(config(t)).toEqual({ keys: { prj_ci: keys.prj_ci } })
+      expect(t.out()).toContain(
+        `Forgot the API key laptop saved for project ${PROJECT_ID}`
+      )
+      expect(t.out()).toContain("stays valid until you revoke it")
     })
 
-    await t.ok(["--profile", "staging", "login"])
-    expect(JSON.parse(t.text(configFile)).profiles).toMatchObject({
-      default: { api_key: "k" },
-      staging: { api_url: "http://staging.test", api_key: "nohead_sk_staging" },
+    it("forgets the linked project's key, or the only one", async () => {
+      const t = testRuntime({
+        env,
+        files: { ...saved(keys), "/work/nohead.json": '{"project":"prj_ci"}' },
+      })
+      await t.ok(["--json", "logout"])
+      expect(t.json()).toEqual({ project_id: "prj_ci", removed: true })
+      expect(Object.keys(config(t).keys)).toEqual([PROJECT_ID])
+
+      const only = testRuntime({
+        env,
+        files: saved({ prj_ci: keys.prj_ci }),
+      })
+      await only.ok(["logout"])
+      expect(config(only)).toEqual({ keys: {} })
+    })
+
+    it("asks which project with several keys and none chosen", async () => {
+      const t = testRuntime({ env, files: saved(keys) })
+      expect(await run(["logout"], t.runtime)).toBe(ExitCode.Usage)
+      expect(t.err()).toContain("API keys are saved for several projects")
+      expect(t.written).toEqual({})
+    })
+
+    it("says when there is nothing to forget", async () => {
+      const t = testRuntime({ env, files: saved(keys) })
+      await t.ok(["--project", "prj_new", "logout"])
+      expect(t.out()).toContain("No API key saved for project prj_new.")
+
+      const none = testRuntime({ env })
+      await none.ok(["logout"])
+      expect(none.out()).toContain("No API keys are saved.")
+      expect({ ...t.written, ...none.written }).toEqual({})
     })
   })
+})
 
-  it("explains unknown profiles and logs out", async () => {
+describe("link", () => {
+  const env = { HOME: "/home/ada" }
+  const configFile = "/home/ada/.config/nohead/config.json"
+
+  it("writes nohead.json in the current folder", async () => {
+    const t = testRuntime({ env, cwd: "/work/site" })
+
+    await t.ok(["link", PROJECT_ID])
+    expect(t.text("/work/site/nohead.json")).toBe(
+      `{\n  "project": "${PROJECT_ID}"\n}\n`
+    )
+    expect(t.out()).toContain(
+      `Linked /work/site/nohead.json to project ${PROJECT_ID}.`
+    )
+    // No key is saved for it yet.
+    expect(t.err()).toContain(
+      `No API key is saved for project ${PROJECT_ID}: run \`nohead login\``
+    )
+  })
+
+  it("says nothing more when the project's key is saved", async () => {
     const t = testRuntime({
       env,
-      files: saved({ default: { api_url: "http://x.test", api_key: "k" } }),
+      files: {
+        [configFile]: JSON.stringify({
+          keys: {
+            [PROJECT_ID]: { api_url: "http://api.test", api_key: "k" },
+          },
+        }),
+      },
     })
 
-    expect(await run(["--profile", "nope", "whoami"], t.runtime)).toBe(
-      ExitCode.Usage
-    )
-    expect(t.err()).toContain('No saved profile "nope"')
+    await t.ok(["--json", "link", PROJECT_ID])
+    expect(t.json()).toEqual({
+      project: PROJECT_ID,
+      link_file: "/work/nohead.json",
+      saved_key: true,
+    })
+    expect(t.err()).toBe("")
+  })
 
-    await t.ok(["logout"])
-    expect(JSON.parse(t.text(configFile))).toEqual({ profiles: {} })
+  it("replaces the project in an existing nohead.json, keeping the rest", async () => {
+    const t = testRuntime({
+      env,
+      files: {
+        "/work/nohead.json": JSON.stringify({
+          project: "prj_old",
+          schema: "x.yaml",
+        }),
+      },
+    })
+
+    await t.ok(["link", "prj_new"])
+    expect(JSON.parse(t.text("/work/nohead.json"))).toEqual({
+      project: "prj_new",
+      schema: "x.yaml",
+    })
+  })
+
+  it("refuses what is not a project ID, or a nohead.json it cannot merge into", async () => {
+    const t = testRuntime({
+      env,
+      files: { "/work/nohead.json": "[1, 2" },
+    })
+
+    expect(await run(["link", "key_123"], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("key_123 is not a project ID (prj_...)")
+
+    expect(await run(["link", PROJECT_ID], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain(
+      "/work/nohead.json is not valid JSON; fix or delete it"
+    )
+    expect(t.written).toEqual({})
   })
 })
 

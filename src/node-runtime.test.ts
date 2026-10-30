@@ -18,9 +18,9 @@ describe("writePrivateFile", () => {
   it("creates the file and its directory for the current user only", async () => {
     const path = join(directory, "nohead", "config.json")
 
-    await nodeRuntime().writePrivateFile(path, '{"profiles":{}}\n')
+    await nodeRuntime().writePrivateFile(path, '{"keys":{}}\n')
 
-    expect(await nodeRuntime().readFile(path)).toBe('{"profiles":{}}\n')
+    expect(await nodeRuntime().readFile(path)).toBe('{"keys":{}}\n')
     expect(await mode(path)).toBe(0o600)
     expect(await mode(join(directory, "nohead"))).toBe(0o700)
   })

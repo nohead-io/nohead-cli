@@ -41,11 +41,14 @@ export function testRuntime({
   },
   files = {},
   stdin = "",
+  cwd = "/work",
 }: {
   routes?: Record<string, Handler>
   env?: Runtime["env"]
   files?: Record<string, string | Uint8Array>
   stdin?: string
+  /** The current directory, where nohead.json is looked for first. */
+  cwd?: string
 } = {}) {
   let stdout = ""
   let stderr = ""
@@ -107,6 +110,7 @@ export function testRuntime({
     stdout: (text) => (stdout += text),
     stderr: (text) => (stderr += text),
     env,
+    cwd: () => cwd,
     fetch: fetch as unknown as Runtime["fetch"],
     readFile: async (path) => {
       if (!(path in files)) throw fsError("ENOENT", path)
