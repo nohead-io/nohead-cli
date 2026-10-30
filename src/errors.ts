@@ -91,10 +91,12 @@ export function cliError(error: unknown): unknown {
         message: `Unexpected API response (HTTP ${error.status})`,
       })
     // As the API sends it: in this order, details only when there are some.
-    const { type, message, requestId, details } = error
+    // The API's own message: the SDK's `message` adds the status, type and
+    // request ID, which the CLI prints on their own.
+    const { type, apiMessage, requestId, details } = error
     return new CliError(ExitCode.ApiError, {
       type,
-      message,
+      message: apiMessage,
       request_id: requestId,
       ...(details.length > 0 && { details }),
     })
