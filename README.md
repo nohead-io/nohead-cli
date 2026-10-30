@@ -2,7 +2,7 @@
 
 The `nohead` command-line interface for [Nohead](https://nohead.io), for developers, CI and coding agents. It talks to the **public API only**, through the TypeScript SDK, [`@nohead/sdk`](https://www.npmjs.com/package/@nohead/sdk). Every change it makes is recorded in history as made "via the CLI".
 
-It needs Node 26 or newer. Until 1.0, any release may break your code: pin a version, and read the changelog's **Breaking** entries before upgrading.
+It needs Node 26 or newer. Until 1.0, any release may break scripts and CI jobs that use it: pin a version there (`npx nohead@0.4`), and read the changelog's **Breaking** entries before upgrading.
 
 ```bash
 npm install -g @nohead/cli               # or run it without installing: npx nohead
@@ -128,7 +128,7 @@ NOHEAD_API_URL=http://localhost:3000 node dist/index.js whoami   # against a loc
 
 `openapi.json` is the API's published contract; the tests check every stubbed request and response against it. When the contract changes, the Nohead API repository pushes the new one to the `contract/update` branch, and a pull request follows.
 
-The end-to-end tests run the built CLI against the real API. They live with the API, which runs them in its end-to-end tests and before every release, with this repository's `main` or a local checkout.
+The end-to-end tests run the built CLI against the real API. They live with the API, which runs them before every release, with this repository's `main` or a local checkout.
 
 ## Releasing
 
