@@ -79,6 +79,7 @@ async function send(
   body: unknown
 ): Promise<Answer> {
   let response: Response
+  let text: string
   try {
     response = await runtime.fetch(
       new Request(url, {
@@ -91,13 +92,15 @@ async function send(
         signal: AbortSignal.timeout(30_000),
       })
     )
+    // An answer cut off (a dropped connection, the timeout) is no answer:
+    // a pick-up's may have held the new key.
+    text = await response.text()
   } catch (cause) {
     return {
       error: cliError(new ConnectionError(`Could not reach ${url}`, { cause })),
       transient: true,
     }
   }
-  const text = await response.text().catch(() => "")
   let parsed: unknown = text
   try {
     parsed = JSON.parse(text)

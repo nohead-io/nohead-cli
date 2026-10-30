@@ -66,6 +66,14 @@ const failure = (
 const unreachable = () => {
   throw new TypeError("fetch failed")
 }
+/** A 201 whose body never arrives whole (the connection dropped). */
+const cutOff = () =>
+  new Response(
+    new ReadableStream({
+      start: (controller) => controller.error(new TypeError("terminated")),
+    }),
+    { status: 201 }
+  )
 const unavailable = () =>
   failure(503, "service_unavailable", "The service is unavailable")
 const rateLimited = (after: string) =>
@@ -384,6 +392,7 @@ describe("login in the browser", () => {
   it.each([
     ["no answer", unreachable],
     ["a 503", unavailable],
+    ["its answer cut off", cutOff],
   ])(
     "says a key may have been made when a 404 follows a pick-up with %s",
     async (_, lost) => {
