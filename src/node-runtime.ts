@@ -83,7 +83,9 @@ export function browserCommand(
   env: Runtime["env"],
   installed: (file: string) => boolean = (file) => onPath(file, env)
 ): { file: string; args: string[]; verbatim: boolean } | undefined {
-  if (env.SSH_CONNECTION || env.SSH_TTY) return undefined
+  // BROWSER=none, the usual way to say "never open one" (scripts, tests).
+  if (env.BROWSER === "none" || env.SSH_CONNECTION || env.SSH_TTY)
+    return undefined
   if (platform === "darwin")
     return { file: "open", args: [url], verbatim: false }
   // start is cmd's own: cmd reads & | < > ^ ( ) as its own, so each is

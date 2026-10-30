@@ -9,6 +9,8 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- `BROWSER=none` keeps `nohead login` from opening a browser: it only
+  prints the page to open, as over SSH.
 - `nohead login` signs you in with the browser, at a terminal or run by a
   coding agent (no terminal and nothing on stdin). It prints a code, then
   opens the web app (or, over SSH or without a display, prints the page to

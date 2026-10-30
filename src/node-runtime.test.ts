@@ -87,6 +87,7 @@ describe("browserCommand", () => {
       undefined
     )
     expect(browserCommand(url, "linux", {})).toBe(undefined)
+    expect(browserCommand(url, "darwin", { BROWSER: "none" })).toBe(undefined)
     expect(
       browserCommand(url, "linux", { WAYLAND_DISPLAY: "wayland-0" }, () => true)
         ?.file
