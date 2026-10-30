@@ -59,11 +59,13 @@ describe("browserCommand", () => {
       args: [url],
       verbatim: false,
     })
-    expect(browserCommand(url, "linux", { DISPLAY: ":0" })).toEqual({
-      file: "xdg-open",
-      args: [url],
-      verbatim: false,
-    })
+    expect(browserCommand(url, "linux", { DISPLAY: ":0" }, () => true)).toEqual(
+      {
+        file: "xdg-open",
+        args: [url],
+        verbatim: false,
+      }
+    )
     // cmd would run what follows an unescaped &.
     expect(browserCommand(url, "win32", {})).toEqual({
       file: "cmd",
@@ -86,7 +88,18 @@ describe("browserCommand", () => {
     )
     expect(browserCommand(url, "linux", {})).toBe(undefined)
     expect(
-      browserCommand(url, "linux", { WAYLAND_DISPLAY: "wayland-0" })?.file
+      browserCommand(url, "linux", { WAYLAND_DISPLAY: "wayland-0" }, () => true)
+        ?.file
     ).toBe("xdg-open")
+  })
+
+  // The URL is printed either way: never claim a browser opened when none can.
+  it("opens none without xdg-open, or for a URL cmd would expand", () => {
+    expect(browserCommand(url, "linux", { DISPLAY: ":0" }, () => false)).toBe(
+      undefined
+    )
+    expect(browserCommand("https://a.test/?q=%PATH%", "win32", {})).toBe(
+      undefined
+    )
   })
 })

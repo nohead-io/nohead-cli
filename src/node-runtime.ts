@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process"
+import { accessSync, constants } from "node:fs"
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { hostname } from "node:os"
-import { dirname } from "node:path"
+import { delimiter, dirname, join } from "node:path"
 import { text } from "node:stream/consumers"
 import { setTimeout } from "node:timers/promises"
 
@@ -47,38 +48,57 @@ export function nodeRuntime(): Runtime {
         })
         child.on("error", () => {})
         child.unref()
+        return true
       } catch {
-        // No opener installed: the URL is printed for the person anyway.
+        return false // the URL is printed for the person anyway
       }
-      return true
     },
     // macOS adds .local, which says nothing about the machine.
     hostname: () => hostname().replace(/\.local$/, ""),
   }
 }
 
+/** Whether `file` is an executable on the PATH. */
+function onPath(file: string, env: Runtime["env"]): boolean {
+  return (env.PATH ?? "").split(delimiter).some((dir) => {
+    try {
+      accessSync(join(dir, file), constants.X_OK)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 /**
  * How to open `url` in the default browser on this platform: none in an SSH
- * session, or (Linux and the like) without a display, where xdg-open would
- * fail or start a text browser with no terminal.
+ * session, or (Linux and the like) without a display or without xdg-open,
+ * where it would fail or start a text browser with no terminal. None means
+ * the person opens the printed URL themselves, so it is never claimed open
+ * when it can't be.
  */
 export function browserCommand(
   url: string,
   platform: NodeJS.Platform,
-  env: Runtime["env"]
+  env: Runtime["env"],
+  installed: (file: string) => boolean = (file) => onPath(file, env)
 ): { file: string; args: string[]; verbatim: boolean } | undefined {
   if (env.SSH_CONNECTION || env.SSH_TTY) return undefined
   if (platform === "darwin")
     return { file: "open", args: [url], verbatim: false }
   // start is cmd's own: cmd reads & | < > ^ ( ) as its own, so each is
   // escaped with ^; "" is start's window title, without which a quoted URL
-  // would be taken for one.
+  // would be taken for one. A % can't be escaped on cmd's command line (it
+  // would expand %NAME%), so such a URL is only printed; sign-in URLs have none.
   if (platform === "win32")
-    return {
-      file: "cmd",
-      args: ["/c", "start", '""', url.replace(/[&|<>^()]/g, "^$&")],
-      verbatim: true,
-    }
+    return url.includes("%")
+      ? undefined
+      : {
+          file: "cmd",
+          args: ["/c", "start", '""', url.replace(/[&|<>^()]/g, "^$&")],
+          verbatim: true,
+        }
   if (!env.DISPLAY && !env.WAYLAND_DISPLAY) return undefined
+  if (!installed("xdg-open")) return undefined
   return { file: "xdg-open", args: [url], verbatim: false }
 }

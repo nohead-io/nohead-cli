@@ -12,6 +12,7 @@ import { APIError, ConnectionError } from "@nohead/sdk"
 
 import type { CommandContext } from "./context.ts"
 import { CliError, cliError } from "./errors.ts"
+import { isObject } from "./input.ts"
 import { printNotice } from "./output.ts"
 import { VERSION } from "./version.ts"
 
@@ -49,9 +50,6 @@ const START_RETRIES = 3
 
 const EXPIRED = "The sign-in request expired; run nohead login again"
 const DENIED = "Sign-in was denied in the browser"
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null
 
 /** Seconds to wait, from 1 to 60 whatever the API says; `fallback` if none. */
 function seconds(value: unknown, fallback: number): number {
