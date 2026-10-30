@@ -9,6 +9,21 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- `nohead login` signs you in with the browser, at a terminal or run by a
+  coding agent (no terminal and nothing on stdin). It prints a code, then
+  opens the web app (or, over SSH or without a display, prints the page to
+  open), where you check the code and choose the project, the key's scopes
+  and its expiry; the CLI waits for you to choose Allow and saves the new
+  key for that project, as a piped key is saved. In a folder that uses a
+  project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it suggests
+  that project. The code and the page go to stderr even with `--json`;
+  stdout carries the same result as for a piped key. A key piped in
+  (`echo "$KEY" | nohead login`) is checked and saved as before.
+- **Breaking:** `nohead login` at a terminal no longer asks you to paste an
+  API key: it signs you in with the browser. To save a key you already
+  have, pipe it in. An empty stdin no longer fails with exit code 2 ("No API
+  key given on stdin"): it signs in with the browser too, so a script that
+  pipes in an unset variable waits for a sign-in until the code expires.
 - **Breaking:** API keys are saved by project, and profiles are gone:
   `--profile` and `NOHEAD_PROFILE` no longer exist. An API key belongs to
   one project, so choosing a project now chooses its saved key: a command

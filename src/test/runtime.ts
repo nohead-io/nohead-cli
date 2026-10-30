@@ -133,15 +133,14 @@ export function testRuntime({
     },
     readStdin: async () => stdin,
     stdinIsTTY: false,
-    readSecret: async () => {
-      throw new Error("readSecret is only for a terminal (set stdinIsTTY)")
-    },
     writePrivateFile: async (path, content) => {
       written[path] = content
       files[path] = content
     },
     sleep: async () => {},
     now: () => new Date("2026-09-27T12:00:00.000Z"),
+    openUrl: () => false,
+    hostname: () => "ada-laptop",
   }
 
   return {
