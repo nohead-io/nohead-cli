@@ -31,8 +31,11 @@ release's section is its GitHub release's notes.
   folder that has one replaces its project and keeps anything else in it.
 - `nohead whoami` says which project is in use and where it came from
   (`--project`, `NOHEAD_PROJECT`, a `nohead.json` and its path, the only
-  saved key, or `NOHEAD_API_KEY`); with `--json`, in `project_source` and
-  `link_file`.
+  saved key, or `NOHEAD_API_KEY`), and names a folder's `nohead.json` that
+  something else overrides; with `--json`, in `project_id`,
+  `project_source`, `link_file` and `unused_link_file`.
+- `nohead login` says when the key's project isn't the one the folder (or
+  `--project`, `NOHEAD_PROJECT`) uses.
 - `--api-url` is no longer in `--help`: there is one API,
   `https://api.nohead.io`. It and `NOHEAD_API_URL` still work, for a local
   or test API.
