@@ -7,7 +7,7 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.4.0
 
 - `BROWSER=none` keeps `nohead login` from opening a browser: it only
   prints the page to open, as over SSH.
