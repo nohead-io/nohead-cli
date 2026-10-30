@@ -2,7 +2,7 @@
 
 The `nohead` command-line interface for [Nohead](https://nohead.io), for developers, CI and coding agents. It talks to the **public API only**, through the TypeScript SDK, [`@nohead/sdk`](https://www.npmjs.com/package/@nohead/sdk). Every change it makes is recorded in history as made "via the CLI".
 
-It needs Node 26 or newer.
+It needs Node 26 or newer. Until 1.0, any release may break your code: pin a version, and read the changelog's **Breaking** entries before upgrading.
 
 ```bash
 npm install -g @nohead/cli               # or run it without installing: npx nohead
@@ -128,7 +128,7 @@ NOHEAD_API_URL=http://localhost:3000 node dist/index.js whoami   # against a loc
 
 `openapi.json` is the API's published contract; the tests check every stubbed request and response against it. When the contract changes, the Nohead API repository pushes the new one to the `contract/update` branch, and a pull request follows.
 
-The end-to-end tests run the built CLI against the real API. They live with the API, which runs them on every API change, with this repository's `main` or a local checkout.
+The end-to-end tests run the built CLI against the real API. They live with the API, which runs them in its end-to-end tests and before every release, with this repository's `main` or a local checkout.
 
 ## Releasing
 
@@ -137,7 +137,7 @@ The CLI is published as `@nohead/cli`, and as the unscoped `nohead` ([alias](ali
 1. Set the new version in `package.json` and in `alias/package.json` (its own and the `@nohead/cli` it depends on), then `npm install --package-lock-only`.
 2. Add a section for it to `CHANGELOG.md` (`## 1.2.3`), which becomes the release's notes.
 3. Merge to `main`. Its ruleset requires the **CI passed** check, so the commit goes through a pull request or a branch whose CI passed, and force pushes are refused.
-4. Run the **CLI release** workflow in the Nohead API repository. It runs the end-to-end tests against this commit and pushes the tag `v1.2.3`. Nobody else can push `v*` tags: a tag ruleset lets only that workflow's deploy key through.
+4. Run the **CLI release** workflow in the Nohead API repository. It runs the end-to-end tests against this commit and pushes the tag `v1.2.3`. A tag ruleset lets only deploy keys push `v*` tags.
 5. The tag starts `.github/workflows/release.yml`. A build job checks the tag is on `main` and matches both versions and the notes, and packs both packages, with no publishing credential. Its publishing job runs in the `release` environment, which only `v*` tags can use, and the registry's trusted publishers accept only that environment. It stages both packages on npm with provenance through trusted publishing (no token), then creates a draft GitHub release.
 6. Approve `@nohead/cli` first, then `nohead`, with 2FA: on npmjs.com, or with `npm stage list <package>` and `npm stage approve <stage-id>`. Only then are they installable. Publish the draft GitHub release.
 
