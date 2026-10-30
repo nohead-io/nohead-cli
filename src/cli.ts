@@ -212,10 +212,11 @@ export function describeCommands(): DescribedCommand {
     writeFile: refuse,
     readStdin: refuse,
     stdinIsTTY: false,
-    readSecret: refuse,
     writePrivateFile: refuse,
     sleep: () => Promise.resolve(),
     now: () => new Date(0),
+    openUrl: () => false,
+    hostname: () => "",
   }
   return describe(buildProgram(inert, { config: { keys: {} } }, false))
 }

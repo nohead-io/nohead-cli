@@ -1,5 +1,6 @@
 import type { Command } from "commander"
 
+import { browserLogin, type ApprovedLogin } from "../browser-login.ts"
 import { configPath, readConfig, savedKey, writeConfig } from "../config.ts"
 import {
   createApi,
@@ -17,7 +18,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
   program
     .command("login")
     .description(
-      "Save an API key for its project, for later commands; reads the key from stdin (echo $KEY | nohead login)"
+      "Sign in with the browser and save an API key for the project you choose; a key piped in is checked and saved as it is (echo $KEY | nohead login)"
     )
     .action(async () => {
       const ctx = context()
@@ -27,53 +28,47 @@ export function registerLogin(program: Command, context: () => CommandContext) {
         envVar(runtime.env, "NOHEAD_API_URL") ??
         DEFAULT_API_URL
 
-      // At a terminal the key is read without echo, so it never stays on
-      // screen or in scrollback. Piped in (echo $KEY | nohead
-      // login), as agents and CI do, it is read as before. With --json,
-      // stderr carries only an error document, so there is no prompt.
-      const apiKey = (
-        runtime.stdinIsTTY
-          ? await runtime.readSecret(
-              options.json
-                ? ""
-                : "Paste an API key (create one in the web app under API keys), then press Enter: "
-            )
-          : await runtime.readStdin()
-      ).trim()
-      if (!apiKey)
+      // A key piped in (echo $KEY | nohead login), as CI does, is checked
+      // and saved. Otherwise, at a terminal or with nothing on stdin (a
+      // coding agent), the person signs in with the browser, which makes a
+      // key for the project they choose, or for the one this folder (or
+      // --project, NOHEAD_PROJECT) uses, if it uses one.
+      const raw = runtime.stdinIsTTY ? "" : await runtime.readStdin()
+      const piped = raw.trim()
+      // Something piped in that holds no key is a mistake (an unset
+      // variable in `echo "$KEY"`), not a person waiting to sign in; and
+      // in CI there is no one to approve a browser sign-in.
+      if (raw && !piped)
+        throw usageError("No API key given on stdin (is the variable set?)")
+      if (!piped && runtime.env.CI)
         throw usageError(
-          runtime.stdinIsTTY ? "No API key given" : "No API key given on stdin"
+          "No API key given: in CI, set NOHEAD_API_KEY (or pipe a key in) instead of signing in with the browser"
         )
       requireSecureUrl(apiUrl)
+      const { token, api_key } = piped
+        ? await checkKey(apiUrl, piped, runtime.fetch)
+        : await browserLogin(ctx, apiUrl, wantedProject(ctx)?.project)
 
-      // Check the key before saving it.
-      const api = createApi({ baseUrl: apiUrl, apiKey, fetch: runtime.fetch })
-      const me = await unwrap(api.me.get())
-      if (!me.api_key)
-        throw usageError(
-          "That is not a project API key; log in with one from the web app (API keys)"
-        )
-
-      const project = me.api_key.project_id
+      const project = api_key.project_id
       const config = await readConfig(runtime)
       // One key per project: logging in again for it replaces the old one.
       const replaced = savedKey(config, project) !== undefined
       config.keys[project] = {
         api_url: apiUrl,
-        api_key: apiKey,
-        name: me.api_key.name,
+        api_key: token,
+        name: api_key.name,
       }
       const path = await writeConfig(runtime, config)
       const result = {
         api_url: apiUrl,
         project_id: project,
-        api_key: { id: me.api_key.id, name: me.api_key.name },
+        api_key: { id: api_key.id, name: api_key.name },
         replaced,
         config: path,
       }
       printResult(ctx, result, () =>
         [
-          `Logged in to ${apiUrl} with API key ${me.api_key!.name} (project ${project}).`,
+          `Logged in to ${apiUrl} with API key ${api_key.name} (project ${project}).`,
           `${replaced ? "Replaced the saved key" : "Saved the key"} for project ${project} in ${path}.`,
         ].join("\n")
       )
@@ -83,7 +78,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
       if (wanted && wanted.project !== project && !options.json)
         printNotice(
           ctx,
-          `Commands here use project ${wanted.project} (from ${describeSource(wanted)}), not ${project}: log in with one of its keys too, or choose ${project} with --project.`
+          `Commands here use project ${wanted.project} (from ${describeSource(wanted)}), not ${project}: log in to it too, or choose ${project} with --project.`
         )
       if (envVar(runtime.env, "NOHEAD_API_KEY") && !options.json)
         printNotice(
@@ -120,7 +115,25 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     })
 }
 
-/** The project chosen for this folder, if one is, before this login. */
+/** A key piped in, checked before it is saved. */
+async function checkKey(
+  apiUrl: string,
+  apiKey: string,
+  fetch: CommandContext["runtime"]["fetch"]
+): Promise<ApprovedLogin> {
+  const api = createApi({ baseUrl: apiUrl, apiKey, fetch })
+  const me = await unwrap(api.me.get())
+  if (!me.api_key)
+    throw usageError(
+      "That is not a project API key; log in with one from the web app (API keys)"
+    )
+  return { token: apiKey, api_key: me.api_key }
+}
+
+/**
+ * The project chosen for this folder (--project, NOHEAD_PROJECT or the
+ * nearest nohead.json), if one is, before this login.
+ */
 function wantedProject(ctx: CommandContext) {
   try {
     const choice = ctx.savedProjectChoice()

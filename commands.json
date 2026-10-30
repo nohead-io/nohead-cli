@@ -46,7 +46,7 @@
     {
       "name": "login",
       "usage": "[options]",
-      "description": "Save an API key for its project, for later commands; reads the key from stdin (echo $KEY | nohead login)",
+      "description": "Sign in with the browser and save an API key for the project you choose; a key piped in is checked and saved as it is (echo $KEY | nohead login)",
       "arguments": [],
       "options": [],
       "commands": []

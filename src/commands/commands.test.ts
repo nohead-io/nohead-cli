@@ -1735,55 +1735,6 @@ describe("login and saved keys", () => {
     )
   })
 
-  // Pasted at a terminal, the key must not stay on screen.
-  it("reads the key without echo at a terminal, ending on Enter", async () => {
-    const t = testRuntime({
-      env: { ...env, NOHEAD_API_URL: "http://api.test" },
-      routes: { "GET /v1/me": me },
-    })
-    const prompts: string[] = []
-    t.runtime.stdinIsTTY = true
-    t.runtime.readStdin = async () => {
-      throw new Error("a terminal is read without echo, not as stdin")
-    }
-    t.runtime.readSecret = async (prompt) => {
-      prompts.push(prompt)
-      return "nohead_sk_test0000000_secret\n"
-    }
-
-    await t.ok(["login"])
-
-    expect(prompts).toEqual([expect.stringContaining("then press Enter")])
-    expect(t.requests[0].headers.get("Authorization")).toBe(
-      "Bearer nohead_sk_test0000000_secret"
-    )
-    expect(t.out() + t.err()).not.toContain("nohead_sk_test0000000_secret")
-  })
-
-  it("asks for the key without a prompt with --json, so stderr stays empty", async () => {
-    const t = testRuntime({ env, routes: { "GET /v1/me": me } })
-    t.runtime.stdinIsTTY = true
-    const prompts: string[] = []
-    t.runtime.readSecret = async (prompt) => {
-      prompts.push(prompt)
-      return "nohead_sk_test0000000_secret"
-    }
-
-    await t.ok(["--json", "login"])
-    expect(prompts).toEqual([""])
-    expect(t.err()).toBe("")
-  })
-
-  it("refuses an empty key typed at a terminal", async () => {
-    const t = testRuntime({ env, routes: {} })
-    t.runtime.stdinIsTTY = true
-    t.runtime.readSecret = async () => "  "
-
-    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
-    expect(t.err()).toContain("No API key given")
-    expect(t.err()).not.toContain("on stdin")
-  })
-
   it("reads profiles saved by earlier versions as keys by project", async () => {
     const t = testRuntime({
       env: { ...env, NOHEAD_API_URL: "http://api.test" },
@@ -1982,7 +1933,7 @@ describe("login and saved keys", () => {
         await run(["--project", "prj_new", "collections", "list"], flag.runtime)
       ).toBe(ExitCode.Usage)
       expect(flag.err()).toContain(
-        "No API key saved for project prj_new. Run `nohead login` with one of that project's API keys"
+        "No API key saved for project prj_new. Run `nohead login` and choose that project"
       )
 
       const link = setup(

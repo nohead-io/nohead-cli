@@ -127,7 +127,7 @@ export function chooseProject({
   if (saved.length === 0) {
     if (apiUrl && Object.keys(config.keys).length > 0)
       throw usageError(
-        `No API key saved for ${apiUrl}. Run \`nohead login\` with one of its API keys, or set NOHEAD_API_KEY.`
+        `No API key saved for ${apiUrl}. Run \`nohead login\` to sign in to it, or set NOHEAD_API_KEY.`
       )
     return undefined
   }
@@ -148,6 +148,6 @@ export function savedKeyFor(config: ConfigFile, choice: ProjectChoice) {
   if (key) return key
   const linked = choice.linkFile ? `, which ${choice.linkFile} links to` : ""
   throw usageError(
-    `No API key saved for project ${choice.project}${linked}. Run \`nohead login\` with one of that project's API keys (from the web app), or set NOHEAD_API_KEY.`
+    `No API key saved for project ${choice.project}${linked}. Run \`nohead login\` and choose that project, or set NOHEAD_API_KEY.`
   )
 }

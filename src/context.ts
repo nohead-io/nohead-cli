@@ -67,16 +67,19 @@ export interface Runtime {
   readStdin: () => Promise<string>
   /** Whether stdin is an interactive terminal (nothing piped in). */
   stdinIsTTY: boolean
-  /**
-   * A line from the interactive terminal, not echoed (a secret), after
-   * writing `prompt` to stderr. Only when stdinIsTTY.
-   */
-  readSecret: (prompt: string) => Promise<string>
   /** Writes a file only the current user can read, creating directories. */
   writePrivateFile: (path: string, content: string) => Promise<void>
   sleep: (ms: number) => Promise<void>
   /** The current time (injectable so relative times are testable). */
   now: () => Date
+  /**
+   * Opens an http(s) `url` in the default browser without waiting for it,
+   * ignoring failures. False when there is no browser to open it in (an SSH
+   * session, no display), so the person opens it themselves.
+   */
+  openUrl: (url: string) => boolean
+  /** This machine's name, which names the key a browser sign-in creates. */
+  hostname: () => string
 }
 
 export interface GlobalOptions {
@@ -219,8 +222,7 @@ export function createContext(
     if (!chosen) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message:
-          "Not logged in. Run `nohead login` with an API key from the web app (API keys), or set NOHEAD_API_KEY.",
+        message: "Not logged in. Run `nohead login`, or set NOHEAD_API_KEY.",
       })
     }
     const key = savedKeyFor(config, chosen)

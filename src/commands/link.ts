@@ -45,7 +45,7 @@ export function registerLink(program: Command, context: () => CommandContext) {
       if (!saved && !options.json)
         printNotice(
           ctx,
-          `No API key is saved for project ${project}: run \`nohead login\` with one of its API keys (from the web app).`
+          `No API key is saved for project ${project}: run \`nohead login\` here to sign in to it.`
         )
     })
 }

@@ -75,7 +75,14 @@ export async function unwrapFind<T>(
   return undefined
 }
 
-function cliError(error: unknown): unknown {
+/**
+ * An SDK error as a CliError; anything else is returned as it is. The
+ * browser sign-in's endpoints, which the SDK does not call, build their
+ * answers into SDK errors to come out the same way.
+ */
+export function cliError(error: APIError | ConnectionError): CliError
+export function cliError(error: unknown): unknown
+export function cliError(error: unknown): unknown {
   if (error instanceof APIError) {
     // The SDK reads the error envelope: a type means the body was one.
     if (error.type === undefined)
