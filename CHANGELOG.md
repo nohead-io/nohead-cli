@@ -9,6 +9,33 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- **Breaking:** API keys are saved by project, and profiles are gone:
+  `--profile` and `NOHEAD_PROFILE` no longer exist. An API key belongs to
+  one project, so choosing a project now chooses its saved key: a command
+  works in `--project`, else `NOHEAD_PROJECT`, else the project in the
+  nearest `nohead.json` (in the current folder or one above it), else the
+  project of the only saved key. With keys saved for several projects and
+  none chosen, a command exits 2 and lists them. `nohead login` saves a key
+  for its project next to other projects' keys (a new key for the same
+  project replaces the old one) and says which project it saved;
+  `nohead logout` forgets the key of the project in use. Keys saved as
+  profiles by earlier versions keep working: each is read as its project's
+  key, and the config file is saved in the new shape the next time it
+  changes. `NOHEAD_API_KEY` still wins over saved keys, in its own project
+  (or `--project`, or `NOHEAD_PROJECT`); `nohead.json` doesn't apply to it.
+  With `--json`, `login` prints `replaced` (whether it replaced a saved
+  key) instead of `profile`, and `logout` prints `project_id` instead.
+- `nohead link <project>` writes `nohead.json` in the current folder,
+  `{ "project": "prj_..." }`, so commands run there or below use that
+  project and its saved key. It holds no secret: commit it. Linking a
+  folder that has one replaces its project and keeps anything else in it.
+- `nohead whoami` says which project is in use and where it came from
+  (`--project`, `NOHEAD_PROJECT`, a `nohead.json` and its path, the only
+  saved key, or `NOHEAD_API_KEY`), and names a folder's `nohead.json` that
+  something else overrides; with `--json`, in `project_id`,
+  `project_source`, `link_file` and `unused_link_file`.
+- `nohead login` says when the key's project isn't the one the folder (or
+  `--project`, `NOHEAD_PROJECT`) uses.
 - `--api-url` is no longer in `--help`: there is one API,
   `https://api.nohead.io`. It and `NOHEAD_API_URL` still work, for a local
   or test API.
@@ -25,9 +52,8 @@ release's section is its GitHub release's notes.
   `fields restore`, `fields migrate`) find a field in a collection with
   more than 100 fields; they looked in the first 100 only.
 - An empty environment variable counts as unset, as in the SDKs: an empty
-  `NOHEAD_API_KEY`, `NOHEAD_API_URL`, `NOHEAD_PROFILE` or `NOHEAD_PROJECT`
-  (say, `NOHEAD_API_KEY=` in an `.envrc`) no longer hides the saved
-  profile's setting, and an empty `XDG_CONFIG_HOME` no longer moves the
+  `NOHEAD_API_KEY`, `NOHEAD_API_URL` or `NOHEAD_PROJECT` (say,
+  `NOHEAD_API_KEY=` in an `.envrc`) no longer hides the saved key, and an empty `XDG_CONFIG_HOME` no longer moves the
   config file into the current directory.
 - A list page that says there is more but gives no cursor no longer ends
   with `More: --cursor null`; like the SDKs, the CLI stops there.

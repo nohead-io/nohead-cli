@@ -12,6 +12,7 @@ export function nodeRuntime(): Runtime {
     stdout: (output) => process.stdout.write(output),
     stderr: (output) => process.stderr.write(output),
     env: process.env,
+    cwd: () => process.cwd(),
     fetch: globalThis.fetch,
     readFile: (path) => readFile(path, "utf8"),
     readBinaryFile: (path) => readFile(path),

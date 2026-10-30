@@ -1,28 +1,27 @@
 import type { Command } from "commander"
 
-import { configPath, readConfig, writeConfig } from "../config.ts"
+import { configPath, readConfig, savedKey, writeConfig } from "../config.ts"
 import {
   createApi,
   DEFAULT_API_URL,
   envVar,
-  profileName,
   requireSecureUrl,
   type CommandContext,
 } from "../context.ts"
 import { unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
-import { printResult } from "../output.ts"
+import { printNotice, printResult } from "../output.ts"
+import { describeSource } from "../project.ts"
 
 export function registerLogin(program: Command, context: () => CommandContext) {
   program
     .command("login")
     .description(
-      "Save an API key for later commands; reads the key from stdin (echo $KEY | nohead login)"
+      "Save an API key for its project, for later commands; reads the key from stdin (echo $KEY | nohead login)"
     )
     .action(async () => {
       const ctx = context()
       const { runtime, options } = ctx
-      const name = profileName(options, runtime.env)
       const apiUrl =
         options.apiUrl ??
         envVar(runtime.env, "NOHEAD_API_URL") ??
@@ -55,44 +54,78 @@ export function registerLogin(program: Command, context: () => CommandContext) {
           "That is not a project API key; log in with one from the web app (API keys)"
         )
 
+      const project = me.api_key.project_id
       const config = await readConfig(runtime)
-      config.profiles[name] = {
+      // One key per project: logging in again for it replaces the old one.
+      const replaced = savedKey(config, project) !== undefined
+      config.keys[project] = {
         api_url: apiUrl,
         api_key: apiKey,
-        project_id: me.api_key.project_id,
+        name: me.api_key.name,
       }
       const path = await writeConfig(runtime, config)
       const result = {
-        profile: name,
         api_url: apiUrl,
-        project_id: me.api_key.project_id,
+        project_id: project,
         api_key: { id: me.api_key.id, name: me.api_key.name },
+        replaced,
         config: path,
       }
       printResult(ctx, result, () =>
         [
-          `Logged in to ${apiUrl} with API key ${me.api_key!.name} (project ${me.api_key!.project_id}).`,
-          `Saved as profile "${name}" in ${path}.`,
+          `Logged in to ${apiUrl} with API key ${me.api_key!.name} (project ${project}).`,
+          `${replaced ? "Replaced the saved key" : "Saved the key"} for project ${project} in ${path}.`,
         ].join("\n")
       )
+      // The key went under its own project, which may not be the one this
+      // folder (or --project, NOHEAD_PROJECT) asks for.
+      const wanted = wantedProject(ctx)
+      if (wanted && wanted.project !== project && !options.json)
+        printNotice(
+          ctx,
+          `Commands here use project ${wanted.project} (from ${describeSource(wanted)}), not ${project}: log in with one of its keys too, or choose ${project} with --project.`
+        )
+      if (envVar(runtime.env, "NOHEAD_API_KEY") && !options.json)
+        printNotice(
+          ctx,
+          "NOHEAD_API_KEY is set, so commands use it rather than the saved key until you unset it."
+        )
     })
 
   program
     .command("logout")
     .description(
-      "Forget a saved API key (the key itself stays valid; revoke it in the web app)"
+      "Forget the API key saved for the project in use (the key itself stays valid; revoke it in the web app)"
     )
     .action(async () => {
       const ctx = context()
-      const name = profileName(ctx.options, ctx.runtime.env)
-      const config = await readConfig(ctx.runtime)
-      const known = name in config.profiles
-      delete config.profiles[name]
-      if (known) await writeConfig(ctx.runtime, config)
-      printResult(ctx, { profile: name, removed: known }, () =>
-        known
-          ? `Logged out of profile "${name}" (${configPath(ctx.runtime.env)}).`
-          : `No saved profile "${name}".`
+      const { runtime } = ctx
+      const config = await readConfig(runtime)
+      const project = ctx.savedProjectChoice()?.project
+      const key = project ? savedKey(config, project) : undefined
+      if (project && key) {
+        delete config.keys[project]
+        await writeConfig(runtime, config)
+      }
+      printResult(
+        ctx,
+        { project_id: project ?? null, removed: Boolean(key) },
+        () =>
+          !project
+            ? "No API keys are saved."
+            : key
+              ? `Forgot the API key${key.name ? ` ${key.name}` : ""} saved for project ${project} (${configPath(runtime.env)}). The key stays valid until you revoke it in the web app.`
+              : `No API key saved for project ${project}.`
       )
     })
+}
+
+/** The project chosen for this folder, if one is, before this login. */
+function wantedProject(ctx: CommandContext) {
+  try {
+    const choice = ctx.savedProjectChoice()
+    return choice?.source === "only_saved_key" ? undefined : choice
+  } catch {
+    return undefined // several keys, none chosen: nothing asked for yet
+  }
 }

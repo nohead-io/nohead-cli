@@ -7,6 +7,7 @@ It needs Node 26 or newer.
 ```bash
 npm install -g @nohead/cli               # or run it without installing: npx nohead
 echo "$NOHEAD_API_KEY" | nohead login    # create a key in the web app under API keys
+nohead link prj_...                      # optional: use that project in this folder
 nohead whoami
 ```
 
@@ -36,7 +37,7 @@ The docs' [CLI reference](https://docs.nohead.io/cli/overview) has every command
 | `fields`      | `list <c> [--deleted] [paging flags]`, `add <c> <name> --type <type> [--key] [--required] [--multiple] [config flags]`, `update <c> <field> [--name] [--key] [--required\|--optional] [config flags]`, `delete <c> <field>`, `restore <c> <field>`, `migrate <c> <field> [--type] [--multiple\|--single] [--required\|--optional] [--backfill text\|--backfill-json json] [--days-in zone] [--clear-invalid] [--dry-run] [--no-wait] [config flags]`                                                                                                                                                                                                                                                                                    |
 | `schema`      | `pull [--output file\|-]`, `diff [file] [--exit-code] [--no-preview]`, `push [file] --yes [--allow-migrations] [--clear-invalid]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 |               | `export --output <dir> [--include-history] [--include-deleted] [--include-files]`, `import <dir>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-|               | `login` (API key on stdin), `logout`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+|               | `login` (API key on stdin), `logout`, `link <project>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `search`      | `search [query] [--collection c] [--filter k=v] [--sort] [--limit]` (one collection, or the whole project)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `webhooks`    | `list [paging flags]`, `create --url <url> [--events a,b\|*] [--description]`, `delete <id>`, `rotate-secret <id>`, `test <id>`, `deliveries <id> [--status] [paging flags]`, `delivery <whd_...>`, `retry <whd_...>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `audit`       | `audit [--type t\|record.*] [--resource id] [--actor usr_\|key_] [--since] [--until] [paging flags]` (needs `audit:read`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -55,7 +56,24 @@ Paging flags work on every list: a list prints one page of 100 (`audit`: 20, or 
 
 `fields migrate` changes a field in a way that rewrites record values (type, single/multiple, a stricter configuration, or required with a backfill). Run it with `--dry-run` first to see how every record converts. Without `--no-wait` it waits for the background migration and exits non-zero if it fails or is cancelled. While it runs, the collection's fields can't change, and once it is running its records can't either.
 
-`echo "$KEY" | nohead login` checks the key and saves it, with its project, as a profile (file mode 0600). Run at a terminal, `nohead login` asks for the key and reads it without echoing it, so it doesn't stay on screen or in scrollback. Flags win over environment variables, which win over the profile.
+### API keys and projects
+
+An API key belongs to one project. `echo "$KEY" | nohead login` checks the key and saves it for its project, next to the keys saved for other projects (in a file only you can read, mode 0600); logging in again with a key of the same project replaces its key. Run at a terminal, `nohead login` asks for the key and reads it without echoing it, so it doesn't stay on screen or in scrollback.
+
+Choosing a project chooses its saved key. A command works in the first of:
+
+1. `--project <id>`
+2. `NOHEAD_PROJECT`
+3. the project in the nearest `nohead.json`, in the current folder or a folder above it
+4. the project of the only saved key
+
+With keys saved for several projects and none chosen, a command stops and asks for one. `nohead whoami` shows the project in use and where it came from.
+
+`nohead link <project>` writes `nohead.json` in the current folder, `{ "project": "prj_..." }`, so commands run there or in a folder below use that project's key. It holds no secret, so commit it: each teammate logs in once with a key of that project. To unlink a folder, delete its `nohead.json`.
+
+`nohead logout` forgets the saved key of the project in use, chosen as above. The key itself stays valid until you revoke it in the web app.
+
+A coding agent working in your checkout uses your saved keys and the folder's `nohead.json` just as you do, so it stays in the project the folder is linked to. In CI, or for an agent that should act with a key of its own, set `NOHEAD_API_KEY` instead of logging in. It wins over saved keys and works in its own project (or the one given with `--project` or `NOHEAD_PROJECT`); `nohead.json` doesn't apply to it, and `nohead whoami` says when a folder's link isn't used.
 
 ### Schema as code
 
@@ -75,13 +93,14 @@ Record data comes from `--set key=text`, `--set key:=json` (numbers, booleans, n
 
 ## Configuration
 
-| Setting     | Flag                      | Environment                                                                            |
-| ----------- | ------------------------- | -------------------------------------------------------------------------------------- |
-| API key     | —                         | `NOHEAD_API_KEY`                                                                       |
-| Project     | `--project <id>`          | `NOHEAD_PROJECT` (default: the API key's project, from `GET /v1/me`)                   |
-| Profile     | `--profile <name>`        | `NOHEAD_PROFILE` (default `default`)                                                   |
-| Change note | `--note <text>`           | — (kept with record revisions, merges and schema changes; other writes ignore it)      |
-| Idempotency | `--idempotency-key <key>` | — (sent with mutations; the same key and request return the first result for 24 hours) |
+| Setting     | Flag                      | Environment                                                                                                              |
+| ----------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| API key     | —                         | `NOHEAD_API_KEY`                                                                                                         |
+| Project     | `--project <id>`          | `NOHEAD_PROJECT` (default: the nearest `nohead.json`, then the only saved key; with `NOHEAD_API_KEY`, the key's project) |
+| Change note | `--note <text>`           | — (kept with record revisions, merges and schema changes; other writes ignore it)                                        |
+| Idempotency | `--idempotency-key <key>` | — (sent with mutations; the same key and request return the first result for 24 hours)                                   |
+
+Flags win over environment variables, which win over `nohead.json` and saved keys.
 
 ## Output contract
 

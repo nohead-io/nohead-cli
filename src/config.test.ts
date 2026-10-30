@@ -38,7 +38,7 @@ describe("readConfig", () => {
   it("refuses a config that is not JSON as a usage error", async () => {
     const t = testRuntime({
       env: { NOHEAD_CONFIG: "/etc/nohead.json" },
-      files: { "/etc/nohead.json": '{"profiles": {' },
+      files: { "/etc/nohead.json": '{"keys": {' },
     })
 
     expect(await run(["whoami"], t.runtime)).toBe(ExitCode.Usage)

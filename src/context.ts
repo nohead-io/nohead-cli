@@ -1,12 +1,18 @@
 import { Nohead, type RequestOptions } from "@nohead/sdk"
 
-import { DEFAULT_PROFILE, type ConfigFile } from "./config.ts"
+import { savedKey, type ConfigFile } from "./config.ts"
 import { CliError, ExitCode, unwrap } from "./errors.ts"
+import {
+  chooseProject,
+  savedKeyFor,
+  type LinkFile,
+  type ProjectChoice,
+} from "./project.ts"
 import { VERSION } from "./version.ts"
 
 export const DEFAULT_API_URL = "https://api.nohead.io"
 
-const origin = (url: string) => URL.parse(url)?.origin ?? url
+export const origin = (url: string) => URL.parse(url)?.origin ?? url
 
 /**
  * API keys travel over https, except to this machine or a development host
@@ -30,7 +36,7 @@ export function requireSecureUrl(url: string) {
 
 /**
  * An environment variable's value, with an empty one counting as unset (as in
- * the SDKs): `NOHEAD_API_KEY=` in an .envrc must not hide the saved profile.
+ * the SDKs): `NOHEAD_API_KEY=` in an .envrc must not hide the saved keys.
  */
 export function envVar(
   env: Runtime["env"],
@@ -39,19 +45,13 @@ export function envVar(
   return env[name] || undefined
 }
 
-/** The profile a command uses: --profile, then NOHEAD_PROFILE, then the default. */
-export function profileName(
-  options: { profile?: string },
-  env: Runtime["env"]
-): string {
-  return options.profile ?? envVar(env, "NOHEAD_PROFILE") ?? DEFAULT_PROFILE
-}
-
 /** Process boundary the CLI runs against, injectable for tests. */
 export interface Runtime {
   stdout: (text: string) => void
   stderr: (text: string) => void
   env: Record<string, string | undefined>
+  /** The current directory, where `nohead link` writes nohead.json. */
+  cwd: () => string
   fetch: typeof globalThis.fetch
   readFile: (path: string) => Promise<string>
   readBinaryFile: (path: string) => Promise<Uint8Array>
@@ -85,7 +85,6 @@ export interface GlobalOptions {
   project?: string
   note?: string
   idempotencyKey?: string
-  profile?: string
 }
 
 export interface CommandContext {
@@ -107,8 +106,20 @@ export interface CommandContext {
   baseUrl: string
   /** Where the API key comes from, for `whoami`. */
   credentials: string
-  /** The project to work in: --project, $NOHEAD_PROJECT, or the API key's own. */
+  /**
+   * The project to work in: --project, $NOHEAD_PROJECT, nohead.json, the
+   * only saved key's, or NOHEAD_API_KEY's own.
+   */
   projectId: () => Promise<string>
+  /** Where the project comes from (chooseProject), for `whoami`. */
+  projectChoice: () => ProjectChoice | undefined
+  /**
+   * The project whose saved key a command would use, whatever
+   * NOHEAD_API_KEY says (`login`, `logout`).
+   */
+  savedProjectChoice: () => ProjectChoice | undefined
+  /** The nearest nohead.json, unchecked. */
+  link?: LinkFile
   /**
    * Options for mutations: the --note, recorded in history, and an
    * Idempotency-Key (--idempotency-key, or one the command derives; null:
@@ -155,65 +166,74 @@ export function createApi(options: {
 }
 
 /**
- * Settings resolve flags first, then environment variables, then the saved
- * profile (`nohead login`; --profile or $NOHEAD_PROFILE, else "default").
+ * Settings resolve flags first, then environment variables, then what is
+ * saved: the key `nohead login` saved for the project chosen (chooseProject).
  */
 export function createContext(
   runtime: Runtime,
   options: GlobalOptions,
-  config: ConfigFile = { profiles: {} }
+  config: ConfigFile = { keys: {} },
+  link?: LinkFile
 ): CommandContext {
   const envApiKey = envVar(runtime.env, "NOHEAD_API_KEY")
-  const name = profileName(options, runtime.env)
-  const profile = config.profiles[name]
-  // A named profile that does not exist yet is fine for `login`, which
-  // creates it; any command that needs credentials fails here instead.
-  const missingProfile =
-    !profile &&
-    Boolean(options.profile || envVar(runtime.env, "NOHEAD_PROFILE"))
-  const baseUrl =
-    options.apiUrl ??
-    envVar(runtime.env, "NOHEAD_API_URL") ??
-    profile?.api_url ??
-    DEFAULT_API_URL
-  // A saved key only goes to the API it was saved for: a NOHEAD_API_URL
-  // from some project's .envrc must not receive it.
-  const savedUrl = profile ? (profile.api_url ?? DEFAULT_API_URL) : undefined
-  const profileKey =
-    savedUrl && origin(savedUrl) === origin(baseUrl)
-      ? profile?.api_key
-      : undefined
-  const apiKey = envApiKey ?? profileKey
+  const apiUrl = options.apiUrl ?? envVar(runtime.env, "NOHEAD_API_URL")
+  // Chosen now, so the API URL can follow the saved key, but only reported
+  // when a command needs it: `health` works whatever is saved.
+  const choose = (withEnvKey: boolean) =>
+    chooseProject({
+      options,
+      env: runtime.env,
+      config,
+      link,
+      apiUrl,
+      envApiKey: withEnvKey ? envApiKey : undefined,
+    })
+  let choice: ProjectChoice | undefined
+  let choiceError: Error | undefined
+  try {
+    choice = choose(true)
+  } catch (error) {
+    choiceError = error as Error
+  }
+  const projectChoice = () => {
+    if (choiceError) throw choiceError
+    return choice
+  }
+  const saved =
+    !envApiKey && choice?.project ? savedKey(config, choice.project) : undefined
+  const baseUrl = apiUrl ?? saved?.api_url ?? DEFAULT_API_URL
   const credentials = envApiKey
     ? "NOHEAD_API_KEY"
-    : profileKey
-      ? `profile ${name}`
+    : saved
+      ? "saved key"
       : "none"
   const fetch = runtime.fetch
   // With --json, stderr carries only the final error document.
   const notify = options.json ? () => {} : runtime.stderr
   const authenticatedKey = () => {
-    if (missingProfile && !envApiKey) {
-      throw new CliError(ExitCode.Usage, {
-        type: "invalid_request",
-        message: `No saved profile "${name}". Run: nohead login --profile ${name}`,
-      })
+    if (envApiKey) {
+      requireSecureUrl(baseUrl)
+      return envApiKey
     }
-    if (!apiKey && profile?.api_key) {
-      throw new CliError(ExitCode.Usage, {
-        type: "invalid_request",
-        message: `Profile "${name}" holds a key for ${savedUrl}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
-      })
-    }
-    if (!apiKey) {
+    const chosen = projectChoice()
+    if (!chosen) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
         message:
           "Not logged in. Run `nohead login` with an API key from the web app (API keys), or set NOHEAD_API_KEY.",
       })
     }
+    const key = savedKeyFor(config, chosen)
+    // A saved key only goes to the API it was saved for: a NOHEAD_API_URL
+    // from some project's .envrc must not receive it.
+    if (origin(key.api_url) !== origin(baseUrl)) {
+      throw new CliError(ExitCode.Usage, {
+        type: "invalid_request",
+        message: `The API key saved for project ${chosen.project} is for ${key.api_url}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
+      })
+    }
     requireSecureUrl(baseUrl)
-    return apiKey
+    return key.api_key
   }
 
   let api: Nohead | undefined
@@ -222,12 +242,11 @@ export function createContext(
   let project: Promise<string> | undefined
   const projectId = () =>
     (project ??= (async () => {
-      const explicit =
-        options.project ??
-        envVar(runtime.env, "NOHEAD_PROJECT") ??
-        (envApiKey ? undefined : profile?.project_id)
-      if (explicit) return explicit
+      const chosen = projectChoice()?.project
+      if (chosen) return chosen
 
+      // NOHEAD_API_KEY's own project (or not logged in, which context.api
+      // reports).
       const me = await unwrap(context.api.me.get())
       if (!me.api_key) {
         throw new CliError(ExitCode.Usage, {
@@ -280,6 +299,9 @@ export function createContext(
     baseUrl,
     credentials,
     projectId,
+    projectChoice,
+    savedProjectChoice: () => choose(false),
+    link,
     writeOptions,
   }
   return context

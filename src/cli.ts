@@ -17,6 +17,7 @@ import { registerWebhooks } from "./commands/webhooks.ts"
 import { registerAudit } from "./commands/audit.ts"
 import { registerWhoami } from "./commands/whoami.ts"
 import { readConfig, type ConfigFile } from "./config.ts"
+import { registerLink } from "./commands/link.ts"
 import {
   createContext,
   type CommandContext,
@@ -25,11 +26,16 @@ import {
 } from "./context.ts"
 import { CliError, ExitCode, type ErrorBody } from "./errors.ts"
 import { printError } from "./output.ts"
+import { findLinkFile, type LinkFile } from "./project.ts"
 import { VERSION } from "./version.ts"
 
 export { VERSION }
 
-function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
+function buildProgram(
+  runtime: Runtime,
+  saved: { config: ConfigFile; link?: LinkFile },
+  json: boolean
+) {
   const program = new Command()
     .name("nohead")
     .description(
@@ -48,11 +54,7 @@ function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
     )
     .option(
       "--project <id>",
-      "project ID (default: $NOHEAD_PROJECT, or the API key's project)"
-    )
-    .option(
-      "--profile <name>",
-      "saved credentials to use (default: $NOHEAD_PROFILE or default)"
+      "project to work in, and so its saved API key (default: $NOHEAD_PROJECT, then the nearest nohead.json, then the only saved key)"
     )
     .option(
       "--note <text>",
@@ -73,11 +75,17 @@ function buildProgram(runtime: Runtime, config: ConfigFile, json: boolean) {
     })
 
   const context = (): CommandContext =>
-    createContext(runtime, program.opts<GlobalOptions>(), config)
+    createContext(
+      runtime,
+      program.opts<GlobalOptions>(),
+      saved.config,
+      saved.link
+    )
 
   registerHealth(program, context)
   registerWhoami(program, context)
   registerLogin(program, context)
+  registerLink(program, context)
   registerCollections(program, context)
   registerFields(program, context)
   registerMigrations(program, context)
@@ -100,7 +108,11 @@ export async function run(argv: string[], runtime: Runtime): Promise<number> {
   const json = argv.includes("--json")
   let program: Command | undefined
   try {
-    program = buildProgram(runtime, await readConfig(runtime), json)
+    const [config, link] = await Promise.all([
+      readConfig(runtime),
+      findLinkFile(runtime),
+    ])
+    program = buildProgram(runtime, { config, link }, json)
     await program.parseAsync(argv, { from: "user" })
     return ExitCode.Success
   } catch (error) {
@@ -193,6 +205,7 @@ export function describeCommands(): DescribedCommand {
     stdout: () => {},
     stderr: () => {},
     env: {},
+    cwd: () => "/",
     fetch: refuse,
     readFile: refuse,
     readBinaryFile: refuse,
@@ -204,7 +217,7 @@ export function describeCommands(): DescribedCommand {
     sleep: () => Promise.resolve(),
     now: () => new Date(0),
   }
-  return describe(buildProgram(inert, { profiles: {} }, false))
+  return describe(buildProgram(inert, { config: { keys: {} } }, false))
 }
 
 function describe(command: Command): DescribedCommand {
