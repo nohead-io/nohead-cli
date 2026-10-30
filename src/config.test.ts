@@ -47,4 +47,19 @@ describe("readConfig", () => {
     )
     expect(t.requests).toHaveLength(0)
   })
+
+  it.each(["null", "[]", '"keys"'])(
+    "refuses a config that holds %s, not an object, as a usage error",
+    async (text) => {
+      const t = testRuntime({
+        env: { NOHEAD_CONFIG: "/etc/nohead.json" },
+        files: { "/etc/nohead.json": text },
+      })
+
+      expect(await run(["--help"], t.runtime)).toBe(ExitCode.Usage)
+      expect(t.err()).toContain(
+        "/etc/nohead.json is not a JSON object; fix or delete it"
+      )
+    }
+  )
 })

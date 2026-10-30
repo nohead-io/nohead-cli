@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, onTestFinished, vi } from "vitest"
 
 import { run } from "../cli.ts"
 import { ExitCode } from "../errors.ts"
@@ -361,8 +361,9 @@ describe("login in the browser", () => {
     expect(t.written).toEqual({})
   })
 
-  it("stops when the API says the request expired", async () => {
+  it("stops when the API says the request expired or was already used", async () => {
     const t = browserLogin([
+      unavailable,
       () => pending(),
       () => failure(404, "not_found", "No such sign-in request"),
     ])
@@ -371,11 +372,36 @@ describe("login in the browser", () => {
 
     expect(JSON.parse(t.err().split("…\n")[1]).error).toEqual({
       type: "not_found",
-      message: "The sign-in request expired; run nohead login again",
+      message:
+        "The sign-in request expired or was already used; run nohead login again",
       request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
     })
     expect(t.written).toEqual({})
   })
+
+  // The API hands the key over once: if that answer is lost, the next poll
+  // gets a 404 for a request that made a key.
+  it.each([
+    ["no answer", unreachable],
+    ["a 503", unavailable],
+  ])(
+    "says a key may have been made when a 404 follows a pick-up with %s",
+    async (_, lost) => {
+      const t = browserLogin([
+        () => pending(),
+        lost,
+        () => rateLimited("1"),
+        () => failure(404, "not_found", "No such sign-in request"),
+      ])
+
+      expect(await run(["login"], t.runtime)).toBe(ExitCode.ApiError)
+
+      expect(t.err()).toContain(
+        "Error: The sign-in request expired or was already used; if you chose Allow, its API key was lost on the way: revoke it in the web app (API keys), then run nohead login again"
+      )
+      expect(t.written).toEqual({})
+    }
+  )
 
   it("stops polling when the request runs out of time", async () => {
     const t = browserLogin(Array.from({ length: 200 }, () => () => pending()))
@@ -543,6 +569,51 @@ describe("login with a piped key", () => {
     expect(JSON.parse(t.text(CONFIG)).keys[PROJECT_ID].api_key).toBe(
       "nohead_sk_test0000000_secret"
     )
+  })
+
+  // A pipe left open (ssh without -t) never ends, so the read never does.
+  it("says what it waits for when nothing arrives on stdin for a second", async () => {
+    const t = testRuntime({
+      env: { HOME, NOHEAD_API_URL: "http://api.test" },
+      routes: { "GET /v1/me": () => contractResponse("me_get", ME) },
+    })
+    const { promise, resolve } = Promise.withResolvers<string>()
+    t.runtime.readStdin = () => promise
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    onTestFinished(() => void vi.useRealTimers())
+
+    const login = run(["login"], t.runtime)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(t.err()).toBe("")
+    await vi.advanceTimersByTimeAsync(1)
+    expect(t.err()).toBe(
+      "Waiting for an API key on stdin… (close it, or run in a terminal, to sign in with the browser)\n"
+    )
+
+    // It goes on reading: a key that arrives later is saved.
+    resolve("nohead_sk_test0000000_secret\n")
+    expect(await login).toBe(ExitCode.Success)
+    expect(JSON.parse(t.text(CONFIG)).keys[PROJECT_ID].api_key).toBe(
+      "nohead_sk_test0000000_secret"
+    )
+  })
+
+  it("says nothing more when the key arrives within a second", async () => {
+    const t = testRuntime({
+      env: { HOME, NOHEAD_API_URL: "http://api.test" },
+      routes: { "GET /v1/me": () => contractResponse("me_get", ME) },
+    })
+    const { promise, resolve } = Promise.withResolvers<string>()
+    t.runtime.readStdin = () => promise
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    onTestFinished(() => void vi.useRealTimers())
+
+    const login = run(["login"], t.runtime)
+    await vi.advanceTimersByTimeAsync(500)
+    resolve("nohead_sk_test0000000_secret\n")
+    expect(await login).toBe(ExitCode.Success)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(t.err()).toBe("")
   })
 
   it("refuses an empty pipe (an unset variable) instead of waiting for a browser", async () => {

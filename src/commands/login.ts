@@ -33,7 +33,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
       // coding agent), the person signs in with the browser, which makes a
       // key for the project they choose, or for the one this folder (or
       // --project, NOHEAD_PROJECT) uses, if it uses one.
-      const raw = runtime.stdinIsTTY ? "" : await runtime.readStdin()
+      const raw = runtime.stdinIsTTY ? "" : await readPiped(ctx)
       const piped = raw.trim()
       // Something piped in that holds no key is a mistake (an unset
       // variable in `echo "$KEY"`), not a person waiting to sign in; and
@@ -113,6 +113,27 @@ export function registerLogin(program: Command, context: () => CommandContext) {
               : `No API key saved for project ${project}.`
       )
     })
+}
+
+/**
+ * What is piped in, read to its end. A pipe left open (`ssh host nohead
+ * login` without -t) never ends: after a second, say what is being waited
+ * for.
+ */
+async function readPiped(ctx: CommandContext): Promise<string> {
+  const waiting = setTimeout(
+    () =>
+      printNotice(
+        ctx,
+        "Waiting for an API key on stdin… (close it, or run in a terminal, to sign in with the browser)"
+      ),
+    1000
+  )
+  try {
+    return await ctx.runtime.readStdin()
+  } finally {
+    clearTimeout(waiting)
+  }
 }
 
 /** A key piped in, checked before it is saved. */

@@ -222,7 +222,7 @@ export function createContext(
     if (!chosen) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message: "Not logged in. Run `nohead login`, or set NOHEAD_API_KEY.",
+        message: "Not logged in: run `nohead login`, or set NOHEAD_API_KEY",
       })
     }
     const key = savedKeyFor(config, chosen)
@@ -231,7 +231,7 @@ export function createContext(
     if (origin(key.api_url) !== origin(baseUrl)) {
       throw new CliError(ExitCode.Usage, {
         type: "invalid_request",
-        message: `The API key saved for project ${chosen.project} is for ${key.api_url}, not ${baseUrl}. Set NOHEAD_API_KEY to use another API.`,
+        message: `The API key saved for project ${chosen.project} is for ${key.api_url}, not ${baseUrl}; set NOHEAD_API_KEY to use another API`,
       })
     }
     requireSecureUrl(baseUrl)
@@ -254,7 +254,7 @@ export function createContext(
         throw new CliError(ExitCode.Usage, {
           type: "invalid_request",
           message:
-            "Pass --project (or set NOHEAD_PROJECT) when not using a project API key.",
+            "Pass --project (or set NOHEAD_PROJECT) when not using a project API key",
         })
       }
       return me.api_key.project_id
