@@ -4,9 +4,9 @@ import type { Command } from "commander"
 
 import { readConfig, savedKey } from "../config.ts"
 import type { CommandContext } from "../context.ts"
-import { usageError } from "../input.ts"
+import { parseOwnFile, usageError } from "../input.ts"
 import { printNotice, printResult } from "../output.ts"
-import { LINK_FILE, parseLinkFile } from "../project.ts"
+import { LINK_FILE } from "../project.ts"
 
 export function registerLink(program: Command, context: () => CommandContext) {
   program
@@ -25,7 +25,7 @@ export function registerLink(program: Command, context: () => CommandContext) {
       const path = join(runtime.cwd(), LINK_FILE)
       let existing: Record<string, unknown> = {}
       try {
-        existing = parseLinkFile(path, await runtime.readFile(path))
+        existing = parseOwnFile(path, await runtime.readFile(path))
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
       }

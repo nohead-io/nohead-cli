@@ -1,8 +1,8 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-import { DEFAULT_API_URL, type Runtime } from "./context.ts"
-import { usageError } from "./input.ts"
+import type { Runtime } from "./context.ts"
+import { parseOwnFile } from "./input.ts"
 
 /** A saved API key (`nohead login`), for the API it was checked against. */
 export interface SavedKey {
@@ -19,7 +19,7 @@ export interface ConfigFile {
 
 /** The shape before keys were saved by project: named profiles. */
 interface Profile {
-  api_url?: string
+  api_url: string
   api_key?: string
   project_id?: string
 }
@@ -44,11 +44,9 @@ export async function readConfig(runtime: Runtime): Promise<ConfigFile> {
   } catch {
     return { keys: {} }
   }
-  let parsed: { keys?: ConfigFile["keys"]; profiles?: Record<string, Profile> }
-  try {
-    parsed = JSON.parse(text) as typeof parsed
-  } catch {
-    throw usageError(`${path} is not valid JSON; fix or delete it`)
+  const parsed = parseOwnFile(path, text) as {
+    keys?: ConfigFile["keys"]
+    profiles?: Record<string, Profile>
   }
   return { keys: { ...fromProfiles(parsed.profiles), ...parsed.keys } }
 }
@@ -61,8 +59,7 @@ function fromProfiles(profiles: Record<string, Profile> = {}) {
   const keys: ConfigFile["keys"] = {}
   for (const { api_url, api_key, project_id } of Object.values(profiles)) {
     if (!project_id || !api_key || project_id in keys) continue
-    // Profiles saved before the URL was recorded were for the default API.
-    keys[project_id] = { api_url: api_url ?? DEFAULT_API_URL, api_key }
+    keys[project_id] = { api_url, api_key }
   }
   return keys
 }

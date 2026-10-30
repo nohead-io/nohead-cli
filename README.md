@@ -58,7 +58,7 @@ Paging flags work on every list: a list prints one page of 100 (`audit`: 20, or 
 
 ### API keys and projects
 
-An API key belongs to one project. `nohead login` signs you in with the browser, at a terminal or run by a coding agent: it prints a code and opens the web app (it always prints the page too, and only prints it over SSH, without a display, or with `BROWSER=none`), where you check the code and choose the project, the key's scopes and its expiry. The CLI then saves the new key for that project, next to the keys saved for other projects (in a file only you can read, mode 0600); logging in again for the same project replaces its key. Run in a folder that uses a project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it asks for a key for that project, the only one the page then offers. In CI, pipe in a key made in the web app under API keys: `echo "$KEY" | nohead login` checks it and saves it for its project as it is.
+An API key belongs to one project. `nohead login` signs you in with the browser, at a terminal or run by a coding agent: it prints a code and opens the web app (it always prints the page too, and only prints it over SSH, without a display, or with `BROWSER=none`), where you check the code and choose the project, the key's scopes and its expiry. The CLI then saves the new key for that project, next to the keys saved for other projects (in a file only you can read, mode 0600). Approving another sign-in from the same machine for the same project replaces the key: the CLI saves the new one, and the earlier one is revoked. Run in a folder that uses a project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it asks for a key for that project, the only one the page then offers. In CI, pipe in a key made in the web app under API keys: `echo "$KEY" | nohead login` checks it and saves it for its project as it is, replacing any key saved for that project without revoking it.
 
 Choosing a project chooses its saved key. A command works in the first of:
 
@@ -67,7 +67,7 @@ Choosing a project chooses its saved key. A command works in the first of:
 3. the project in the nearest `nohead.json`, in the current folder or a folder above it
 4. the project of the only saved key
 
-With keys saved for several projects and none chosen, a command stops and asks for one. `nohead whoami` shows the project in use and where it came from.
+With keys saved for several projects and none chosen, a command exits with code 2 and lists the projects and the ways to choose one. `nohead whoami` shows the project in use and where it came from.
 
 `nohead link <project>` writes `nohead.json` in the current folder, `{ "project": "prj_..." }`, so commands run there or in a folder below use that project's key. It holds no secret, so commit it: each teammate runs `nohead login` there once, which asks for a key for that project. To unlink a folder, delete its `nohead.json`.
 
@@ -107,7 +107,7 @@ Flags win over environment variables, which win over `nohead.json` and saved key
 Scripts and agents depend on this, so it is covered by unit and E2E tests:
 
 - **stdout** carries only results. With `--json`, exactly one JSON document (the API's representation). `records export` writes JSON Lines.
-- **stderr** carries errors, summaries and diagnostics. With `--json`, errors use the API error envelope `{ "error": { "type", "message", "request_id", "details" } }`; a browser `nohead login` prints its code and page there too.
+- **stderr** carries errors, summaries and diagnostics. With `--json`, errors use the API error envelope `{ "error": { "type", "message", "request_id", "details" } }`; a browser `nohead login` prints its code and page there too, and a `nohead login` still waiting for a key on stdin after a second says so.
 - **Exit codes:** `0` success, `1` API error (validation, auth, 404, 412, import failures), `2` usage error (bad arguments, missing API key, unreadable files), `3` API or storage unreachable, `4` unexpected CLI failure (a bug; `NOHEAD_DEBUG=1` prints the stack).
 - **Retries:** up to 3, reported on stderr. `429` responses are retried after `Retry-After` (up to 60 s). Network failures, `500`, `502`, `503` and `504` are retried with backoff. Every write carries an `Idempotency-Key` (`--idempotency-key`, or a new one per request), so a repeat returns the first result.
 - Deleting a collection and discarding a draft require `--yes`; a discarded draft can't be restored. Everything else is soft-deleted and recoverable.

@@ -366,12 +366,10 @@ export function registerPortability(
       if (changes.some((c) => c.kind === "migrate_field")) {
         throw new CliError(ExitCode.Usage, {
           type: "invalid_request",
-          message: `The project has fields of another type than the export: ${changes
+          message: `The project has fields of another type than the export, so import into an empty project or migrate them first: ${changes
             .filter((c) => c.kind === "migrate_field")
             .map(describeChange)
-            .join(
-              "; "
-            )}. Import into an empty project, or migrate those fields first.`,
+            .join("; ")}`,
         })
       }
       for (const change of changes) printNotice(ctx, describeChange(change))
@@ -531,7 +529,7 @@ async function readExport(
   if (problems.length > 0)
     throw new CliError(ExitCode.Usage, {
       type: "invalid_request",
-      message: `The export in ${dir} is incomplete or damaged; nothing was imported.`,
+      message: `The export in ${dir} is incomplete or damaged; nothing was imported`,
       details: problems
         .slice(0, 20)
         .map((message) => ({ code: "invalid_export", message })),

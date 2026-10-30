@@ -77,7 +77,7 @@ describe("credentials and project", () => {
     const t = testRuntime({ env: { NOHEAD_API_URL: "http://api.test" } })
 
     expect(await run(["records", "get", REC_A], t.runtime)).toBe(ExitCode.Usage)
-    expect(t.err()).toContain("Not logged in. Run `nohead login`")
+    expect(t.err()).toContain("Not logged in: run `nohead login`")
     expect(t.requests).toHaveLength(0)
   })
 })
@@ -1259,7 +1259,7 @@ describe("schema push", () => {
       await run(["schema", "push", "nohead.schema.yaml", "--yes"], t.runtime)
     ).toBe(ExitCode.ApiError)
     expect(t.err()).toContain(
-      "posts: its fields changed during the push, so they were not put in the file's order. Run the push again."
+      "posts: its fields changed during the push, so they were not put in the file's order; run the push again"
     )
   })
 })
@@ -1913,7 +1913,7 @@ describe("login and saved keys", () => {
       const t = setup({})
       expect(await run(["collections", "list"], t.runtime)).toBe(ExitCode.Usage)
       expect(t.err()).toContain(
-        `API keys are saved for several projects: ${PROJECT_ID} (laptop), prj_ci. Choose one: pass --project, set NOHEAD_PROJECT, or run \`nohead link <project>\` in this folder.`
+        `API keys are saved for several projects: ${PROJECT_ID} (laptop), prj_ci; to choose one, pass --project, set NOHEAD_PROJECT, or run \`nohead link <project>\` in this folder`
       )
       expect(t.requests).toHaveLength(0)
 
@@ -1933,7 +1933,7 @@ describe("login and saved keys", () => {
         await run(["--project", "prj_new", "collections", "list"], flag.runtime)
       ).toBe(ExitCode.Usage)
       expect(flag.err()).toContain(
-        "No API key saved for project prj_new. Run `nohead login` and choose that project"
+        "No API key saved for project prj_new; run `nohead login` and choose that project"
       )
 
       const link = setup(
@@ -1944,7 +1944,7 @@ describe("login and saved keys", () => {
         ExitCode.Usage
       )
       expect(link.err()).toContain(
-        "No API key saved for project prj_new, which /work/nohead.json links to. Run `nohead login`"
+        "No API key saved for project prj_new, which /work/nohead.json links to; run `nohead login`"
       )
       expect([...flag.requests, ...link.requests]).toHaveLength(0)
     })

@@ -2,7 +2,7 @@ import { dirname, join } from "node:path"
 
 import { savedKey, type ConfigFile } from "./config.ts"
 import { envVar, origin, type GlobalOptions, type Runtime } from "./context.ts"
-import { usageError } from "./input.ts"
+import { parseOwnFile, usageError } from "./input.ts"
 
 /** The file `nohead link` writes: a folder's project, with no secret in it. */
 export const LINK_FILE = "nohead.json"
@@ -35,23 +35,10 @@ export async function findLinkFile(
   }
 }
 
-/** A nohead.json's contents: any JSON object (other keys are kept). */
-export function parseLinkFile(path: string, text: string) {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    throw usageError(`${path} is not valid JSON; fix or delete it`)
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
-    throw usageError(`${path} is not a JSON object; fix or delete it`)
-  return parsed as Record<string, unknown>
-}
-
 /** The project a nohead.json links to. */
 function linkedProject(link: LinkFile): string {
   if (link.error) throw usageError(`Cannot read ${link.path}: ${link.error}`)
-  const { project } = parseLinkFile(link.path, link.text ?? "")
+  const { project } = parseOwnFile(link.path, link.text ?? "")
   if (typeof project !== "string" || !project)
     throw usageError(
       `${link.path} names no project; run \`nohead link <project>\` or delete it`
@@ -127,7 +114,7 @@ export function chooseProject({
   if (saved.length === 0) {
     if (apiUrl && Object.keys(config.keys).length > 0)
       throw usageError(
-        `No API key saved for ${apiUrl}. Run \`nohead login\` to sign in to it, or set NOHEAD_API_KEY.`
+        `No API key saved for ${apiUrl}; run \`nohead login\` to sign in to it, or set NOHEAD_API_KEY`
       )
     return undefined
   }
@@ -138,7 +125,7 @@ export function chooseProject({
     })
     .join(", ")
   throw usageError(
-    `API keys are saved for several projects: ${list}. Choose one: pass --project, set NOHEAD_PROJECT, or run \`nohead link <project>\` in this folder.`
+    `API keys are saved for several projects: ${list}; to choose one, pass --project, set NOHEAD_PROJECT, or run \`nohead link <project>\` in this folder`
   )
 }
 
@@ -148,6 +135,6 @@ export function savedKeyFor(config: ConfigFile, choice: ProjectChoice) {
   if (key) return key
   const linked = choice.linkFile ? `, which ${choice.linkFile} links to` : ""
   throw usageError(
-    `No API key saved for project ${choice.project}${linked}. Run \`nohead login\` and choose that project, or set NOHEAD_API_KEY.`
+    `No API key saved for project ${choice.project}${linked}; run \`nohead login\` and choose that project, or set NOHEAD_API_KEY`
   )
 }

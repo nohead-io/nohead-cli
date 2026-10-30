@@ -18,9 +18,15 @@ release's section is its GitHub release's notes.
   and its expiry; the CLI waits for you to choose Allow and saves the new
   key for that project, as a piped key is saved. In a folder that uses a
   project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it asks for a
-  key for that project, the only one the page then offers. The code and the page go to stderr even with `--json`;
-  stdout carries the same result as for a piped key. A key piped in
-  (`echo "$KEY" | nohead login`) is checked and saved as before.
+  key for that project, the only one the page then offers. Approving another
+  sign-in from the same machine for the same project replaces the key: the
+  CLI saves the new one, and the earlier one is revoked. The code and the
+  page go to stderr even with `--json`; stdout carries the same result as
+  for a piped key. A key piped in (`echo "$KEY" | nohead login`) is checked
+  and saved as before, replacing the saved key without revoking it. When
+  stdin is left open with nothing on it (`ssh host nohead login` without
+  `-t`), it says on stderr after a second that it is waiting for a key
+  there.
 - **Breaking:** `nohead login` at a terminal no longer asks you to paste an
   API key: it signs you in with the browser. To save a key you already
   have, pipe it in. With nothing on stdin it signs in with the browser too;

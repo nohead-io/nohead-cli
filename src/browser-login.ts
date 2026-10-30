@@ -49,6 +49,11 @@ interface Answer {
 const START_RETRIES = 3
 
 const EXPIRED = "The sign-in request expired; run nohead login again"
+const GONE =
+  "The sign-in request expired or was already used; run nohead login again"
+/** A 404 after a failed pick-up, whose answer may have been the new key. */
+const LOST =
+  "The sign-in request expired or was already used; if you chose Allow, its API key was lost on the way: revoke it in the web app (API keys), then run nohead login again"
 const DENIED = "Sign-in was denied in the browser"
 
 /** Seconds to wait, from 1 to 60 whatever the API says; `fallback` if none. */
@@ -74,6 +79,7 @@ async function send(
   body: unknown
 ): Promise<Answer> {
   let response: Response
+  let text: string
   try {
     response = await runtime.fetch(
       new Request(url, {
@@ -86,13 +92,15 @@ async function send(
         signal: AbortSignal.timeout(30_000),
       })
     )
+    // An answer cut off (a dropped connection, the timeout) is no answer:
+    // a pick-up's may have held the new key.
+    text = await response.text()
   } catch (cause) {
     return {
       error: cliError(new ConnectionError(`Could not reach ${url}`, { cause })),
       transient: true,
     }
   }
-  const text = await response.text().catch(() => "")
   let parsed: unknown = text
   try {
     parsed = JSON.parse(text)
@@ -233,6 +241,9 @@ export async function browserLogin(
       failing = answer.error
       continue
     }
+    // The API hands the key over once and answers 404 after: a pick-up
+    // whose answer was lost (a timeout, a proxy's 5xx) may have made one.
+    const lost = failing !== undefined
     failing = undefined
 
     const { status, body, error } = answer
@@ -242,7 +253,7 @@ export async function browserLogin(
       continue
     }
     if (status === 201 && isApproved(body)) return body
-    if (status === 404) throw reworded(error, EXPIRED)
+    if (status === 404) throw reworded(error, lost ? LOST : GONE)
     if (
       status === 403 &&
       error.body.details?.some((detail) => detail.code === "access_denied")

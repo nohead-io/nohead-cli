@@ -171,7 +171,7 @@ export async function applyPlan(
     if (preview.records.invalid > 0)
       throw new CliError(ExitCode.ApiError, {
         type: "validation_error",
-        message: `${change.slug}.${change.key}: ${preview.records.invalid} record(s) do not meet the new settings (missing or no longer valid values). Nothing was changed; fix them, or migrate the field with a backfill (nohead fields migrate --help).`,
+        message: `${change.slug}.${change.key}: ${preview.records.invalid} record(s) do not meet the new settings (missing or no longer valid values), so nothing was changed; fix them, or migrate the field with a backfill (nohead fields migrate --help)`,
       })
   }
 
@@ -185,7 +185,7 @@ export async function applyPlan(
     if (preview.records.invalid > 0 && !options.clearInvalid) {
       throw new CliError(ExitCode.ApiError, {
         type: "validation_error",
-        message: `${change.slug}.${change.key}: ${preview.records.invalid} record(s) have values that cannot be converted. Nothing was changed; fix them or push with --clear-invalid.`,
+        message: `${change.slug}.${change.key}: ${preview.records.invalid} record(s) have values that cannot be converted, so nothing was changed; fix them or push with --clear-invalid`,
       })
     }
   }
@@ -304,7 +304,7 @@ export async function applyPlan(
         // plan (another push, the web app); what was applied stays.
         const changed = new CliError(ExitCode.ApiError, {
           type: "schema_changed",
-          message: `${change.slug}: its fields changed during the push, so they were not put in the file's order. Run the push again.`,
+          message: `${change.slug}: its fields changed during the push, so they were not put in the file's order; run the push again`,
         })
         const known = fieldIds.get(change.slug)
         const ordered = change.api_keys.map((key) => known?.get(key))
@@ -475,14 +475,14 @@ export function registerSchema(
           throw new CliError(ExitCode.Usage, {
             type: "invalid_request",
             message:
-              "The file changes field types or multiple; these rewrite record values. Review them with `nohead fields migrate --dry-run`, then push with --allow-migrations.",
+              "The file changes field types or multiple, which rewrites record values; review them with `nohead fields migrate --dry-run`, then push with --allow-migrations",
           })
         }
         if (!options.yes)
           throw new CliError(ExitCode.Usage, {
             type: "invalid_request",
             message:
-              "Nothing was changed. Run again with --yes to apply this plan.",
+              "Nothing was changed; run again with --yes to apply this plan",
           })
 
         const { applied } = await applyPlan(ctx, remote, todo, options)

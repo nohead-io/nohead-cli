@@ -54,6 +54,19 @@ export function parseJsonObject(
   return value
 }
 
+/** A file the CLI writes (its config, a nohead.json): a JSON object. */
+export function parseOwnFile(path: string, text: string) {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw usageError(`${path} is not valid JSON; fix or delete it`)
+  }
+  if (!isObject(parsed))
+    throw usageError(`${path} is not a JSON object; fix or delete it`)
+  return parsed
+}
+
 export async function readSource(
   runtime: Runtime,
   path: string
