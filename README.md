@@ -58,7 +58,7 @@ Paging flags work on every list: a list prints one page of 100 (`audit`: 20, or 
 
 ### API keys and projects
 
-An API key belongs to one project. `nohead login` signs you in with the browser, at a terminal or run by a coding agent: it prints a code and opens the web app (or prints the page to open, over SSH or without a display), where you check the code and choose the project, the key's scopes and its expiry. The CLI then saves the new key for that project, next to the keys saved for other projects (in a file only you can read, mode 0600); logging in again for the same project replaces its key. Run in a folder that uses a project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it suggests that project. In CI, pipe in a key made in the web app under API keys: `echo "$KEY" | nohead login` checks it and saves it for its project as it is.
+An API key belongs to one project. `nohead login` signs you in with the browser, at a terminal or run by a coding agent: it prints a code and opens the web app (or prints the page to open, over SSH or without a display), where you check the code and choose the project, the key's scopes and its expiry. The CLI then saves the new key for that project, next to the keys saved for other projects (in a file only you can read, mode 0600); logging in again for the same project replaces its key. Run in a folder that uses a project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it asks for a key for that project, the only one the page then offers. In CI, pipe in a key made in the web app under API keys: `echo "$KEY" | nohead login` checks it and saves it for its project as it is.
 
 Choosing a project chooses its saved key. A command works in the first of:
 
@@ -69,7 +69,7 @@ Choosing a project chooses its saved key. A command works in the first of:
 
 With keys saved for several projects and none chosen, a command stops and asks for one. `nohead whoami` shows the project in use and where it came from.
 
-`nohead link <project>` writes `nohead.json` in the current folder, `{ "project": "prj_..." }`, so commands run there or in a folder below use that project's key. It holds no secret, so commit it: each teammate runs `nohead login` there once, which suggests that project. To unlink a folder, delete its `nohead.json`.
+`nohead link <project>` writes `nohead.json` in the current folder, `{ "project": "prj_..." }`, so commands run there or in a folder below use that project's key. It holds no secret, so commit it: each teammate runs `nohead login` there once, which asks for a key for that project. To unlink a folder, delete its `nohead.json`.
 
 `nohead logout` forgets the saved key of the project in use, chosen as above. The key itself stays valid until you revoke it in the web app.
 

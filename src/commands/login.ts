@@ -31,8 +31,8 @@ export function registerLogin(program: Command, context: () => CommandContext) {
       // A key piped in (echo $KEY | nohead login), as CI does, is checked
       // and saved. Otherwise, at a terminal or with nothing on stdin (a
       // coding agent), the person signs in with the browser, which makes a
-      // key for the project they choose: suggested here, if this folder (or
-      // --project, NOHEAD_PROJECT) uses one.
+      // key for the project they choose, or for the one this folder (or
+      // --project, NOHEAD_PROJECT) uses, if it uses one.
       const raw = runtime.stdinIsTTY ? "" : await runtime.readStdin()
       const piped = raw.trim()
       // Something piped in that holds no key is a mistake (an unset

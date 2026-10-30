@@ -15,8 +15,8 @@ release's section is its GitHub release's notes.
   open), where you check the code and choose the project, the key's scopes
   and its expiry; the CLI waits for you to choose Allow and saves the new
   key for that project, as a piped key is saved. In a folder that uses a
-  project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it suggests
-  that project. The code and the page go to stderr even with `--json`;
+  project (`--project`, `NOHEAD_PROJECT` or a `nohead.json`), it asks for a
+  key for that project, the only one the page then offers. The code and the page go to stderr even with `--json`;
   stdout carries the same result as for a piped key. A key piped in
   (`echo "$KEY" | nohead login`) is checked and saved as before.
 - **Breaking:** `nohead login` at a terminal no longer asks you to paste an

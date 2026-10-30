@@ -171,8 +171,8 @@ async function start(
 }
 
 /**
- * Signs in with the browser: starts a sign-in request (suggesting
- * `projectId`), shows its code and opens (or prints) the page to approve it
+ * Signs in with the browser: starts a sign-in request (asking for a key
+ * for `projectId`, if given), shows its code and opens (or prints) the page to approve it
  * on, then polls until the person allows or denies it, or it expires. The
  * code and the page go to stderr even with --json: without them nobody can
  * approve.
