@@ -2160,6 +2160,7 @@
       "post": {
         "operationId": "fields_create",
         "summary": "Add a field",
+        "description": "A collection has at most 100 active fields; a 101st is `409`.",
         "tags": [
           "fields"
         ],
@@ -2545,7 +2546,7 @@
       "post": {
         "operationId": "fields_restore",
         "summary": "Restore a deleted field",
-        "description": "Brings a deleted field back with its values. `409` (detail code\n`duplicate_values`) for a unique field whose values records share\nnow.\n",
+        "description": "Brings a deleted field back with its values. `409` (detail code\n`duplicate_values`) for a unique field whose values records share\nnow, and for a collection that already has 100 active fields.\n",
         "tags": [
           "fields"
         ],
@@ -5553,6 +5554,7 @@
       "RichTextFieldConfiguration": {
         "type": "object",
         "additionalProperties": false,
+        "description": "A rich text document up to 1,000,000 bytes (`too_large`).",
         "properties": {
           "description": {
             "type": "string",
@@ -5790,6 +5792,7 @@
       "JsonFieldConfiguration": {
         "type": "object",
         "additionalProperties": false,
+        "description": "Any JSON value up to 100,000 bytes (`too_large`), nested at most 32 levels deep (`too_deep`): for data with a shape of its own, such as settings or another service's payload. Content belongs in typed fields, and large data in an asset.",
         "properties": {
           "description": {
             "type": "string",
@@ -6330,6 +6333,7 @@
           },
           "fields": {
             "type": "array",
+            "description": "At most 100 (`too_many`).",
             "items": {
               "$ref": "#/components/schemas/FieldCreate"
             }
@@ -7426,7 +7430,7 @@
       },
       "RecordData": {
         "type": "object",
-        "description": "Field values keyed by field `key`. A rich text value is a\nProseMirror/Tiptap JSON document (`{\"type\": \"doc\", \"content\": [...]}`).\nAn image of an asset in it is `{\"type\": \"image\", \"attrs\": {\"asset_id\":\n\"ast_...\", \"alt\": \"...\"}}`, between the document's blocks (not inside\na list or quote), at most 100 per document (`too_many_images`); a\nnewly shown image must be an uploaded JPEG, PNG, GIF, WebP or AVIF of\nthe project (`invalid_reference`, `type_not_accepted`). `expand` embeds the assets, and published-only\nkeys can read the images of published records.\n",
+        "description": "Field values keyed by field `key`. A rich text value is a\nProseMirror/Tiptap JSON document (`{\"type\": \"doc\", \"content\": [...]}`).\nAn image of an asset in it is `{\"type\": \"image\", \"attrs\": {\"asset_id\":\n\"ast_...\", \"alt\": \"...\"}}`, between the document's blocks (not inside\na list or quote), at most 100 per document (`too_many_images`); a\nnewly shown image must be an uploaded JPEG, PNG, GIF, WebP or AVIF of\nthe project (`invalid_reference`, `type_not_accepted`). `expand` embeds the assets, and published-only\nkeys can read the images of published records. A record holds at\nmost 2,000,000 bytes of values, all fields together (`too_large` on\n`data`); one already larger can still be edited without growing.\n",
         "additionalProperties": true,
         "examples": [
           {
