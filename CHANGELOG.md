@@ -7,6 +7,10 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `--help` ends with a link to the CLI's docs, for every command.
+
 ## 0.4.1
 
 - Runs on `@nohead/sdk` 0.9.0: a redirect from the API is an error that

@@ -67,6 +67,8 @@ function buildProgram(
     // Subcommands copy these settings when .command() makes them, so they
     // are set before any command is registered.
     .showHelpAfterError()
+    // Under every command's help, root and subcommands alike.
+    .addHelpText("afterAll", "\nDocs: https://docs.nohead.io/cli/overview")
     .exitOverride()
     .configureOutput({
       writeOut: runtime.stdout,

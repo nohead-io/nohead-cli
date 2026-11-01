@@ -160,6 +160,7 @@ describe("usage", () => {
     await t.ok(["--help"])
     expect(t.out()).toContain("Usage: nohead")
     expect(t.out()).toContain("collections")
+    expect(t.out()).toContain("Docs: https://docs.nohead.io/cli/overview")
     // Only for a local or test API: it works, but isn't offered.
     expect(t.out()).not.toContain("--api-url")
   })
