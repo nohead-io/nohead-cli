@@ -28,6 +28,8 @@ The docs' [CLI overview](https://docs.nohead.io/cli/overview) explains signing i
 
 `commands.json` describes every command for the docs' CLI reference; run `npm run commands` after changing a command (a test fails while it is stale).
 
+Scripts and agents rely on what the CLI prints and its exit codes, the docs' [output and exit codes](https://docs.nohead.io/cli/overview#output-and-exit-codes): the unit and end-to-end tests cover them, and a change to them changes the docs too.
+
 The CLI calls the API through [`@nohead/sdk`](https://github.com/nohead-io/nohead-typescript), so a command that needs an operation the SDK lacks waits for the SDK release that adds it.
 
 ```bash
