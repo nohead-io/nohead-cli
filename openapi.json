@@ -113,6 +113,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/RecordFilter"
           },
           {
@@ -176,6 +179,9 @@
           "records"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -251,6 +257,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/Expand"
           }
         ],
@@ -283,6 +292,9 @@
           "records"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -344,6 +356,9 @@
           "records"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -447,6 +462,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
@@ -515,6 +533,9 @@
           "records"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -609,6 +630,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
@@ -656,6 +680,9 @@
           "publishing"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -1042,6 +1069,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
@@ -1188,6 +1218,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/Limit"
           },
           {
@@ -1223,6 +1256,9 @@
           "drafts"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -1283,6 +1319,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "name": "sort",
             "in": "query",
             "schema": {
@@ -1338,6 +1377,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/Expand"
           }
         ],
@@ -1370,6 +1412,9 @@
           "drafts"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -1429,6 +1474,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
@@ -1480,6 +1528,9 @@
           "drafts"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -1539,6 +1590,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
@@ -1590,6 +1644,9 @@
           "drafts"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
@@ -3315,6 +3372,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/RichText"
+          },
+          {
             "name": "q",
             "in": "query",
             "description": "The words to search for; empty matches everything.",
@@ -3392,6 +3452,9 @@
           "search"
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/RichText"
+          },
           {
             "name": "q",
             "in": "query",
@@ -4623,6 +4686,20 @@
           "minimum": 1
         }
       },
+      "RichText": {
+        "name": "rich_text",
+        "in": "query",
+        "description": "How rich text fields read in the records and drafts returned (and in records they embed with `expand`): `document`, the stored ProseMirror JSON document; `html`, an HTML fragment of known elements with every text and attribute escaped, to put in a page as it is; or `markdown` (GitHub Flavored), which reads back as the same document when written. Images render with their URLs, so they need no `expand`: in HTML a WebP rendition at most 1600 pixels wide with its `width` and `height` (an SVG as itself), in Markdown the asset's `image_url`. An image whose asset was deleted is left out of HTML, and written as its asset ID in Markdown. Record history keeps documents.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "document",
+            "html",
+            "markdown"
+          ],
+          "default": "document"
+        }
+      },
       "Expand": {
         "name": "expand",
         "in": "query",
@@ -5554,7 +5631,7 @@
       "RichTextFieldConfiguration": {
         "type": "object",
         "additionalProperties": false,
-        "description": "A rich text document up to 1,000,000 bytes (`too_large`).",
+        "description": "A rich text document up to 1,000,000 bytes (`too_large`), written as Markdown or a document (see `RecordData`).",
         "properties": {
           "description": {
             "type": "string",
@@ -7430,7 +7507,7 @@
       },
       "RecordData": {
         "type": "object",
-        "description": "Field values keyed by field `key`. A rich text value is a\nProseMirror/Tiptap JSON document (`{\"type\": \"doc\", \"content\": [...]}`).\nAn image of an asset in it is `{\"type\": \"image\", \"attrs\": {\"asset_id\":\n\"ast_...\", \"alt\": \"...\"}}`, between the document's blocks (not inside\na list or quote), at most 100 per document (`too_many_images`); a\nnewly shown image must be an uploaded JPEG, PNG, GIF, WebP or AVIF of\nthe project (`invalid_reference`, `type_not_accepted`). `expand` embeds the assets, and published-only\nkeys can read the images of published records. A record holds at\nmost 2,000,000 bytes of values, all fields together (`too_large` on\n`data`); one already larger can still be edited without growing.\n",
+        "description": "Field values keyed by field `key`.\n\nA rich text value is written as Markdown (GitHub Flavored, a string)\nor as a ProseMirror JSON document (`{\"type\": \"doc\", \"content\": [...]}`),\nand stored and read as the document (`rich_text` reads it as HTML or\nMarkdown). Markdown is converted as closely as the vocabulary allows:\nheadings below h3 become h3, task list items plain items, footnotes and\nraw HTML text. A document uses the web editor's vocabulary (Tiptap's\nStarterKit and tables) and nothing else; another name is refused with\n`invalid_format`, naming ours where one fits (`strong` is `bold`):\n\n- blocks: `paragraph`, `heading` (`level` 1-3), `blockquote`,\n  `bulletList` and `orderedList` (`start`, `type`) of `listItem`\n  (starting with a paragraph), `codeBlock` (`language`),\n  `horizontalRule`, and `table` of `tableRow` of `tableHeader` or\n  `tableCell` (`colspan`, `rowspan`, `colwidth`, `align`); any block\n  may have `dir` (`auto`, `ltr`, `rtl`);\n- inline: `text` (non-empty) and `hardBreak`;\n- marks on text: `bold`, `italic`, `strike`, `underline`, `code` (alone),\n  and `link` (`href`, and `target`, `rel`, `class`, `title`); a link's\n  `href` is an `http`, `https`, `mailto`, `tel` or relative URL.\n\nAn image of an asset is `{\"type\": \"image\", \"attrs\": {\"asset_id\":\n\"ast_...\", \"alt\": \"...\"}}` (in Markdown `![alt](ast_...)`, or the\nasset's `image_url`), between the document's blocks (not inside a list,\nquote or table), at most 100 per document (`too_many_images`); a newly\nshown image must be an uploaded JPEG, PNG, GIF, WebP, AVIF or SVG of\nthe project (`invalid_reference`, `type_not_accepted`). `expand` embeds\nthe assets, and published-only keys can read the images of published\nrecords. A record holds at\nmost 2,000,000 bytes of values, all fields together (`too_large` on\n`data`); one already larger can still be edited without growing.\n",
         "additionalProperties": true,
         "examples": [
           {
@@ -9253,7 +9330,7 @@
               "null"
             ],
             "format": "uri",
-            "description": "The URL of the whole image, for ready images (JPEG, PNG, GIF, WebP\nor AVIF), deleted ones included until they are purged; null\notherwise. Image URLs are open and never expire. For a rendition,\nwrite [imgproxy processing options](https://docs.imgproxy.net/usage/processing)\nbefore `/plain/`, and a format after `@`: for example\n`https://images.nohead.io/rs:fill:800:600/g:sm/plain/…@webp`. Renditions\nare at most 4096 pixels a side, from originals of at most 50\nmegapixels. Options that would return the file as stored (`raw`,\n`skip_processing`, `strip_metadata`) are refused.\n",
+            "description": "The URL of the whole image, for ready images (JPEG, PNG, GIF, WebP,\nAVIF or SVG), deleted ones included until they are purged; null\notherwise. Image URLs are open and never expire. An SVG is served\nas SVG without its scripts, unless a format such as `@webp`\nrasterizes it. For a rendition,\nwrite [imgproxy processing options](https://docs.imgproxy.net/usage/processing)\nbefore `/plain/`, and a format after `@`: for example\n`https://images.nohead.io/rs:fill:800:600/g:sm/plain/…@webp`. Renditions\nare at most 4096 pixels a side, from originals of at most 50\nmegapixels. Options that would return the file as stored (`raw`,\n`skip_processing`, `strip_metadata`) are refused.\n",
             "examples": [
               "https://images.nohead.io/plain/0199f5c2-7b1e-7c3a-9d4f-2a6b8c0e1f3d/0199f5c2-8a2d-7e4b-b1c3-5d7e9f1a2b4c"
             ]
@@ -9264,7 +9341,7 @@
               "null"
             ],
             "format": "uri",
-            "description": "The URL of a small rendition (fits in 640×640, WebP), for ready images and SVGs (rasterized; SVGs have no `image_url`), deleted ones included until they are purged; null otherwise."
+            "description": "The URL of a small rendition (fits in 640×640, WebP), for ready images and SVGs (rasterized), deleted ones included until they are purged; null otherwise."
           },
           "file_url": {
             "type": [
