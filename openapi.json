@@ -1172,6 +1172,20 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "rich_text",
+            "in": "query",
+            "description": "How rich text values read in `changes`: `document`, the stored ProseMirror JSON document, or written as `html` or `markdown`, as records read with `rich_text`. Record history and webhooks keep documents. A change that HTML or Markdown can't show (an underline, in Markdown) reads the same on both sides. In HTML and Markdown, text from before a field became rich text reads as paragraphs; an older value that is no document of today's vocabulary, or a redacted one, is kept as stored.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "document",
+                "html",
+                "markdown"
+              ],
+              "default": "document"
+            }
           }
         ],
         "responses": {
@@ -7683,13 +7697,15 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "The field's key now, after any rename (its last key if it was deleted); null if the field no longer exists."
           },
           "field_id": {
             "type": "string"
           },
           "field_deleted": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the field has been deleted since."
           },
           "attribute": {
             "type": "string",
@@ -7911,6 +7927,7 @@
           },
           "changes": {
             "type": "array",
+            "description": "What the revert would change. Rich text values read as `rich_text` asks, like `data`; a change that HTML or Markdown can't show (an underline, in Markdown) reads the same on both sides.",
             "items": {
               "$ref": "#/components/schemas/Change"
             }
