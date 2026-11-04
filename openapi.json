@@ -8527,6 +8527,7 @@
           "resource",
           "actor",
           "via",
+          "note",
           "metadata",
           "request_id",
           "created_at"
@@ -8610,9 +8611,19 @@
               }
             ]
           },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The change note (`Nohead-Change-Note`) the change was made with,\nread from the revision or schema change the event references, so\nrecord and schema events have one when their change did; null\notherwise, and once a revision's history is pruned.\n",
+            "examples": [
+              "Clearer title"
+            ]
+          },
           "metadata": {
             "type": "object",
-            "description": "Small, action-specific references, e.g. `revision_id` and\n`collection_id` for record events, `schema_change_id` for schema\nevents, `changed` attribute names for updates. Never content.\n",
+            "description": "Small, action-specific references, e.g. `revision_id` and\n`collection_id` for record events, `schema_change_id` for schema\nevents, `changed` attribute names for updates (field keys for a\ndraft's). Never content.\n",
             "additionalProperties": true
           },
           "request_id": {

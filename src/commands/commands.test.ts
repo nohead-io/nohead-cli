@@ -2643,6 +2643,7 @@ const auditEvent = {
   },
   via: "ui",
   metadata: { revision: 2 },
+  note: null,
   request_id: null,
   created_at: NOW,
 }
