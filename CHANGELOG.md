@@ -14,6 +14,7 @@ release's section is its GitHub release's notes.
   changes to published content: no drafts, schedules or edits to unpublished
   records. `nohead webhooks list` marks such webhooks with
   `(published only)` after their events.
+- Runs on `@nohead/sdk` 0.12.0.
 
 ## 0.4.1
 
