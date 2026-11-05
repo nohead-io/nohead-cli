@@ -8225,6 +8225,7 @@
           "url",
           "description",
           "event_types",
+          "published_only",
           "enabled",
           "deleted_at",
           "purge_after",
@@ -8260,6 +8261,10 @@
             "items": {
               "$ref": "#/components/schemas/WebhookSubscription"
             }
+          },
+          "published_only": {
+            "type": "boolean",
+            "description": "Send only events that change what a published-only API key can read: a record's change while it is published (or that publishes, unpublishes, deletes or restores it), schema changes, and changes to assets that published records use. Drafts, schedules, history redactions, uploads and purges are never sent. `webhook.test` always is."
           },
           "enabled": {
             "type": "boolean"
@@ -8701,6 +8706,10 @@
               "$ref": "#/components/schemas/WebhookSubscription"
             }
           },
+          "published_only": {
+            "type": "boolean",
+            "description": "Send only events that change what a published-only API key can read (`false` by default). It can't be combined with event types it never sends, such as `draft.*`."
+          },
           "enabled": {
             "type": "boolean"
           }
@@ -8725,6 +8734,10 @@
             "items": {
               "$ref": "#/components/schemas/WebhookSubscription"
             }
+          },
+          "published_only": {
+            "type": "boolean",
+            "description": "Send only events that change what a published-only API key can read (`false` by default). It can't be combined with event types it never sends, such as `draft.*`."
           },
           "enabled": {
             "type": "boolean"
