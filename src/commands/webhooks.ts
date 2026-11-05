@@ -31,7 +31,8 @@ export function registerWebhooks(
           items.map((w) => [
             w.id,
             w.url,
-            w.event_types.join(","),
+            w.event_types.join(",") +
+              (w.published_only ? " (published only)" : ""),
             w.enabled ? "enabled" : "disabled",
           ])
         )
@@ -48,11 +49,16 @@ export function registerWebhooks(
       "*"
     )
     .option("--description <text>", "what it is for")
+    .option(
+      "--published-only",
+      "send only changes to published content: no drafts, schedules or edits to unpublished records"
+    )
     .action(
       async (options: {
         url: string
         events: string
         description?: string
+        publishedOnly?: boolean
       }) => {
         const ctx = context()
         const webhook = await unwrap(
@@ -63,6 +69,7 @@ export function registerWebhooks(
               event_types: options.events
                 .split(",")
                 .map((t) => t.trim()) as WebhookCreate["event_types"],
+              published_only: options.publishedOnly ?? false,
             },
             ctx.writeOptions()
           )
