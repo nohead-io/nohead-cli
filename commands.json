@@ -1932,6 +1932,10 @@
             {
               "flags": "--description <text>",
               "description": "what it is for"
+            },
+            {
+              "flags": "--published-only",
+              "description": "send only changes to published content: no drafts, schedules or edits to unpublished records"
             }
           ],
           "commands": []

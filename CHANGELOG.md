@@ -10,6 +10,11 @@ release's section is its GitHub release's notes.
 ## Unreleased
 
 - `--help` ends with a link to the CLI's docs, for every command.
+- `nohead webhooks create --published-only` creates a webhook that sends only
+  changes to published content: no drafts, schedules or edits to unpublished
+  records. `nohead webhooks list` marks such webhooks with
+  `(published only)` after their events.
+- Runs on `@nohead/sdk` 0.12.0.
 
 ## 0.4.1
 

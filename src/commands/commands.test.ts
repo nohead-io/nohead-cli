@@ -2622,8 +2622,49 @@ describe("webhooks", () => {
       url: "https://example.com/hook",
       description: null,
       event_types: ["record.created", "record.published"],
+      published_only: false,
     })
     expect(t.out()).toContain("Signing secret: whsec_c2VjcmV0")
+  })
+
+  it("creates a published-only webhook with --published-only", async () => {
+    const t = testRuntime({
+      routes: {
+        "GET /v1/me": me,
+        [`POST /v1/projects/${PROJECT_ID}/webhooks`]: async (request) =>
+          contractResponse(
+            "webhooks_create",
+            {
+              id: "wh_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+              object: "webhook",
+              project_id: PROJECT_ID,
+              ...(await body(request)),
+              enabled: true,
+              deleted_at: null,
+              purge_after: null,
+              secret: "whsec_c2VjcmV0",
+              created_at: NOW,
+              updated_at: NOW,
+            },
+            { status: 201 }
+          ),
+      },
+    })
+
+    await t.ok([
+      "webhooks",
+      "create",
+      "--url",
+      "https://example.com/hook",
+      "--events",
+      "record.*",
+      "--published-only",
+    ])
+
+    expect(await body(t.requests[1])).toMatchObject({
+      event_types: ["record.*"],
+      published_only: true,
+    })
   })
 })
 
@@ -3531,6 +3572,16 @@ describe("commands with a single request", () => {
       output: new RegExp(
         `${WEBHOOK_ID}\\s+https://example.com/hook\\s+record.published\\s+enabled`
       ),
+    },
+    {
+      argv: ["webhooks", "list"],
+      request: `GET /v1/projects/${PROJECT_ID}/webhooks?limit=100`,
+      response: () =>
+        contractResponse(
+          "webhooks_list",
+          page([{ ...webhook, published_only: true }])
+        ),
+      output: /record\.published \(published only\)\s+enabled/,
     },
     {
       argv: ["webhooks", "delete", WEBHOOK_ID],
