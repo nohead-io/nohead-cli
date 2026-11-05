@@ -7,7 +7,7 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.5.0
 
 - `--help` ends with a link to the CLI's docs, for every command.
 - `nohead webhooks create --published-only` creates a webhook that sends only
