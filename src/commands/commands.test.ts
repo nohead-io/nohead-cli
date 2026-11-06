@@ -1807,14 +1807,13 @@ describe("login and saved keys", () => {
     expect(elsewhere.requests).toHaveLength(0)
 
     const insecure = testRuntime({
-      env: { ...env, NOHEAD_API_KEY: "nohead_sk_env" },
+      env: {
+        ...env,
+        NOHEAD_API_URL: "http://api.example.com",
+        NOHEAD_API_KEY: "nohead_sk_env",
+      },
     })
-    expect(
-      await run(
-        ["--api-url", "http://api.example.com", "whoami"],
-        insecure.runtime
-      )
-    ).toBe(ExitCode.Usage)
+    expect(await run(["whoami"], insecure.runtime)).toBe(ExitCode.Usage)
     expect(insecure.err()).toContain(
       "Refusing to send an API key to http://api.example.com: use https"
     )
@@ -1989,17 +1988,13 @@ describe("login and saved keys", () => {
       ])
     })
 
-    it("takes the API URL and key from flags, then the environment", async () => {
+    it("takes the API URL and key from the environment", async () => {
       const t = setup({
         NOHEAD_API_URL: "http://env.test",
         NOHEAD_API_KEY: "nohead_sk_env",
       })
       await t.ok(["whoami"])
-      await t.ok(["--api-url", "http://flag.test", "whoami"])
-      expect(sent(t)).toEqual([
-        "http://env.test/v1/me Bearer nohead_sk_env",
-        "http://flag.test/v1/me Bearer nohead_sk_env",
-      ])
+      expect(sent(t)).toEqual(["http://env.test/v1/me Bearer nohead_sk_env"])
       expect(t.out()).toContain("from:    NOHEAD_API_KEY")
     })
 
