@@ -27,15 +27,11 @@ describe("nohead health", () => {
     expect(t.json()).toEqual(healthy)
   })
 
-  it("calls the configured API URL, preferring --api-url over the environment", async () => {
-    const env = testRuntime({ routes: { "GET /v1/health": health } })
-    const flag = testRuntime({ routes: { "GET /v1/health": health } })
+  it("calls the API URL from NOHEAD_API_URL", async () => {
+    const t = testRuntime({ routes: { "GET /v1/health": health } })
 
-    await env.ok(["health"])
-    await flag.ok(["--api-url", "http://flag.test", "health"])
-
-    expect(env.requests[0].url).toBe("http://api.test/v1/health")
-    expect(flag.requests[0].url).toBe("http://flag.test/v1/health")
+    await t.ok(["health"])
+    expect(t.requests[0].url).toBe("http://api.test/v1/health")
   })
 
   it("reports API errors on stderr with the request ID and exits 1", async () => {
@@ -161,8 +157,6 @@ describe("usage", () => {
     expect(t.out()).toContain("Usage: nohead")
     expect(t.out()).toContain("collections")
     expect(t.out()).toContain("Docs: https://docs.nohead.io/cli/overview")
-    // Only for a local or test API: it works, but isn't offered.
-    expect(t.out()).not.toContain("--api-url")
   })
 
   it("prints its version and the SDK's for --version", async () => {

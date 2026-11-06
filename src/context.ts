@@ -84,7 +84,6 @@ export interface Runtime {
 
 export interface GlobalOptions {
   json: boolean
-  apiUrl?: string
   project?: string
   note?: string
   idempotencyKey?: string
@@ -179,7 +178,8 @@ export function createContext(
   link?: LinkFile
 ): CommandContext {
   const envApiKey = envVar(runtime.env, "NOHEAD_API_KEY")
-  const apiUrl = options.apiUrl ?? envVar(runtime.env, "NOHEAD_API_URL")
+  // Only for a local or test API: customers have only https://api.nohead.io.
+  const apiUrl = envVar(runtime.env, "NOHEAD_API_URL")
   // Chosen now, so the API URL can follow the saved key, but only reported
   // when a command needs it: `health` works whatever is saved.
   const choose = (withEnvKey: boolean) =>

@@ -23,10 +23,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     .action(async () => {
       const ctx = context()
       const { runtime, options } = ctx
-      const apiUrl =
-        options.apiUrl ??
-        envVar(runtime.env, "NOHEAD_API_URL") ??
-        DEFAULT_API_URL
+      const apiUrl = envVar(runtime.env, "NOHEAD_API_URL") ?? DEFAULT_API_URL
 
       // A key piped in (echo $KEY | nohead login), as CI does, is checked
       // and saved. Otherwise, at a terminal or with nothing on stdin (a
