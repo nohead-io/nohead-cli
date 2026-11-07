@@ -1530,6 +1530,102 @@ describe("schema push: a relation into a collection the push creates", () => {
   })
 })
 
+describe("schema push: the organization's collection limit", () => {
+  const schema = [
+    "collections:",
+    "  posts:",
+    "    fields:",
+    "      title: { type: text, required: true }",
+    "  people:",
+    "    fields:",
+    "      name: text",
+    "  pages:",
+    "    fields:",
+    "      name: text",
+    "",
+  ].join("\n")
+  const setup = (usage: number, limit: number | null, created: string[]) =>
+    testRuntime({
+      files: { "nohead.schema.yaml": schema },
+      routes: {
+        "GET /v1/me": () =>
+          contractResponse("me_get", {
+            ...ME,
+            api_key: {
+              ...ME.api_key,
+              scopes: ["schema:write" as const],
+              collections: { usage, limit },
+            },
+          }),
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse(
+            "collections_list",
+            page([
+              collection({
+                fields: [
+                  field({ key: "title", name: "Title", required: true }),
+                ],
+              }),
+            ])
+          ),
+        [`POST /v1/projects/${PROJECT_ID}/collections`]: async (request) => {
+          const { slug } = await body(request)
+          created.push(slug)
+          return contractResponse(
+            "collections_create",
+            collection({
+              id: `col_01J9ZQ3F8X5W2K7M4N6P0${slug.toUpperCase().padEnd(5, "0").slice(0, 5)}`,
+              name: slug,
+              slug,
+              fields: [],
+            }),
+            { status: 201 }
+          )
+        },
+      },
+    })
+
+  it("push refuses a file that won't fit before creating anything", async () => {
+    const created: string[] = []
+    const t = setup(4, 5, created)
+
+    expect(
+      await run(["schema", "push", "nohead.schema.yaml", "--yes"], t.runtime)
+    ).toBe(ExitCode.ApiError)
+    expect(created).toEqual([])
+    expect(t.err()).toContain(
+      "Your organization's plan allows 5 collections across its projects and has 1 left; this would create 2. Nothing was changed"
+    )
+  })
+
+  it("diff says how many are left, and that push would be refused", async () => {
+    const t = setup(4, 5, [])
+
+    await t.ok(["schema", "diff", "nohead.schema.yaml"])
+    expect(t.out()).toContain(
+      "has 1 left; this would create 2. Push would be refused before changing anything."
+    )
+  })
+
+  it("push creates every collection when they fit", async () => {
+    const created: string[] = []
+    const t = setup(1, 5, created)
+
+    await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
+    expect(created).toEqual(["people", "pages"])
+  })
+
+  it("doesn't count when the plan has no limit", async () => {
+    const created: string[] = []
+    const t = setup(40, null, created)
+
+    await t.ok(["schema", "diff", "nohead.schema.yaml"])
+    expect(t.out()).not.toContain("left")
+    await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
+    expect(created).toEqual(["people", "pages"])
+  })
+})
+
 describe("flags", () => {
   it("lists feature flags for the key's context", async () => {
     const t = testRuntime({

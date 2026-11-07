@@ -192,6 +192,40 @@ function waitingNote({
   return `${change.slug}.${change.key}: migrates to a relation into "${target}", which this push creates, so it runs once "${target}" exists and can't be previewed; "${target}" has no records then, so any value the field holds is cleared (push with --clear-invalid)`
 }
 
+/** The organization's collections against its plan, from the key's `/v1/me`. */
+type Room = { usage: number; limit: number | null }
+
+/**
+ * Collections the plan creates, and the organization's room for them, when
+ * the API says (an API key with `schema:write`): the limit is per
+ * organization, across its projects, so a push can stop before creating any.
+ */
+async function collectionRoom(
+  ctx: CommandContext,
+  todo: Change[]
+): Promise<(Room & { creating: number }) | undefined> {
+  const creating = todo.filter((c) => c.kind === "create_collection").length
+  if (creating === 0) return undefined
+  const me = await unwrap(ctx.api.me.get())
+  // Typed by the next SDK release; older APIs and other keys don't say.
+  const room = (me.api_key as { collections?: Room | null } | null)?.collections
+  return room ? { ...room, creating } : undefined
+}
+
+function describeRoom({
+  creating,
+  usage,
+  limit,
+}: Room & { creating: number }): string | undefined {
+  if (limit === null) return undefined
+  const left = Math.max(limit - usage, 0)
+  return `Your organization's plan allows ${limit} ${limit === 1 ? "collection" : "collections"} across its projects and has ${left} left; this would create ${creating}.`
+}
+
+function tooMany(room: Room & { creating: number }): boolean {
+  return room.limit !== null && room.usage + room.creating > room.limit
+}
+
 /**
  * Applies a plan (see planChanges): collections first (relations to new
  * collections once those exist), then collection and field changes, then field
@@ -207,6 +241,15 @@ export async function applyPlan(
   const ids = new Map(remote.map((c) => [c.slug, c.id]))
   const fieldIds = fieldIdsOf(remote)
   const migrations = todo.filter((c) => c.kind === "migrate_field")
+
+  // Refuse a plan that the organization's collection limit won't fit, before
+  // creating any of it.
+  const room = await collectionRoom(ctx, todo)
+  if (room && tooMany(room))
+    throw new CliError(ExitCode.ApiError, {
+      type: "plan_limit_exceeded",
+      message: `${describeRoom(room)} Nothing was changed; delete collections you no longer need, or upgrade the plan.`,
+    })
 
   // Check tightening changes before changing anything. (Duplicates for a new
   // `unique` refuse the dry run.) A relation pointed at a collection this push
@@ -463,6 +506,7 @@ export function registerSchema(
       ) => {
         const ctx = context()
         const { changes, remote } = await plan(ctx, file)
+        const room = await collectionRoom(ctx, applicable(changes))
         const { previews, waiting } = options.preview
           ? await previewMigrations(ctx, remote, changes, {
               clearInvalid: false,
@@ -481,15 +525,24 @@ export function registerSchema(
             new_target: target,
           })),
         ]
-        printResult(ctx, { changes, migrations }, () =>
-          [
-            describePlan(changes),
-            ...previews.map(
-              ({ change, preview }) =>
-                `\n${change.slug}.${change.key} migration preview (${preview.conversion}): ${preview.records.total} ${preview.records.total === 1 ? "record" : "records"}, ${counts(preview.records) || "nothing to change"}${preview.records.invalid > 0 ? "\n  Values that cannot be converted block the push unless you pass --clear-invalid; see `nohead fields migrate --dry-run`." : ""}`
-            ),
-            ...waiting.map((item) => `\n${waitingNote(item)}`),
-          ].join("")
+        const roomNote = room && describeRoom(room)
+        printResult(
+          ctx,
+          { changes, migrations, ...(room ? { collections: room } : {}) },
+          () =>
+            [
+              describePlan(changes),
+              ...(roomNote
+                ? [
+                    `\n${roomNote}${tooMany(room) ? " Push would be refused before changing anything." : ""}`,
+                  ]
+                : []),
+              ...previews.map(
+                ({ change, preview }) =>
+                  `\n${change.slug}.${change.key} migration preview (${preview.conversion}): ${preview.records.total} ${preview.records.total === 1 ? "record" : "records"}, ${counts(preview.records) || "nothing to change"}${preview.records.invalid > 0 ? "\n  Values that cannot be converted block the push unless you pass --clear-invalid; see `nohead fields migrate --dry-run`." : ""}`
+              ),
+              ...waiting.map((item) => `\n${waitingNote(item)}`),
+            ].join("")
         )
         if (options.exitCode && applicable(changes).length > 0)
           throw new CliError(ExitCode.ApiError, {

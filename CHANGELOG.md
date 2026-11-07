@@ -17,6 +17,15 @@ release's section is its GitHub release's notes.
   that isn't possible at all is still refused before anything changes. Before, both
   stopped with `no collection "…" in the project or the file`, though the
   file defined it.
+- `nohead schema push` (and `nohead import`, which pushes the export's
+  schema) refuses a file whose new collections won't fit the organization's
+  plan before creating any, saying how many the plan allows and how many are
+  left. The limit counts every project in the organization. Before, a push
+  created collections until the API refused one, leaving the project half set
+  up. `nohead schema diff` says how many are left whenever the file creates
+  collections, and whether push would be refused (`collections` in `--json`).
+  It needs an API that reports the room (an API key with `schema:write`);
+  otherwise the API's own limit applies, as before.
 
 ## 0.5.0
 
