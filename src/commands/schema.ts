@@ -119,17 +119,56 @@ function tightens(change: Change): change is UpdateChange {
   )
 }
 
-/** Dry runs of the plan's field migrations: what each would do to records. */
+/**
+ * The collection a field change makes a relation point at, when this push
+ * creates it: it doesn't exist yet, so nothing can be dry-run against it.
+ */
+function newTarget(change: Change, todo: Change[]): string | undefined {
+  if (change.kind !== "migrate_field" && change.kind !== "update_field")
+    return undefined
+  const target = change.to.options.collection
+  return todo.some(
+    (c) => c.kind === "create_collection" && c.collection.slug === target
+  )
+    ? (target as string)
+    : undefined
+}
+
+/**
+ * Dry runs of the plan's field migrations: what each would do to records.
+ * A migration to a relation into a collection this push creates can't be
+ * dry-run before that collection exists; it is listed under `waiting`.
+ */
 async function previewMigrations(
   ctx: CommandContext,
   remote: Collection[],
   todo: Change[],
   { clearInvalid }: { clearInvalid: boolean }
-): Promise<{ change: MigrateChange; preview: FieldMigrationPreview }[]> {
+): Promise<{
+  previews: { change: MigrateChange; preview: FieldMigrationPreview }[]
+  waiting: { change: MigrateChange; target: string }[]
+}> {
   const ids = new Map(remote.map((c) => [c.slug, c.id]))
   const previews = []
+  const waiting = []
   for (const change of todo) {
     if (change.kind !== "migrate_field") continue
+    const target = newTarget(change, todo)
+    if (target) {
+      // Its counts would mean nothing, but a dry run against a collection
+      // that exists (the field's own) still refuses a conversion that isn't
+      // possible at all, before anything is created.
+      const own = ids.get(change.slug) ?? change.slug
+      await unwrap(
+        ctx.api.migrations.create(own, {
+          field_id: change.field_id,
+          ...migrationBody(change, new Map(ids).set(target, own), clearInvalid),
+          dry_run: true,
+        })
+      )
+      waiting.push({ change, target })
+      continue
+    }
     const preview = await unwrap(
       ctx.api.migrations.create(ids.get(change.slug) ?? change.slug, {
         field_id: change.field_id,
@@ -139,7 +178,18 @@ async function previewMigrations(
     )
     previews.push({ change, preview })
   }
-  return previews
+  return { previews, waiting }
+}
+
+/** Why a migration into a collection this push creates needs --clear-invalid. */
+function waitingNote({
+  change,
+  target,
+}: {
+  change: MigrateChange
+  target: string
+}): string {
+  return `${change.slug}.${change.key}: migrates to a relation into "${target}", which this push creates, so it runs once "${target}" exists and can't be previewed; "${target}" has no records then, so any value the field holds is cleared (push with --clear-invalid)`
 }
 
 /** The organization's collections against its plan, from the key's `/v1/me`. */
@@ -202,8 +252,11 @@ export async function applyPlan(
     })
 
   // Check tightening changes before changing anything. (Duplicates for a new
-  // `unique` refuse the dry run.)
+  // `unique` refuse the dry run.) A relation pointed at a collection this push
+  // creates can't be checked yet; the API refuses that change if the field
+  // holds values.
   for (const change of todo.filter(tightens)) {
+    if (newTarget(change, todo)) continue
     const preview = await unwrap(
       ctx.api.migrations.create(ids.get(change.slug) ?? change.slug, {
         field_id: change.field_id,
@@ -219,12 +272,19 @@ export async function applyPlan(
   }
 
   // Preview every migration before changing anything.
-  for (const { change, preview } of await previewMigrations(
+  const { previews, waiting } = await previewMigrations(
     ctx,
     remote,
     todo,
     options
-  )) {
+  )
+  if (waiting.length > 0 && !options.clearInvalid)
+    throw new CliError(ExitCode.ApiError, {
+      type: "validation_error",
+      message: `${waiting.map(waitingNote).join("\n")}\nNothing was changed.`,
+    })
+  for (const item of waiting) printNotice(ctx, waitingNote(item))
+  for (const { change, preview } of previews) {
     if (preview.records.invalid > 0 && !options.clearInvalid) {
       throw new CliError(ExitCode.ApiError, {
         type: "validation_error",
@@ -447,17 +507,24 @@ export function registerSchema(
         const ctx = context()
         const { changes, remote } = await plan(ctx, file)
         const room = await collectionRoom(ctx, applicable(changes))
-        const previews = options.preview
+        const { previews, waiting } = options.preview
           ? await previewMigrations(ctx, remote, changes, {
               clearInvalid: false,
             })
-          : []
-        const migrations = previews.map(({ change, preview }) => ({
-          collection: change.slug,
-          field: change.key,
-          conversion: preview.conversion,
-          records: preview.records,
-        }))
+          : { previews: [], waiting: [] }
+        const migrations = [
+          ...previews.map(({ change, preview }) => ({
+            collection: change.slug,
+            field: change.key,
+            conversion: preview.conversion,
+            records: preview.records,
+          })),
+          ...waiting.map(({ change, target }) => ({
+            collection: change.slug,
+            field: change.key,
+            new_target: target,
+          })),
+        ]
         const roomNote = room && describeRoom(room)
         printResult(
           ctx,
@@ -474,6 +541,7 @@ export function registerSchema(
                 ({ change, preview }) =>
                   `\n${change.slug}.${change.key} migration preview (${preview.conversion}): ${preview.records.total} ${preview.records.total === 1 ? "record" : "records"}, ${counts(preview.records) || "nothing to change"}${preview.records.invalid > 0 ? "\n  Values that cannot be converted block the push unless you pass --clear-invalid; see `nohead fields migrate --dry-run`." : ""}`
               ),
+              ...waiting.map((item) => `\n${waitingNote(item)}`),
             ].join("")
         )
         if (options.exitCode && applicable(changes).length > 0)

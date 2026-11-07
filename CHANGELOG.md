@@ -9,6 +9,14 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- `nohead schema push` and `diff` handle a field migrated to a relation into
+  a collection the same push creates. It can't be previewed before that
+  collection exists, so `diff` says so, and `push` needs `--clear-invalid`
+  (the new collection has no records, so any value the field holds is
+  cleared); it creates the collection, then migrates the field. A conversion
+  that isn't possible at all is still refused before anything changes. Before, both
+  stopped with `no collection "…" in the project or the file`, though the
+  file defined it.
 - `nohead schema push` (and `nohead import`, which pushes the export's
   schema) refuses a file whose new collections won't fit the organization's
   plan before creating any, saying how many the plan allows and how many are
