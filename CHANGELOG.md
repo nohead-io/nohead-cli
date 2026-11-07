@@ -7,6 +7,17 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `nohead schema push` and `diff` handle a field migrated to a relation into
+  a collection the same push creates. It can't be previewed before that
+  collection exists, so `diff` says so, and `push` needs `--clear-invalid`
+  (the new collection has no records, so any value the field holds is
+  cleared); it creates the collection, then migrates the field. A conversion
+  that isn't possible at all is still refused before anything changes. Before, both
+  stopped with `no collection "…" in the project or the file`, though the
+  file defined it.
+
 ## 0.5.0
 
 - `--help` ends with a link to the CLI's docs, for every command.

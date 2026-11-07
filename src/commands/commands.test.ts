@@ -1264,6 +1264,272 @@ describe("schema push", () => {
   })
 })
 
+describe("schema push: a relation into a collection the push creates", () => {
+  const CATEGORIES_ID = "col_01J9ZQ3F8X5W2K7M4N6P0CATEG"
+  const category = field({
+    key: "category",
+    name: "Category",
+    type: "json",
+    position: 1,
+  })
+  const posts = collection({
+    fields: [field({ key: "title", name: "Title", required: true }), category],
+  })
+  const schema = [
+    "collections:",
+    "  categories:",
+    "    fields:",
+    "      name: text",
+    "  posts:",
+    "    fields:",
+    "      title: { type: text, required: true }",
+    "      category: { type: relation, collection: categories }",
+    "",
+  ].join("\n")
+  const definition = {
+    configuration: {},
+    multiple: false,
+    required: false,
+  } as const
+  const setup = (
+    requests: string[],
+    sent: Record<string, unknown>[] = [],
+    refuse = false
+  ) =>
+    testRuntime({
+      files: { "nohead.schema.yaml": schema },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([posts])),
+        [`POST /v1/projects/${PROJECT_ID}/collections`]: () => {
+          requests.push("create categories")
+          return contractResponse(
+            "collections_create",
+            collection({
+              id: CATEGORIES_ID,
+              name: "Categories",
+              slug: "categories",
+              fields: [field({ key: "name", collection_id: CATEGORIES_ID })],
+            }),
+            { status: 201 }
+          )
+        },
+        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: async (
+          request
+        ) => {
+          const migration = await body(request)
+          const dryRun =
+            new URL(request.url).searchParams.get("dry_run") === "true"
+          sent.push(migration)
+          requests.push(dryRun ? "dry run" : "migrate")
+          if (refuse)
+            return contractResponse(
+              "migrations_create",
+              validation(
+                "Field migration is not possible: json values cannot be converted to relation",
+                "type",
+                "incompatible"
+              ),
+              { status: 422 }
+            )
+          if (dryRun)
+            return contractResponse("migrations_create", {
+              object: "field_migration_preview",
+              field_id: category.id,
+              from: { ...definition, type: "json" },
+              to: {
+                ...definition,
+                type: "relation",
+                configuration: { target_collection_id: COLLECTION_ID },
+              },
+              conversion: "conditional",
+              records: {
+                total: 2,
+                unchanged: 1,
+                converted: 0,
+                backfilled: 0,
+                cleared: 0,
+                invalid: 1,
+              },
+              samples: [],
+            })
+          return contractResponse(
+            "migrations_create",
+            {
+              id: "mig_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+              object: "field_migration",
+              collection_id: COLLECTION_ID,
+              field_id: category.id,
+              status: "complete",
+              from: { ...definition, type: "json" },
+              to: {
+                ...definition,
+                type: "relation",
+                configuration: { target_collection_id: CATEGORIES_ID },
+              },
+              backfill: null,
+              on_invalid: "clear",
+              time_zone: null,
+              records: {
+                total: 2,
+                unchanged: 1,
+                converted: 0,
+                backfilled: 0,
+                cleared: 1,
+                invalid: 0,
+              },
+              failure: null,
+              schema_change_id: "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+              cancel_requested_at: null,
+              actor: {
+                type: "api_key",
+                id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                name: "ci",
+              },
+              via: "cli",
+              note: null,
+              request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+              created_at: NOW,
+              started_at: NOW,
+              completed_at: NOW,
+            },
+            { status: 202 }
+          )
+        },
+      },
+    })
+
+  it("diff says the migration waits for the new collection", async () => {
+    const requests: string[] = []
+    const t = setup(requests)
+
+    await t.ok(["schema", "diff", "nohead.schema.yaml"])
+    // Only a dry run against an existing collection, to check the conversion.
+    expect(requests).toEqual(["dry run"])
+    expect(t.out()).toContain("+ collection categories")
+    expect(t.out()).toContain(
+      'posts.category: migrates to a relation into "categories", which this push creates'
+    )
+  })
+
+  it("push refuses before changing anything without --clear-invalid", async () => {
+    const requests: string[] = []
+    const t = setup(requests)
+
+    expect(
+      await run(
+        ["schema", "push", "nohead.schema.yaml", "--yes", "--allow-migrations"],
+        t.runtime
+      )
+    ).toBe(ExitCode.ApiError)
+    expect(requests).toEqual(["dry run"])
+    expect(t.err()).toContain("(push with --clear-invalid)")
+    expect(t.err()).toContain("Nothing was changed.")
+  })
+
+  it("push creates the collection, then migrates the field into it", async () => {
+    const requests: string[] = []
+    const sent: Record<string, unknown>[] = []
+    const t = setup(requests, sent)
+
+    await t.ok([
+      "schema",
+      "push",
+      "nohead.schema.yaml",
+      "--yes",
+      "--allow-migrations",
+      "--clear-invalid",
+    ])
+    expect(requests).toEqual(["dry run", "create categories", "migrate"])
+    expect(sent[0]).toMatchObject({
+      configuration: { target_collection_id: COLLECTION_ID },
+    })
+    expect(t.err()).toContain("any value the field holds is cleared")
+    expect(sent[1]).toMatchObject({
+      field_id: category.id,
+      type: "relation",
+      configuration: { target_collection_id: CATEGORIES_ID },
+      on_invalid: "clear",
+    })
+  })
+
+  it("push refuses a conversion that isn't possible before creating anything", async () => {
+    const requests: string[] = []
+    const t = setup(requests, [], true)
+
+    expect(
+      await run(
+        [
+          "schema",
+          "push",
+          "nohead.schema.yaml",
+          "--yes",
+          "--allow-migrations",
+          "--clear-invalid",
+        ],
+        t.runtime
+      )
+    ).toBe(ExitCode.ApiError)
+    expect(requests).toEqual(["dry run"])
+    expect(t.err()).toContain("Field migration is not possible")
+  })
+
+  it("points a relation at the new collection without a dry run", async () => {
+    const author = field({
+      key: "author",
+      name: "Author",
+      type: "relation",
+      position: 1,
+      configuration: { target_collection_id: COLLECTION_ID },
+    })
+    let patched: Record<string, unknown> = {}
+    const t = testRuntime({
+      files: {
+        "nohead.schema.yaml": schema.replace(
+          "category: { type: relation, collection: categories }",
+          "author: { type: relation, collection: categories }"
+        ),
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse(
+            "collections_list",
+            page([
+              collection({
+                fields: [
+                  field({ key: "title", name: "Title", required: true }),
+                  author,
+                ],
+              }),
+            ])
+          ),
+        [`POST /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse(
+            "collections_create",
+            collection({
+              id: CATEGORIES_ID,
+              name: "Categories",
+              slug: "categories",
+              fields: [field({ key: "name", collection_id: CATEGORIES_ID })],
+            }),
+            { status: 201 }
+          ),
+        [`PATCH /v1/fields/${author.id}`]: async (request) => {
+          patched = await body(request)
+          return contractResponse("fields_update", author)
+        },
+      },
+    })
+
+    await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
+    expect(patched).toMatchObject({
+      configuration: { target_collection_id: CATEGORIES_ID },
+    })
+  })
+})
+
 describe("flags", () => {
   it("lists feature flags for the key's context", async () => {
     const t = testRuntime({
