@@ -4453,7 +4453,7 @@
       "get": {
         "operationId": "me_get",
         "summary": "Get the authenticated principal",
-        "description": "The user or API key making the request. API key clients use it to\ndiscover their project and scopes.\n",
+        "description": "The user or API key making the request. API key clients use it to\ndiscover their project and scopes, and their organization's room\nfor new collections.\n",
         "tags": [
           "system"
         ],
@@ -8042,7 +8042,8 @@
                   "scopes",
                   "published_only",
                   "project_id",
-                  "expires_at"
+                  "expires_at",
+                  "collections"
                 ],
                 "properties": {
                   "id": {
@@ -8065,6 +8066,30 @@
                   },
                   "expires_at": {
                     "$ref": "#/components/schemas/NullableTimestamp"
+                  },
+                  "collections": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": false,
+                    "required": [
+                      "usage",
+                      "limit"
+                    ],
+                    "description": "The organization's active collections, across all its\nprojects, and how many its plan allows, so a client can\ncheck that new collections fit before creating any.\nCreating one past the limit is `402 plan_limit_exceeded`.\nNull for a key without `schema:write`.\n",
+                    "properties": {
+                      "usage": {
+                        "type": "integer"
+                      },
+                      "limit": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "description": "Null when the plan doesn't limit collections."
+                      }
+                    }
                   }
                 }
               }
