@@ -169,7 +169,7 @@ function describeRoom({
 }: Room & { creating: number }): string | undefined {
   if (limit === null) return undefined
   const left = Math.max(limit - usage, 0)
-  return `Your organization's plan allows ${limit} ${limit === 1 ? "collection" : "collections"} across its projects and has ${left} left; this file creates ${creating}.`
+  return `Your organization's plan allows ${limit} ${limit === 1 ? "collection" : "collections"} across its projects and has ${left} left; this would create ${creating}.`
 }
 
 function tooMany(room: Room & { creating: number }): boolean {
