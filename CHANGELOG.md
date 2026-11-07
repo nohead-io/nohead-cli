@@ -7,7 +7,7 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.6.0
 
 - `nohead schema push` and `diff` handle a field migrated to a relation into
   a collection the same push creates. It can't be previewed before that
