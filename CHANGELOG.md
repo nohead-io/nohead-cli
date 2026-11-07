@@ -7,7 +7,7 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.7.0
 
 - `nohead assets upload --alt <text>` sets a file's alt text as it uploads
   (one file at a time).
