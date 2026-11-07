@@ -9,8 +9,13 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
-- `nohead import` uploads each file with its alt text, instead of setting it
-  in a second request.
+- `nohead assets upload --alt <text>` sets a file's alt text as it uploads
+  (one file at a time).
+- `nohead records create --publish` creates the record published, in one
+  request.
+- `nohead import` uploads each file with its alt text, and creates a published
+  record that has no relations to set published, so neither takes a second
+  request.
 
 ## 0.6.0
 

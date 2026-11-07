@@ -764,6 +764,39 @@ describe("records", () => {
     expect(await body(piped.requests[0])).toEqual({ data: { title: "Piped" } })
   })
 
+  it("creates a record published with --publish, in one request", async () => {
+    const t = testRuntime({
+      routes: {
+        "POST /v1/collections/posts/records": () =>
+          contractResponse(
+            "records_create",
+            record(
+              REC_A,
+              { title: "Live" },
+              { published_at: NOW, revision: 2 }
+            ),
+            { status: 201 }
+          ),
+      },
+    })
+
+    await t.ok([
+      "records",
+      "create",
+      "posts",
+      "--set",
+      "title=Live",
+      "--publish",
+    ])
+
+    expect(t.requests).toHaveLength(1)
+    expect(await body(t.requests[0])).toEqual({
+      data: { title: "Live" },
+      publish: true,
+    })
+    expect(t.out()).toContain(`Created ${REC_A} (revision 2, published)`)
+  })
+
   it("rejects malformed input as usage errors", async () => {
     for (const args of [
       ["records", "create", "posts"],
@@ -2783,6 +2816,38 @@ describe("assets", () => {
     expect(t.out().trim()).toBe("ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T")
   })
 
+  it("uploads a file with its alt text, one file at a time", async () => {
+    const t = testRuntime({
+      files: {
+        "cover.png": new Uint8Array([1, 2, 3]),
+        "back.png": new Uint8Array([4]),
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
+          contractResponse("assets_upload", pendingUpload, { status: 201 }),
+        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+          contractResponse("assets_get", asset("pending")),
+        "PUT /bucket/key": () => new Response(null, { status: 200 }),
+        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
+          contractResponse("assets_complete", asset("ready")),
+      },
+    })
+
+    await t.ok(["assets", "upload", "cover.png", "--alt", "A harbour"])
+    expect(await body(t.requests[1])).toMatchObject({ alt: "A harbour" })
+
+    const several = t.requests.length
+    expect(
+      await run(
+        ["assets", "upload", "cover.png", "back.png", "--alt", "A harbour"],
+        t.runtime
+      )
+    ).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("--alt describes one file")
+    expect(t.requests).toHaveLength(several)
+  })
+
   it("reports storage that is down or refuses the bytes", async () => {
     const storage = (put: Handler) =>
       testRuntime({
@@ -3734,6 +3799,55 @@ describe("import", () => {
       "pages is in manifest.json but not in schema.yaml",
     ])
     expect(t.requests).toHaveLength(0)
+  })
+
+  it("creates a published record with no relations published, in one request", async () => {
+    const t = testRuntime({
+      files: {
+        "out/manifest.json": JSON.stringify({
+          format: "nohead-export",
+          version: 1,
+          exported_at: NOW,
+          api_url: "http://api.test",
+          project_id: "prj_01J9ZQ3F8X5W2K7M4N6P0R1OLD",
+          include_history: false,
+          include_deleted: false,
+          collections: [{ slug: "posts", records: 2 }],
+        }),
+        "out/schema.yaml":
+          "collections:\n  posts:\n    name: Posts\n    fields:\n      title:\n        name: title\n        type: text\n        required: true\n",
+        "out/records/posts.jsonl": `${JSON.stringify(record(REC_A, { title: "Live" }, { published_at: NOW }))}\n${JSON.stringify(record(REC_B, { title: "Draft" }))}\n`,
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([collection()])),
+        [`POST /v1/collections/${COLLECTION_ID}/records`]: async (request) => {
+          const { data, publish } = await body(request)
+          return contractResponse(
+            "records_create",
+            record(
+              data.title === "Live" ? REC_A : REC_B,
+              data,
+              publish ? { published_at: NOW, revision: 2 } : {}
+            ),
+            { status: 201 }
+          )
+        },
+      },
+    })
+
+    await t.ok(["import", "out"])
+
+    const creates = await Promise.all(
+      t.requests.filter((r) => r.method === "POST").map((r) => body(r))
+    )
+    expect(creates).toEqual([
+      { data: { title: "Live" }, publish: true },
+      { data: { title: "Draft" } },
+    ])
+    expect(t.requests.some((r) => r.url.endsWith("/publication"))).toBe(false)
+    expect(t.out()).toContain("(0 with relations, 1 published)")
   })
 
   it("refuses asset IDs that would read files outside the export", async () => {

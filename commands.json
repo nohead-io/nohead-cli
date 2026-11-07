@@ -961,7 +961,7 @@
         {
           "name": "create",
           "usage": "[options] <collection>",
-          "description": "Create an unpublished record",
+          "description": "Create a record, unpublished unless --publish",
           "arguments": [
             {
               "name": "collection",
@@ -971,6 +971,11 @@
             }
           ],
           "options": [
+            {
+              "flags": "--publish",
+              "description": "create it published, in the same request",
+              "default": false
+            },
             {
               "flags": "--set <key=value>",
               "description": "set a field (key=text or key:=json); repeatable"
@@ -1616,6 +1621,10 @@
             {
               "flags": "--content-type <type>",
               "description": "override the type guessed from the extension"
+            },
+            {
+              "flags": "--alt <text>",
+              "description": "alt text: what the image shows, the default wherever it is used (one file at a time)"
             }
           ],
           "commands": []
