@@ -386,20 +386,28 @@ export function registerRecords(
   withDataFlags(
     records
       .command("create")
-      .description("Create an unpublished record")
+      .description("Create a record, unpublished unless --publish")
       .argument("<collection>", "collection slug or ID")
-  ).action(async (collection: string, options: DataOptions) => {
-    const ctx = context()
-    const data = await readData(ctx.runtime, options)
-    const record = await unwrap(
-      ctx.api.records.create(collection, { data }, ctx.writeOptions())
-    )
-    printResult(
-      ctx,
-      record,
-      () => `Created ${record.id} (revision ${record.revision}, unpublished)`
-    )
-  })
+      .option("--publish", "create it published, in the same request", false)
+  ).action(
+    async (collection: string, options: DataOptions & { publish: boolean }) => {
+      const ctx = context()
+      const data = await readData(ctx.runtime, options)
+      const record = await unwrap(
+        ctx.api.records.create(
+          collection,
+          { data, ...(options.publish && { publish: true }) },
+          ctx.writeOptions()
+        )
+      )
+      printResult(
+        ctx,
+        record,
+        () =>
+          `Created ${record.id} (revision ${record.revision}, ${record.published_at ? "published" : "unpublished"})`
+      )
+    }
+  )
 
   withDataFlags(
     records

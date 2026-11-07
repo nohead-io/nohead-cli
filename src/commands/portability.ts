@@ -603,14 +603,33 @@ function importedValues(
 }
 
 /**
+ * Whether an exported record can be created published: live, not deleted,
+ * and with no relation values to set afterwards (which would change it
+ * while live).
+ */
+export function publishesOnCreate(
+  record: RecordModel,
+  kinds: FieldKinds
+): boolean {
+  const linked = (value: unknown) =>
+    Array.isArray(value) ? value.length > 0 : value != null
+  return (
+    !!record.published_at &&
+    !record.deleted_at &&
+    !kinds.relations.some((field) => linked(record.data[field]))
+  )
+}
+
+/**
  * Records in three passes, so relations can point at records created later:
  * create each record without its relation values, then set relations with
- * the new IDs, then publish and delete as exported. Drafts come last, on the
- * created records: each starts from the fields it changes, so its
- * `base_revision` is the imported record's, and a merge still to come is
- * scheduled again. Every request carries an Idempotency-Key derived from
- * what was exported, so re-running an interrupted import within 24 hours
- * skips what was done.
+ * the new IDs, then publish and delete as exported. A published record with
+ * no relations to set, and not deleted, is created published in one request.
+ * Drafts come last, on the created records: each starts from the fields it
+ * changes, so its `base_revision` is the imported record's, and a merge still
+ * to come is scheduled again. Every request carries an Idempotency-Key
+ * derived from what was exported, so re-running an interrupted import within
+ * 24 hours skips what was done.
  */
 async function importContent(
   ctx: CommandContext,
@@ -625,6 +644,7 @@ async function importContent(
   const writes = (item: string, step: string) =>
     ctx.writeOptions(key(item, step))
   const created = new Map<string, string>()
+  const publishedOnCreate = new Set<string>()
   let droppedAssets = 0
   const failed: { collection: string; record: string; error: ErrorBody }[] = []
   const loaded: {
@@ -658,25 +678,27 @@ async function importContent(
     for (const record of content.records) {
       const { data, dropped } = importedValues(record.data, kinds, assetIds)
       droppedAssets += dropped
+      const publish = publishesOnCreate(record, kinds)
       await attempt(slug, record.id, async () => {
         const copy = await unwrap(
           ctx.api.records.create(
             collectionId,
-            { data },
+            { data, ...(publish && { publish }) },
             writes(record.id, "create")
           )
         )
         created.set(record.id, copy.id)
+        if (publish) publishedOnCreate.add(record.id)
       })
     }
   }
 
   let relinked = 0
-  let published = 0
+  let published = publishedOnCreate.size
   for (const { slug, kinds, records } of loaded) {
     for (const record of records) {
       const copy = created.get(record.id)
-      if (!copy) continue
+      if (!copy || publishedOnCreate.has(record.id)) continue
       const relations = Object.fromEntries(
         kinds.relations
           .filter((field) => record.data[field] !== undefined)

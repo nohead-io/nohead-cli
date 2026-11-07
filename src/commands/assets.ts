@@ -175,29 +175,43 @@ export function registerAssets(
       "--content-type <type>",
       "override the type guessed from the extension"
     )
-    .action(async (files: string[], options: { contentType?: string }) => {
-      const ctx = context()
-      await ctx.project()
-      const uploaded: Asset[] = []
-      for (const path of files) {
-        let bytes: Uint8Array
-        try {
-          bytes = await ctx.runtime.readBinaryFile(path)
-        } catch {
-          throw usageError(`Cannot read ${path}`)
+    .option(
+      "--alt <text>",
+      "alt text: what the image shows, the default wherever it is used (one file at a time)"
+    )
+    .action(
+      async (
+        files: string[],
+        options: { contentType?: string; alt?: string }
+      ) => {
+        const ctx = context()
+        if (options.alt !== undefined && files.length > 1)
+          throw usageError(
+            "--alt describes one file: upload the files one at a time to give each its own"
+          )
+        await ctx.project()
+        const uploaded: Asset[] = []
+        for (const path of files) {
+          let bytes: Uint8Array
+          try {
+            bytes = await ctx.runtime.readBinaryFile(path)
+          } catch {
+            throw usageError(`Cannot read ${path}`)
+          }
+          const asset = await uploadAsset(ctx, {
+            bytes,
+            filename: basename(path),
+            contentType: options.contentType ?? contentTypeFor(path),
+            alt: options.alt,
+          })
+          printNotice(ctx, `Uploaded ${asset.filename}`)
+          uploaded.push(asset)
         }
-        const asset = await uploadAsset(ctx, {
-          bytes,
-          filename: basename(path),
-          contentType: options.contentType ?? contentTypeFor(path),
-        })
-        printNotice(ctx, `Uploaded ${asset.filename}`)
-        uploaded.push(asset)
+        printResult(ctx, { data: uploaded }, () =>
+          uploaded.map((a) => a.id).join("\n")
+        )
       }
-      printResult(ctx, { data: uploaded }, () =>
-        uploaded.map((a) => a.id).join("\n")
-      )
-    })
+    )
 
   assets
     .command("get")
