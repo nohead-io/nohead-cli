@@ -146,21 +146,18 @@ async function importAssets(
       join(dir, "assets", asset.id)
     )
     const key = `import-${manifest.project_id}-${asset.id}`
+    // With its alt text in the same call (exports from before assets had
+    // alt text have none).
     const copy = await uploadAsset(
       ctx,
-      { bytes, filename: asset.filename, contentType: asset.content_type },
+      {
+        bytes,
+        filename: asset.filename,
+        contentType: asset.content_type,
+        alt: asset.alt,
+      },
       key
     )
-    // Alt text is set after the upload; exports from before assets had it
-    // have none.
-    if (typeof asset.alt === "string" && asset.alt && copy.alt !== asset.alt)
-      await unwrap(
-        ctx.api.assets.update(
-          copy.id,
-          { alt: asset.alt },
-          ctx.writeOptions(`${key}-alt`)
-        )
-      )
     ids.set(asset.id, copy.id)
   }
   if (ids.size > 0) printNotice(ctx, `Imported ${ids.size} files`)

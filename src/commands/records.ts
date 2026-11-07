@@ -802,6 +802,10 @@ export function registerRecords(
                 ctx.writeOptions(`${base}:${index}`)
               )
             )
+            // Published in a call of its own, not with publish: true on
+            // the create: the create's key is the file's, so a rerun that
+            // adds --publish replays the creates and publishes them. With
+            // the flag in the create, that rerun would be refused.
             if (options.publish && isRecord && parsed.published_at) {
               await unwrap(
                 ctx.api.records.publish(
