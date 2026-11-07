@@ -13,7 +13,8 @@ release's section is its GitHub release's notes.
   a collection the same push creates. It can't be previewed before that
   collection exists, so `diff` says so, and `push` needs `--clear-invalid`
   (the new collection has no records, so any value the field holds is
-  cleared); it creates the collection, then migrates the field. Before, both
+  cleared); it creates the collection, then migrates the field. A conversion
+  that isn't possible at all is still refused before anything changes. Before, both
   stopped with `no collection "…" in the project or the file`, though the
   file defined it.
 

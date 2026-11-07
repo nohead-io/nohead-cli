@@ -155,6 +155,17 @@ async function previewMigrations(
     if (change.kind !== "migrate_field") continue
     const target = newTarget(change, todo)
     if (target) {
+      // Its counts would mean nothing, but a dry run against a collection
+      // that exists (the field's own) still refuses a conversion that isn't
+      // possible at all, before anything is created.
+      const own = ids.get(change.slug) ?? change.slug
+      await unwrap(
+        ctx.api.migrations.create(own, {
+          field_id: change.field_id,
+          ...migrationBody(change, new Map(ids).set(target, own), clearInvalid),
+          dry_run: true,
+        })
+      )
       waiting.push({ change, target })
       continue
     }
@@ -229,6 +240,7 @@ export async function applyPlan(
       type: "validation_error",
       message: `${waiting.map(waitingNote).join("\n")}\nNothing was changed.`,
     })
+  for (const item of waiting) printNotice(ctx, waitingNote(item))
   for (const { change, preview } of previews) {
     if (preview.records.invalid > 0 && !options.clearInvalid) {
       throw new CliError(ExitCode.ApiError, {
