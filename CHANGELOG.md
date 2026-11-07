@@ -7,6 +7,18 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `nohead schema push` (and `nohead import`, which pushes the export's
+  schema) refuses a file whose new collections won't fit the organization's
+  plan before creating any, saying how many the plan allows and how many are
+  left. The limit counts every project in the organization. Before, a push
+  created collections until the API refused one, leaving the project half set
+  up. `nohead schema diff` says how many are left whenever the file creates
+  collections, and whether push would be refused (`collections` in `--json`).
+  It needs an API that reports the room (an API key with `schema:write`);
+  otherwise the API's own limit applies, as before.
+
 ## 0.5.0
 
 - `--help` ends with a link to the CLI's docs, for every command.

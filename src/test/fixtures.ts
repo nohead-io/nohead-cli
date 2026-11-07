@@ -163,6 +163,7 @@ export const ME = {
     published_only: false,
     project_id: PROJECT_ID,
     expires_at: null,
+    collections: null,
   },
 }
 
