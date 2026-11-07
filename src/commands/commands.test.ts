@@ -1264,6 +1264,155 @@ describe("schema push", () => {
   })
 })
 
+describe("schema push: a relation into a collection the push creates", () => {
+  const CATEGORIES_ID = "col_01J9ZQ3F8X5W2K7M4N6P0CATEG"
+  const category = field({
+    key: "category",
+    name: "Category",
+    type: "json",
+    position: 1,
+  })
+  const posts = collection({
+    fields: [field({ key: "title", name: "Title", required: true }), category],
+  })
+  const schema = [
+    "collections:",
+    "  categories:",
+    "    fields:",
+    "      name: text",
+    "  posts:",
+    "    fields:",
+    "      title: { type: text, required: true }",
+    "      category: { type: relation, collection: categories }",
+    "",
+  ].join("\n")
+  const definition = {
+    configuration: {},
+    multiple: false,
+    required: false,
+  } as const
+  const setup = (requests: string[], sent: Record<string, unknown>[] = []) =>
+    testRuntime({
+      files: { "nohead.schema.yaml": schema },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([posts])),
+        [`POST /v1/projects/${PROJECT_ID}/collections`]: () => {
+          requests.push("create categories")
+          return contractResponse(
+            "collections_create",
+            collection({
+              id: CATEGORIES_ID,
+              name: "Categories",
+              slug: "categories",
+              fields: [field({ key: "name", collection_id: CATEGORIES_ID })],
+            }),
+            { status: 201 }
+          )
+        },
+        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: async (
+          request
+        ) => {
+          const migration = await body(request)
+          sent.push(migration)
+          requests.push(migration.dry_run ? "dry run" : "migrate")
+          return contractResponse(
+            "migrations_create",
+            {
+              id: "mig_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+              object: "field_migration",
+              collection_id: COLLECTION_ID,
+              field_id: category.id,
+              status: "complete",
+              from: { ...definition, type: "json" },
+              to: {
+                ...definition,
+                type: "relation",
+                configuration: { target_collection_id: CATEGORIES_ID },
+              },
+              backfill: null,
+              on_invalid: "clear",
+              time_zone: null,
+              records: {
+                total: 2,
+                unchanged: 1,
+                converted: 0,
+                backfilled: 0,
+                cleared: 1,
+                invalid: 0,
+              },
+              failure: null,
+              schema_change_id: "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+              cancel_requested_at: null,
+              actor: {
+                type: "api_key",
+                id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                name: "ci",
+              },
+              via: "cli",
+              note: null,
+              request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+              created_at: NOW,
+              started_at: NOW,
+              completed_at: NOW,
+            },
+            { status: 202 }
+          )
+        },
+      },
+    })
+
+  it("diff says the migration waits for the new collection", async () => {
+    const requests: string[] = []
+    const t = setup(requests)
+
+    await t.ok(["schema", "diff", "nohead.schema.yaml"])
+    expect(requests).toEqual([])
+    expect(t.out()).toContain("+ collection categories")
+    expect(t.out()).toContain(
+      'posts.category: migrates to a relation into "categories", which this push creates'
+    )
+  })
+
+  it("push refuses before changing anything without --clear-invalid", async () => {
+    const requests: string[] = []
+    const t = setup(requests)
+
+    expect(
+      await run(
+        ["schema", "push", "nohead.schema.yaml", "--yes", "--allow-migrations"],
+        t.runtime
+      )
+    ).toBe(ExitCode.ApiError)
+    expect(requests).toEqual([])
+    expect(t.err()).toContain("(push with --clear-invalid)")
+    expect(t.err()).toContain("Nothing was changed.")
+  })
+
+  it("push creates the collection, then migrates the field into it", async () => {
+    const requests: string[] = []
+    const sent: Record<string, unknown>[] = []
+    const t = setup(requests, sent)
+
+    await t.ok([
+      "schema",
+      "push",
+      "nohead.schema.yaml",
+      "--yes",
+      "--allow-migrations",
+      "--clear-invalid",
+    ])
+    expect(requests).toEqual(["create categories", "migrate"])
+    expect(sent[0]).toMatchObject({
+      field_id: category.id,
+      type: "relation",
+      configuration: { target_collection_id: CATEGORIES_ID },
+      on_invalid: "clear",
+    })
+  })
+})
+
 describe("flags", () => {
   it("lists feature flags for the key's context", async () => {
     const t = testRuntime({
