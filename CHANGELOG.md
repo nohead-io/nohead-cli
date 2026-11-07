@@ -7,6 +7,11 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `nohead import` uploads each file with its alt text, instead of setting it
+  in a second request.
+
 ## 0.6.0
 
 - `nohead schema push` and `diff` handle a field migrated to a relation into

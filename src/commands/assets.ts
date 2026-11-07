@@ -35,14 +35,23 @@ const transferTimeout = (bytes: number) => Math.max(60_000, bytes / 64)
  */
 export async function uploadAsset(
   ctx: CommandContext,
-  file: { bytes: Uint8Array; filename: string; contentType: string },
+  file: {
+    bytes: Uint8Array
+    filename: string
+    contentType: string
+    alt?: string | null
+  },
   idempotencyKey?: string
 ): Promise<Asset> {
   const api = await ctx.project()
   return unwrap(
     api.assets.upload(
       new Uint8Array(file.bytes),
-      { filename: file.filename, content_type: file.contentType },
+      {
+        filename: file.filename,
+        content_type: file.contentType,
+        ...(file.alt && { alt: file.alt }),
+      },
       {
         ...ctx.writeOptions(idempotencyKey ?? null),
         timeout: transferTimeout(file.bytes.byteLength),

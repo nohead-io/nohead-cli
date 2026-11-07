@@ -2707,6 +2707,49 @@ describe("assets", () => {
     expect(t.requests).toHaveLength(0)
   })
 
+  it("imports an export's file with its alt text in the upload itself", async () => {
+    const exported = asset("ready")
+    const t = testRuntime({
+      files: {
+        "out/manifest.json": JSON.stringify({
+          format: "nohead-export",
+          version: 1,
+          exported_at: NOW,
+          api_url: "http://api.test",
+          project_id: PROJECT_ID,
+          include_history: false,
+          include_deleted: false,
+          include_files: true,
+          collections: [],
+        }),
+        "out/schema.yaml": "collections: {}\n",
+        "out/assets.jsonl": `${JSON.stringify({ ...exported, alt: "The spring menu" })}\n`,
+        [`out/assets/${exported.id}`]: new Uint8Array([1, 2, 3]),
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([])),
+        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
+          contractResponse("assets_upload", pendingUpload, { status: 201 }),
+        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+          contractResponse("assets_get", asset("pending")),
+        "PUT /bucket/key": () => new Response(null, { status: 200 }),
+        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
+          contractResponse("assets_complete", asset("ready")),
+      },
+    })
+
+    await t.ok(["import", "out"])
+
+    const upload = t.requests.find((r) =>
+      r.url.endsWith(`/projects/${PROJECT_ID}/assets`)
+    )
+    expect(await body(upload!)).toMatchObject({ alt: "The spring menu" })
+    // No separate update to set it.
+    expect(t.requests.filter((r) => r.method === "PATCH")).toHaveLength(0)
+  })
+
   it("uploads a file straight to storage, then completes it", async () => {
     let stored: Uint8Array | undefined
     const t = testRuntime({
