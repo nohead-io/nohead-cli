@@ -207,8 +207,8 @@ async function collectionRoom(
   const creating = todo.filter((c) => c.kind === "create_collection").length
   if (creating === 0) return undefined
   const me = await unwrap(ctx.api.me.get())
-  // Typed by the next SDK release; older APIs and other keys don't say.
-  const room = (me.api_key as { collections?: Room | null } | null)?.collections
+  // Null for a key without schema:write; an older API leaves it out.
+  const room = me.api_key?.collections
   return room ? { ...room, creating } : undefined
 }
 
