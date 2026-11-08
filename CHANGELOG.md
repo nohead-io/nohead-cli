@@ -16,7 +16,10 @@ release's section is its GitHub release's notes.
   at, and sets a relation when its record is created if the target exists
   already, so records with a required relation import (before, every
   relation waited for a second pass, and records with a required one were
-  refused). A record that fails shows the API's field errors.
+  refused). A required relation to a record later in the same collection, or
+  around a cycle of collections, still can't be set on create. A record that
+  fails shows the API's field errors, and `relinked` in `--json` output counts
+  records whose relations were set on create too.
 
 ## 0.8.0
 

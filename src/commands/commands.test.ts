@@ -4044,6 +4044,91 @@ describe("import", () => {
     expect(t.out()).toContain("(1 with relations, 2 published)")
   })
 
+  it("links a relation to a later record after creating it, then publishes", async () => {
+    const posts = collection({
+      fields: [
+        field({ key: "title", required: true }),
+        field({
+          key: "parent",
+          type: "relation",
+          configuration: { target_collection_id: COLLECTION_ID },
+        }),
+      ],
+    })
+    const NEW_A = "rec_01J9ZQ3F8X5W2K7M4N6P0NEWAA"
+    const NEW_B = "rec_01J9ZQ3F8X5W2K7M4N6P0NEWBB"
+    const t = testRuntime({
+      files: {
+        "out/manifest.json": JSON.stringify({
+          format: "nohead-export",
+          version: 1,
+          exported_at: NOW,
+          api_url: "http://api.test",
+          project_id: "prj_01J9ZQ3F8X5W2K7M4N6P0R1OLD",
+          include_history: false,
+          include_deleted: false,
+          collections: [{ slug: "posts", records: 2 }],
+        }),
+        "out/schema.yaml":
+          "collections:\n  posts:\n    name: Posts\n    fields:\n      title:\n        name: title\n        type: text\n        required: true\n      parent:\n        name: parent\n        type: relation\n        collection: posts\n",
+        // The child comes first and points at its parent, created after it.
+        "out/records/posts.jsonl": `${JSON.stringify(record(REC_A, { title: "Child", parent: REC_B }, { published_at: NOW }))}\n${JSON.stringify(record(REC_B, { title: "Parent", parent: null }, { published_at: NOW }))}\n`,
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([posts])),
+        [`POST /v1/collections/${COLLECTION_ID}/records`]: async (request) => {
+          const { data, publish } = await body(request)
+          return contractResponse(
+            "records_create",
+            record(data.title === "Child" ? NEW_A : NEW_B, data, {
+              published_at: publish ? NOW : null,
+            }),
+            { status: 201 }
+          )
+        },
+        [`PATCH /v1/records/${NEW_A}`]: async (request) =>
+          contractResponse(
+            "records_update",
+            record(NEW_A, { title: "Child", ...(await body(request)).data })
+          ),
+        [`POST /v1/records/${NEW_A}/publication`]: () =>
+          contractResponse(
+            "records_publish",
+            record(NEW_A, { title: "Child" }, { published_at: NOW })
+          ),
+      },
+    })
+
+    await t.ok(["import", "out"])
+
+    const writes = await Promise.all(
+      t.requests
+        .filter((r) => r.method !== "GET")
+        .map(async (r) => [
+          r.method,
+          new URL(r.url).pathname,
+          r.url.endsWith("/publication") ? null : await body(r),
+        ])
+    )
+    expect(writes).toEqual([
+      [
+        "POST",
+        `/v1/collections/${COLLECTION_ID}/records`,
+        { data: { title: "Child" } },
+      ],
+      [
+        "POST",
+        `/v1/collections/${COLLECTION_ID}/records`,
+        { data: { title: "Parent", parent: null }, publish: true },
+      ],
+      ["PATCH", `/v1/records/${NEW_A}`, { data: { parent: NEW_B } }],
+      ["POST", `/v1/records/${NEW_A}/publication`, null],
+    ])
+    expect(t.out()).toContain("(1 with relations, 2 published)")
+  })
+
   it("refuses asset IDs that would read files outside the export", async () => {
     const t = testRuntime({
       files: {
