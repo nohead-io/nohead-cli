@@ -2,7 +2,12 @@ import { Option, type Command } from "commander"
 
 import type { Field, FieldCreate, FieldUpdate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
-import { FIELD_TYPES, isFieldType, type FieldType } from "../field-types.ts"
+import {
+  configurationChange,
+  FIELD_TYPES,
+  isFieldType,
+  type FieldType,
+} from "../field-types.ts"
 import { unwrap, unwrapFind } from "../errors.ts"
 import { toFieldKey, usageError } from "../input.ts"
 import { printResult, table } from "../output.ts"
@@ -280,9 +285,13 @@ export function registerFields(
       if (options.key) body.key = options.key
       if (options.required) body.required = true
       if (options.optional) body.required = false
-      // The API replaces configuration wholesale; merge so unrelated options survive.
+      // The API merges a change onto the field's options; send only the
+      // options the flags change (null removes one), so the rest stay.
       if (Object.keys(config).length > 0)
-        body.configuration = mergeConfiguration(field.configuration, config)
+        body.configuration = configurationChange(
+          field.configuration,
+          mergeConfiguration(field.configuration, config)
+        )
       if (Object.keys(body).length === 0) throw usageError("Nothing to update")
 
       const result = await unwrap(

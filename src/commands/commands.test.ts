@@ -242,7 +242,7 @@ describe("fields", () => {
     }
   })
 
-  it("updates a field by API key, merging configuration", async () => {
+  it("updates a field by API key, sending only the options that change", async () => {
     const title = field({
       key: "title",
       configuration: { description: "Shown in lists" },
@@ -270,7 +270,8 @@ describe("fields", () => {
     expect(await body(t.requests[1])).toEqual({
       name: "Headline",
       required: true,
-      configuration: { description: "Shown in lists", max_length: 80 },
+      // The API keeps the description: it merges the change onto the options.
+      configuration: { max_length: 80 },
     })
   })
 
@@ -289,8 +290,9 @@ describe("fields", () => {
     })
 
     await t.ok(["fields", "update", "posts", "handle", "--format", "email"])
+    // A format sets its own lengths: the old one is removed (null).
     expect(await body(t.requests[1])).toEqual({
-      configuration: { format: "email" },
+      configuration: { format: "email", max_length: null },
     })
 
     const email = {
@@ -306,8 +308,9 @@ describe("fields", () => {
       },
     })
     await u.ok(["fields", "update", "posts", "handle", "--no-format"])
+    // unique stays: only the format is removed.
     expect(await body(u.requests[1])).toEqual({
-      configuration: { unique: true },
+      configuration: { format: null },
     })
   })
 
@@ -389,7 +392,8 @@ describe("fields", () => {
     ])
     expect(await body(t.requests[2])).toEqual({
       field_id: starts.id,
-      configuration: { description: "Doors open" },
+      // The description stays: only the time and its zone are removed.
+      configuration: { include_time: null, time_zone: null },
       time_zone: "America/New_York",
       on_invalid: "fail",
     })

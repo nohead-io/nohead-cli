@@ -1,5 +1,5 @@
 import type { Collection } from "@nohead/sdk"
-import type { FieldType } from "../field-types.ts"
+import { configurationChange, type FieldType } from "../field-types.ts"
 import type { CollectionSpec, FieldSpec } from "./format.ts"
 
 /**
@@ -31,6 +31,7 @@ export type Change =
         key?: string
         name?: string
         required?: boolean
+        /** The options that change (null removes one), as the API merges them. */
         options?: Record<string, unknown>
       }
       /** The field as the file describes it. */
@@ -41,7 +42,12 @@ export type Change =
       slug: string
       field_id: string
       key: string
-      from: { type: FieldType; multiple: boolean; include_time?: boolean }
+      from: {
+        type: FieldType
+        multiple: boolean
+        include_time?: boolean
+        options: Record<string, unknown>
+      }
       to: FieldSpec
     }
   | {
@@ -177,6 +183,7 @@ export function planChanges(
             type: have.type,
             multiple: have.multiple,
             include_time: have.options.include_time === true,
+            options: have.options,
           },
           to: field,
         })
@@ -191,7 +198,7 @@ export function planChanges(
       if (field.name !== have.name) update.name = field.name
       if (field.required !== have.required) update.required = field.required
       if (normalize(field.options) !== normalize(have.options))
-        update.options = field.options
+        update.options = configurationChange(have.options, field.options)
       if (Object.keys(update).length > 0)
         changes.push({
           kind: "update_field",

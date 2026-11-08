@@ -22,6 +22,7 @@ import {
   type Change,
 } from "../schema/plan.ts"
 import { counts, waitFor } from "./migrations.ts"
+import { configurationChange, keptOptions } from "../field-types.ts"
 
 const DEFAULT_FILE = "nohead.schema.yaml"
 
@@ -61,27 +62,40 @@ function fieldIdsOf(collections: Collection[]): FieldIds {
   )
 }
 
-/** A field spec as an API field definition; relation targets resolve slug -> ID. */
-function fieldBody(field: FieldSpec, ids: Map<string, string>): FieldCreate {
-  const { collection, ...rest } = field.options
+/**
+ * A field's options as the API's configuration: a relation's target
+ * collection resolves slug -> ID (null, when an option is removed, stays).
+ */
+function apiOptions(
+  options: Record<string, unknown>,
+  ids: Map<string, string>,
+  key: string
+): Record<string, unknown> {
+  const { collection, ...rest } = options
   const configuration: Record<string, unknown> = { ...rest }
-  if (typeof collection === "string") {
+  if (collection === null) configuration.target_collection_id = null
+  else if (typeof collection === "string") {
     const target =
       ids.get(collection) ??
       (collection.startsWith("col_") ? collection : undefined)
     if (!target)
       throw usageError(
-        `Field ${field.key}: no collection "${collection}" in the project or the file`
+        `Field ${key}: no collection "${collection}" in the project or the file`
       )
     configuration.target_collection_id = target
   }
+  return configuration
+}
+
+/** A field spec as an API field definition. */
+function fieldBody(field: FieldSpec, ids: Map<string, string>): FieldCreate {
   return {
     name: field.name,
     key: field.key,
     type: field.type,
     required: field.required,
     multiple: field.multiple,
-    configuration,
+    configuration: apiOptions(field.options, ids, field.key),
   } as FieldCreate // any type's options; the API checks them against the type
 }
 
@@ -97,12 +111,21 @@ function migrationBody(
   ids: Map<string, string>,
   clearInvalid: boolean
 ) {
-  const { type, multiple, required, configuration } = fieldBody(change.to, ids)
+  const { type, multiple, required } = fieldBody(change.to, ids)
+  // The API merges the change onto the options the field keeps: all of
+  // them, or, for a type change, the ones every type has.
+  const options =
+    change.kind === "migrate_field"
+      ? configurationChange(
+          keptOptions(change.from.options, change.from.type, change.to.type),
+          change.to.options
+        )
+      : (change.changes.options ?? {})
   return {
     type,
     multiple,
     required,
-    configuration,
+    configuration: apiOptions(options, ids, change.to.key),
     on_invalid: clearInvalid ? ("clear" as const) : ("fail" as const),
   }
 }
@@ -370,17 +393,7 @@ export async function applyPlan(
       case "update_field": {
         const { key, name, required, options: fieldOptions } = change.changes
         const configuration = fieldOptions
-          ? fieldBody(
-              {
-                key: change.key,
-                name: "",
-                type: "text",
-                required: false,
-                multiple: false,
-                options: fieldOptions,
-              },
-              ids
-            ).configuration
+          ? apiOptions(fieldOptions, ids, change.key)
           : undefined
         await unwrap(
           ctx.api.fields.update(

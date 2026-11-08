@@ -21,6 +21,7 @@ import {
   withConfigFlags,
   type ConfigOptions,
 } from "./fields.ts"
+import { configurationChange, keptOptions } from "../field-types.ts"
 
 // Small migrations finish within a second: poll soon, then back off to once a
 // second.
@@ -204,12 +205,19 @@ export function registerMigrations(
       if (options.single) body.multiple = false
       if (options.required) body.required = true
       if (options.optional) body.required = false
-      if (Object.keys(config).length > 0)
-        // A type change starts from a clean configuration; otherwise merge.
-        body.configuration = mergeConfiguration(
-          body.type ? {} : field.configuration,
-          config
+      if (Object.keys(config).length > 0) {
+        // The API merges the change onto the options the field keeps: all of
+        // them, or, for a type change, the ones every type has.
+        const kept = keptOptions(
+          field.configuration,
+          field.type,
+          body.type ?? field.type
         )
+        body.configuration = configurationChange(
+          kept,
+          mergeConfiguration(kept, config)
+        )
+      }
       const value = backfill(options)
       if (value !== undefined) body.backfill = value
       if (options.daysIn !== undefined) body.time_zone = options.daysIn

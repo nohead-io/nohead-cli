@@ -4976,7 +4976,7 @@
         "name": "Idempotency-Key",
         "in": "header",
         "required": false,
-        "description": "A unique value (1-255 printable ASCII characters) that makes retrying\nthis request safe. The first response (below 500) is stored for 24\nhours per user or API key; retries with the same key and the same\nrequest get it again with an `Idempotent-Replayed: true` header. The\nsame key with a different request is refused with `400`; a retry while\nthe first request is still running gets `409`.\n",
+        "description": "A unique value (1-255 printable ASCII characters) that makes retrying\nthis request safe. The first response (below 500) is stored for 24\nhours per user or API key; retries with the same key and the same\nrequest get it again with an `Idempotent-Replayed: true` header. The\nsame key with a different request is refused with `400`; a retry while\nthe first request is still running gets `409` with detail code\n`in_progress`: wait a moment and retry with the same key.\n",
         "schema": {
           "type": "string",
           "minLength": 1,
@@ -6302,9 +6302,14 @@
             "description": "Every record must have a value. Not available for boolean fields (a boolean is true or false; no value reads as false)."
           },
           "configuration": {
-            "$ref": "#/components/schemas/FieldConfiguration"
+            "$ref": "#/components/schemas/FieldConfigurationChange"
           }
         }
+      },
+      "FieldConfigurationChange": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "Options to change, merged onto the field's: an option sent replaces\nits value, one sent as `null` is removed, and options left out keep\ntheirs. So `{ \"filterable\": true }` changes one option and keeps the\nrest, and `{ \"max_length\": null }` removes the limit. The options are\nthe field type's (`FieldConfiguration`), checked against it after the\nmerge.\n"
       },
       "FieldList": {
         "type": "object",
@@ -6790,8 +6795,8 @@
             "$ref": "#/components/schemas/FieldType"
           },
           "configuration": {
-            "description": "The complete new configuration. When the type changes and this is omitted, only `description`, `searchable`, `filterable` and `sortable` carry over.",
-            "$ref": "#/components/schemas/FieldConfiguration"
+            "description": "Options to change, merged as a field update merges them (`null` removes one). They merge onto the field's own options, or, when the type changes, onto the ones every type shares (`description`, `searchable`, `filterable` and `sortable`), the only ones that carry over.",
+            "$ref": "#/components/schemas/FieldConfigurationChange"
           },
           "multiple": {
             "type": "boolean",
