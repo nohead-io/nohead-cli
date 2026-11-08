@@ -1283,6 +1283,72 @@ describe("schema push", () => {
     expect(t.err()).toContain("cannot be converted")
   })
 
+  it("migrates with only the options that change, as the API merges them", async () => {
+    let sent: Record<string, unknown> = {}
+    const short = field({
+      key: "code",
+      name: "Code",
+      position: 1,
+      configuration: { max_length: 8, description: "Short" },
+    })
+    const definition = {
+      type: "text",
+      configuration: short.configuration,
+      multiple: false,
+      required: false,
+    } as const
+    const t = testRuntime({
+      files: {
+        "nohead.schema.yaml":
+          "collections:\n  posts:\n    fields:\n      title: { type: text, required: true }\n      code: { type: long_text, description: Short }\n",
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse(
+            "collections_list",
+            page([collection({ fields: [title, short] })])
+          ),
+        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: async (
+          request
+        ) => {
+          sent = await body(request)
+          return contractResponse("migrations_create", {
+            object: "field_migration_preview",
+            field_id: short.id,
+            from: definition,
+            to: {
+              ...definition,
+              type: "long_text",
+              configuration: { description: "Short" },
+            },
+            conversion: "conditional",
+            records: {
+              total: 1,
+              unchanged: 0,
+              converted: 0,
+              backfilled: 0,
+              cleared: 0,
+              invalid: 1,
+            },
+            samples: [],
+          })
+        },
+      },
+    })
+
+    await run(
+      ["schema", "push", "nohead.schema.yaml", "--yes", "--allow-migrations"],
+      t.runtime
+    )
+    // The description carries over as it is; the length the file drops goes.
+    expect(sent).toMatchObject({
+      type: "long_text",
+      configuration: { max_length: null },
+    })
+    expect(Object.keys(sent.configuration as object)).toEqual(["max_length"])
+  })
+
   it("asks for another push when the fields changed during it", async () => {
     const t = push(() =>
       contractResponse(

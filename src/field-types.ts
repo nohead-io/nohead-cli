@@ -23,14 +23,6 @@ export const FIELD_TYPES = Object.keys(TYPES) as FieldType[]
 export const isFieldType = (value: string): value is FieldType =>
   Object.hasOwn(TYPES, value)
 
-/** The options every field type has: the only ones a type change keeps. */
-export const COMMON_OPTIONS = [
-  "description",
-  "searchable",
-  "filterable",
-  "sortable",
-] as const
-
 const absent = (value: unknown) =>
   value === undefined || value === null || value === ""
 
@@ -39,8 +31,8 @@ const absent = (value: unknown) =>
  * onto them: each option that differs, and null for each one `next` leaves
  * out, which removes it. Unchanged options aren't sent, so a change made
  * meanwhile (the web app, another run) to an option this one doesn't touch
- * stays. `current` is what the API merges onto: the field's options, or,
- * for a type change, only its COMMON_OPTIONS.
+ * stays. A migration merges the same way, onto the options that carry over
+ * to its target.
  */
 export function configurationChange(
   current: Record<string, unknown>,
@@ -56,18 +48,4 @@ export function configurationChange(
   for (const [key, value] of Object.entries(current))
     if (!absent(value) && absent(next[key])) change[key] = null
   return change
-}
-
-/** The options a field keeps through a migration to `type`. */
-export function keptOptions(
-  options: Record<string, unknown>,
-  fromType: string,
-  toType: string
-): Record<string, unknown> {
-  if (fromType === toType) return options
-  return Object.fromEntries(
-    Object.entries(options).filter(([key]) =>
-      (COMMON_OPTIONS as readonly string[]).includes(key)
-    )
-  )
 }

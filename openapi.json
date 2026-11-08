@@ -6308,8 +6308,121 @@
       },
       "FieldConfigurationChange": {
         "type": "object",
-        "additionalProperties": true,
-        "description": "Options to change, merged onto the field's: an option sent replaces\nits value, one sent as `null` is removed, and options left out keep\ntheirs. So `{ \"filterable\": true }` changes one option and keeps the\nrest, and `{ \"max_length\": null }` removes the limit. The options are\nthe field type's (`FieldConfiguration`), checked against it after the\nmerge.\n"
+        "additionalProperties": false,
+        "description": "Options to change, merged onto the field's: an option sent replaces\nits value, one sent as `null` is removed, and options left out keep\ntheirs. So `{ \"filterable\": true }` changes one option and keeps the\nrest, and `{ \"max_length\": null }` removes the limit. Any field\ntype's option names are accepted here; the merged options are\nchecked against the field's type (`FieldConfiguration`).\n",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "searchable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "filterable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sortable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "min_length": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "max_length": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "slug",
+              "url",
+              "email",
+              null
+            ]
+          },
+          "unique": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "min": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "include_time": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "time_zone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 1,
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "accepted_types": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_collection_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "FieldList": {
         "type": "object",
@@ -6795,7 +6908,7 @@
             "$ref": "#/components/schemas/FieldType"
           },
           "configuration": {
-            "description": "Options to change, merged as a field update merges them (`null` removes one). They merge onto the field's own options, or, when the type changes, onto the ones every type shares (`description`, `searchable`, `filterable` and `sortable`), the only ones that carry over.",
+            "description": "Options to change, merged as a field update merges them (`null` removes\none). They merge onto the field's options that carry over to the target:\nthose its type takes, with a value it accepts (a text field's\n`max_length` carries over to a long text, its `format` doesn't), less\n`sortable` and `filterable` where the target can't have them. Without\nit, those options are the target's.\n",
             "$ref": "#/components/schemas/FieldConfigurationChange"
           },
           "multiple": {

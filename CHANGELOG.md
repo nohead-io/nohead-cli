@@ -14,6 +14,8 @@ release's section is its GitHub release's notes.
   removed, as the API now merges a field's configuration. An option changed
   meanwhile in the web app, and not by this command, stays as it is. Needs
   the API with merged configurations.
+- `schema diff` and `schema push` show a field's options as that change: only
+  the ones that differ, with `null` for each one the file removes.
 
 ## 0.7.0
 

@@ -22,7 +22,7 @@ import {
   type Change,
 } from "../schema/plan.ts"
 import { counts, waitFor } from "./migrations.ts"
-import { configurationChange, keptOptions } from "../field-types.ts"
+import { configurationChange } from "../field-types.ts"
 
 const DEFAULT_FILE = "nohead.schema.yaml"
 
@@ -112,14 +112,10 @@ function migrationBody(
   clearInvalid: boolean
 ) {
   const { type, multiple, required } = fieldBody(change.to, ids)
-  // The API merges the change onto the options the field keeps: all of
-  // them, or, for a type change, the ones every type has.
+  // The API merges the change onto the options that carry over.
   const options =
     change.kind === "migrate_field"
-      ? configurationChange(
-          keptOptions(change.from.options, change.from.type, change.to.type),
-          change.to.options
-        )
+      ? configurationChange(change.from.options, change.to.options)
       : (change.changes.options ?? {})
   return {
     type,
