@@ -7,7 +7,7 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.8.0
 
 - Field updates and migrations (`fields update`, `fields migrate`,
   `schema push`) send only the options that change, and `null` for each one
