@@ -8195,7 +8195,7 @@
                       "usage",
                       "limit"
                     ],
-                    "description": "The organization's active collections, across all its\nprojects, and how many its plan allows, so a client can\ncheck that new collections fit before creating any.\nCreating one past the limit is `402 plan_limit_exceeded`.\nNull for a key without `schema:write`.\n",
+                    "description": "The key's project's active collections, and how many its\nplan allows in one project, so a client can check that new\ncollections fit before creating any. Creating one past the\nlimit is `402 plan_limit_exceeded`. Null for a key without\n`schema:write`.\n",
                     "properties": {
                       "usage": {
                         "type": "integer"
