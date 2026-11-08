@@ -392,7 +392,12 @@ export function registerPortability(
               ]
             : []),
           ...result.failed.map(
-            (f) => `  ${f.collection} ${f.record}: ${f.error.message}`
+            (f) =>
+              `  ${f.collection} ${f.record}: ${f.error.message}${(
+                f.error.details ?? []
+              )
+                .map((d) => `; ${d.field ? `${d.field}: ` : ""}${d.message}`)
+                .join("")}`
           ),
         ].join("\n")
       )
@@ -603,28 +608,84 @@ function importedValues(
 }
 
 /**
+ * The collections in the order to create their records: each after the
+ * collections its relations point at, so a required relation can be set when
+ * its record is created. Otherwise the export's order stays; a
+ * self-reference, or one link in a cycle, waits for the relations pass.
+ */
+export function creationOrder(
+  slugs: string[],
+  schema: CollectionSpec[]
+): string[] {
+  const targets = (slug: string) =>
+    (schema.find((c) => c.slug === slug)?.fields ?? [])
+      .filter((field) => field.type === "relation")
+      .map((field) => String(field.options.collection))
+      .filter((target) => target !== slug && slugs.includes(target))
+  const ordered: string[] = []
+  const visiting = new Set<string>()
+  const visit = (slug: string) => {
+    if (ordered.includes(slug) || visiting.has(slug)) return
+    visiting.add(slug)
+    targets(slug).forEach(visit)
+    visiting.delete(slug)
+    ordered.push(slug)
+  }
+  slugs.forEach(visit)
+  return ordered
+}
+
+/**
+ * A record's relation values split by when they can be set: `now`, mapped to
+ * the created records, when every target is created already (or the value is
+ * empty), and `later`, the fields with a target still to come, set by the
+ * relations pass. Targets that weren't exported are left out, as they are
+ * then.
+ */
+export function relationsAtCreate(
+  data: RecordData,
+  kinds: FieldKinds,
+  created: Map<string, string>,
+  exported: Set<string>
+): { now: RecordData; later: string[] } {
+  const now: RecordData = {}
+  const later: string[] = []
+  for (const field of kinds.relations) {
+    const value = data[field]
+    if (value === undefined) continue
+    const ids = (Array.isArray(value) ? value : [value]).filter(
+      (id) => id != null
+    )
+    if (ids.some((id) => exported.has(String(id)) && !created.has(String(id))))
+      later.push(field)
+    else
+      Object.assign(
+        now,
+        importedValues({ [field]: value }, kinds, new Map(), created).data
+      )
+  }
+  return { now, later }
+}
+
+/**
  * Whether an exported record can be created published: live, not deleted,
  * and with no relation values to set afterwards (which would change it
  * while live).
  */
 export function publishesOnCreate(
   record: RecordModel,
-  kinds: FieldKinds
+  later: string[]
 ): boolean {
-  const linked = (value: unknown) =>
-    Array.isArray(value) ? value.length > 0 : value != null
-  return (
-    !!record.published_at &&
-    !record.deleted_at &&
-    !kinds.relations.some((field) => linked(record.data[field]))
-  )
+  return !!record.published_at && !record.deleted_at && later.length === 0
 }
 
 /**
- * Records in three passes, so relations can point at records created later:
- * create each record without its relation values, then set relations with
- * the new IDs, then publish and delete as exported. A published record with
- * no relations to set, and not deleted, is created published in one request.
+ * Records in three passes. Collections go in creationOrder, and each record
+ * is created with the relation values whose targets exist already (so
+ * required relations work); then the relations that point at records created
+ * later are set with the new IDs; then records are published and deleted as
+ * exported. A published record with no relations left to set, and not
+ * deleted, is created published in one request.
  * Drafts come last, on the created records: each starts from the fields it
  * changes, so its `base_revision` is the imported record's, and a merge still
  * to come is scheduled again. Every request carries an Idempotency-Key
@@ -667,7 +728,17 @@ async function importContent(
     }
   }
 
-  for (const { slug } of manifest.collections) {
+  const exportedIds = new Set(
+    [...exported.values()].flatMap(({ records }) => records.map((r) => r.id))
+  )
+  // Exported record ID -> the relation fields still to set on its copy.
+  const deferred = new Map<string, string[]>()
+  // Records whose copies got relation values, on create or afterwards.
+  const linked = new Set<string>()
+  const filled = (value: unknown) =>
+    Array.isArray(value) ? value.length > 0 : value != null
+  const slugs = manifest.collections.map((c) => c.slug)
+  for (const slug of creationOrder(slugs, schema)) {
     const spec = schema.find((c) => c.slug === slug)
     const collectionId = collectionIds.get(slug)
     const content = exported.get(slug)
@@ -678,31 +749,39 @@ async function importContent(
     for (const record of content.records) {
       const { data, dropped } = importedValues(record.data, kinds, assetIds)
       droppedAssets += dropped
-      const publish = publishesOnCreate(record, kinds)
+      const { now, later } = relationsAtCreate(
+        record.data,
+        kinds,
+        created,
+        exportedIds
+      )
+      const publish = publishesOnCreate(record, later)
       await attempt(slug, record.id, async () => {
         const copy = await unwrap(
           ctx.api.records.create(
             collectionId,
-            { data, ...(publish && { publish }) },
+            { data: { ...data, ...now }, ...(publish && { publish }) },
             writes(record.id, "create")
           )
         )
         created.set(record.id, copy.id)
         if (publish) publishedOnCreate.add(record.id)
+        if (later.length > 0) deferred.set(record.id, later)
+        if (Object.values(now).some(filled)) linked.add(record.id)
       })
     }
   }
 
-  let relinked = 0
   let published = publishedOnCreate.size
   for (const { slug, kinds, records } of loaded) {
     for (const record of records) {
       const copy = created.get(record.id)
       if (!copy || publishedOnCreate.has(record.id)) continue
       const relations = Object.fromEntries(
-        kinds.relations
-          .filter((field) => record.data[field] !== undefined)
-          .map((field) => [field, record.data[field]])
+        (deferred.get(record.id) ?? []).map((field) => [
+          field,
+          record.data[field],
+        ])
       )
       const { data: links } = importedValues(
         relations,
@@ -722,7 +801,7 @@ async function importContent(
           )
         ))
       )
-        relinked++
+        linked.add(record.id)
       if (
         record.published_at &&
         (await attempt(slug, record.id, () =>
@@ -779,7 +858,7 @@ async function importContent(
   return {
     collections: loaded.length,
     created: created.size,
-    relinked,
+    relinked: linked.size,
     published,
     drafts,
     droppedAssets,

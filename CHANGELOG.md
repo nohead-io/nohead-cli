@@ -12,6 +12,14 @@ release's section is its GitHub release's notes.
 - `schema diff` and `schema push` count the plan's collections per project,
   as the API now limits them: "Your plan allows 5 collections per project, and
   this project has room for 1". Before, they counted the whole organization.
+- `nohead import` creates each collection after the ones its relations point
+  at, and sets a relation when its record is created if the target exists
+  already, so records with a required relation import (before, every
+  relation waited for a second pass, and records with a required one were
+  refused). A required relation to a record later in the same collection, or
+  around a cycle of collections, still can't be set on create. A record that
+  fails shows the API's field errors, and `relinked` in `--json` output counts
+  records whose relations were set on create too.
 
 ## 0.8.0
 
