@@ -3956,6 +3956,94 @@ describe("import", () => {
     expect(t.out()).toContain("(0 with relations, 1 published)")
   })
 
+  it("creates relation targets first and sets a required relation on create", async () => {
+    const PEOPLE_ID = "col_01J9ZQ3F8X5W2K7M4N6P0PEOPL"
+    const PERSON = "rec_01J9ZQ3F8X5W2K7M4N6P0PERSN"
+    const NEW_PERSON = "rec_01J9ZQ3F8X5W2K7M4N6P0NEWPR"
+    const posts = collection({
+      fields: [
+        field({ key: "title", required: true }),
+        field({
+          key: "author",
+          type: "relation",
+          required: true,
+          configuration: { target_collection_id: PEOPLE_ID },
+        }),
+      ],
+    })
+    const people = collection({
+      id: PEOPLE_ID,
+      name: "People",
+      slug: "people",
+      fields: [
+        field({ key: "name", required: true, collection_id: PEOPLE_ID }),
+      ],
+    })
+    const t = testRuntime({
+      files: {
+        "out/manifest.json": JSON.stringify({
+          format: "nohead-export",
+          version: 1,
+          exported_at: NOW,
+          api_url: "http://api.test",
+          project_id: "prj_01J9ZQ3F8X5W2K7M4N6P0R1OLD",
+          include_history: false,
+          include_deleted: false,
+          // Posts first, as an export may list them.
+          collections: [
+            { slug: "posts", records: 1 },
+            { slug: "people", records: 1 },
+          ],
+        }),
+        "out/schema.yaml":
+          "collections:\n  posts:\n    name: Posts\n    fields:\n      title:\n        name: title\n        type: text\n        required: true\n      author:\n        name: author\n        type: relation\n        collection: people\n        required: true\n  people:\n    name: People\n    fields:\n      name:\n        name: name\n        type: text\n        required: true\n",
+        "out/records/posts.jsonl": `${JSON.stringify(record(REC_A, { title: "Hi", author: PERSON }, { published_at: NOW }))}\n`,
+        "out/records/people.jsonl": `${JSON.stringify(record(PERSON, { name: "Leela" }, { published_at: NOW, collection: "people", collection_id: PEOPLE_ID }))}\n`,
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([posts, people])),
+        [`POST /v1/collections/${PEOPLE_ID}/records`]: async (request) =>
+          contractResponse(
+            "records_create",
+            record(NEW_PERSON, (await body(request)).data, {
+              published_at: NOW,
+              collection: "people",
+              collection_id: PEOPLE_ID,
+            }),
+            { status: 201 }
+          ),
+        [`POST /v1/collections/${COLLECTION_ID}/records`]: async (request) =>
+          contractResponse(
+            "records_create",
+            record(REC_B, (await body(request)).data, { published_at: NOW }),
+            { status: 201 }
+          ),
+      },
+    })
+
+    await t.ok(["import", "out"])
+
+    const creates = await Promise.all(
+      t.requests
+        .filter((r) => r.method === "POST")
+        .map(async (r) => [new URL(r.url).pathname, await body(r)])
+    )
+    expect(creates).toEqual([
+      [
+        `/v1/collections/${PEOPLE_ID}/records`,
+        { data: { name: "Leela" }, publish: true },
+      ],
+      [
+        `/v1/collections/${COLLECTION_ID}/records`,
+        { data: { title: "Hi", author: NEW_PERSON }, publish: true },
+      ],
+    ])
+    expect(t.requests.some((r) => r.method === "PATCH")).toBe(false)
+    expect(t.out()).toContain("(1 with relations, 2 published)")
+  })
+
   it("refuses asset IDs that would read files outside the export", async () => {
     const t = testRuntime({
       files: {
