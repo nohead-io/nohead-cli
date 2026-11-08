@@ -113,6 +113,31 @@ collections:
     ])
   })
 
+  it("changes only the options that differ, and removes the ones the file leaves out", () => {
+    const limited = collection({
+      slug: "posts",
+      fields: [
+        field({
+          key: "title",
+          name: "Title",
+          configuration: { max_length: 120, filterable: true },
+        }),
+      ],
+    })
+    expect(
+      planChanges(
+        fromYaml(
+          "collections:\n  posts:\n    fields:\n      title: { type: text, required: false, filterable: true, sortable: true }\n",
+          "schema.yaml"
+        ),
+        fromCollections([limited]),
+        [limited]
+      ).map(describeChange)
+    ).toEqual([
+      '~ field posts.title: options {"sortable":true,"max_length":null}',
+    ])
+  })
+
   it("includes collections in public search, and takes them out", () => {
     const public_ = [authors, { ...posts, public_search: true }]
     const yaml = toYaml(fromCollections(public_))
@@ -355,7 +380,8 @@ describe("date fields in schema files", () => {
         )
       ).map(describeChange)
     ).toEqual([
-      '~ field events.starts: options {"include_time":true,"time_zone":"Europe/Copenhagen"}',
+      // Only the option that changes: the time was already on.
+      '~ field events.starts: options {"time_zone":"Europe/Copenhagen"}',
     ])
   })
 })
