@@ -1,7 +1,6 @@
 import { basename } from "node:path"
 
 import { Option, type Command } from "commander"
-import mime from "mime"
 
 import type { Asset, AssetKind } from "@nohead/sdk"
 import { imageUrl } from "@nohead/sdk/images"
@@ -10,11 +9,6 @@ import { CliError, ExitCode, storageUnreachable, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printNotice, printResult, table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
-
-/** The file's type by its extension, for example image/png for cover.png. */
-export function contentTypeFor(path: string): string {
-  return mime.getType(path) ?? "application/octet-stream"
-}
 
 function size(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -38,7 +32,8 @@ export async function uploadAsset(
   file: {
     bytes: Uint8Array
     filename: string
-    contentType: string
+    /** Without one, the API types the file by its filename, as for every client. */
+    contentType?: string
     alt?: string | null
   },
   idempotencyKey?: string
@@ -49,7 +44,7 @@ export async function uploadAsset(
       new Uint8Array(file.bytes),
       {
         filename: file.filename,
-        content_type: file.contentType,
+        ...(file.contentType && { content_type: file.contentType }),
         ...(file.alt && { alt: file.alt }),
       },
       {
@@ -201,7 +196,7 @@ export function registerAssets(
           const asset = await uploadAsset(ctx, {
             bytes,
             filename: basename(path),
-            contentType: options.contentType ?? contentTypeFor(path),
+            contentType: options.contentType,
             alt: options.alt,
           })
           printNotice(ctx, `Uploaded ${asset.filename}`)
