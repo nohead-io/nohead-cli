@@ -16,6 +16,10 @@ release's section is its GitHub release's notes.
   the API with merged configurations.
 - `schema diff` and `schema push` show a field's options as that change: only
   the ones that differ, with `null` for each one the file removes.
+- `assets upload` leaves a file's content type to the API unless
+  `--content-type` gives one: the API types it by its filename, the same for
+  every client, instead of the CLI's `mime` package. Needs `@nohead/sdk`
+  0.19.
 
 ## 0.7.0
 

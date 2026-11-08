@@ -2874,9 +2874,9 @@ describe("assets", () => {
 
     await t.ok(["assets", "upload", "cover.png"])
 
+    // The API types it by its name, and the PUT carries that type.
     expect(await body(t.requests[1])).toEqual({
       filename: "cover.png",
-      content_type: "image/png",
       byte_size: 3,
     })
     const put = t.requests.find((r) => r.method === "PUT")!
@@ -2884,6 +2884,42 @@ describe("assets", () => {
     expect(put.headers.get("Authorization")).toBeNull()
     expect(Array.from(stored!)).toEqual([1, 2, 3])
     expect(t.out().trim()).toBe("ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T")
+  })
+
+  it("leaves a file's type to the API, unless --content-type says", async () => {
+    const t = testRuntime({
+      files: {
+        "Clip.MOV": new Uint8Array([1]),
+        "notes.unknownext": new Uint8Array([2]),
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
+          contractResponse("assets_upload", pendingUpload, { status: 201 }),
+        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+          contractResponse("assets_get", asset("pending")),
+        "PUT /bucket/key": () => new Response(null, { status: 200 }),
+        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
+          contractResponse("assets_complete", asset("ready")),
+      },
+    })
+
+    await t.ok(["assets", "upload", "Clip.MOV", "notes.unknownext"])
+    await t.ok([
+      "assets",
+      "upload",
+      "notes.unknownext",
+      "--content-type",
+      "text/plain",
+    ])
+    const starts = t.requests.filter(
+      (r) => r.method === "POST" && r.url.endsWith("/assets")
+    )
+    const types = await Promise.all(
+      starts.map(async (r) => (await body(r)).content_type)
+    )
+    // The API types the first two by their names.
+    expect(types).toEqual([undefined, undefined, "text/plain"])
   })
 
   it("uploads a file with its alt text, one file at a time", async () => {
