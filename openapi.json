@@ -4976,7 +4976,7 @@
         "name": "Idempotency-Key",
         "in": "header",
         "required": false,
-        "description": "A unique value (1-255 printable ASCII characters) that makes retrying\nthis request safe. The first response (below 500) is stored for 24\nhours per user or API key; retries with the same key and the same\nrequest get it again with an `Idempotent-Replayed: true` header. The\nsame key with a different request is refused with `400`; a retry while\nthe first request is still running gets `409`.\n",
+        "description": "A unique value (1-255 printable ASCII characters) that makes retrying\nthis request safe. The first response (below 500) is stored for 24\nhours per user or API key; retries with the same key and the same\nrequest get it again with an `Idempotent-Replayed: true` header. The\nsame key with a different request is refused with `400`; a retry while\nthe first request is still running gets `409` with detail code\n`in_progress`: wait a moment and retry with the same key.\n",
         "schema": {
           "type": "string",
           "minLength": 1,
@@ -6302,7 +6302,125 @@
             "description": "Every record must have a value. Not available for boolean fields (a boolean is true or false; no value reads as false)."
           },
           "configuration": {
-            "$ref": "#/components/schemas/FieldConfiguration"
+            "$ref": "#/components/schemas/FieldConfigurationChange"
+          }
+        }
+      },
+      "FieldConfigurationChange": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Options to change, merged onto the field's: an option sent replaces\nits value, one sent as `null` is removed, and options left out keep\ntheirs. So `{ \"filterable\": true }` changes one option and keeps the\nrest, and `{ \"max_length\": null }` removes the limit. Any field\ntype's option names are accepted here; the merged options are\nchecked against the field's type (`FieldConfiguration`).\n",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "searchable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "filterable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sortable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "min_length": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "max_length": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "slug",
+              "url",
+              "email",
+              null
+            ]
+          },
+          "unique": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "min": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "include_time": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "time_zone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 1,
+            "maxItems": 500,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "accepted_types": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            }
+          },
+          "target_collection_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -6790,8 +6908,8 @@
             "$ref": "#/components/schemas/FieldType"
           },
           "configuration": {
-            "description": "The complete new configuration. When the type changes and this is omitted, only `description`, `searchable`, `filterable` and `sortable` carry over.",
-            "$ref": "#/components/schemas/FieldConfiguration"
+            "description": "Options to change, merged as a field update merges them (`null` removes\none). They merge onto the field's options that carry over to the target:\nthose its type takes, with a value it accepts (a text field's\n`max_length` carries over to a long text, its `format` doesn't), less\n`sortable` and `filterable` where the target can't have them. Without\nit, those options are the target's.\n",
+            "$ref": "#/components/schemas/FieldConfigurationChange"
           },
           "multiple": {
             "type": "boolean",
