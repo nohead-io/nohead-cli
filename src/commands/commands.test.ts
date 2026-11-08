@@ -1697,7 +1697,7 @@ describe("schema push: the organization's collection limit", () => {
     ).toBe(ExitCode.ApiError)
     expect(created).toEqual([])
     expect(t.err()).toContain(
-      "Your organization's plan allows 5 collections across its projects and has 1 left; this would create 2. Nothing was changed"
+      "Your plan allows 5 collections per project, and this project has room for 1; this would create 2. Nothing was changed"
     )
   })
 
@@ -1706,7 +1706,7 @@ describe("schema push: the organization's collection limit", () => {
 
     await t.ok(["schema", "diff", "nohead.schema.yaml"])
     expect(t.out()).toContain(
-      "has 1 left; this would create 2. Push would be refused before changing anything."
+      "has room for 1; this would create 2. Push would be refused before changing anything."
     )
   })
 

@@ -211,13 +211,13 @@ function waitingNote({
   return `${change.slug}.${change.key}: migrates to a relation into "${target}", which this push creates, so it runs once "${target}" exists and can't be previewed; "${target}" has no records then, so any value the field holds is cleared (push with --clear-invalid)`
 }
 
-/** The organization's collections against its plan, from the key's `/v1/me`. */
+/** The project's collections against its plan, from the key's `/v1/me`. */
 type Room = { usage: number; limit: number | null }
 
 /**
- * Collections the plan creates, and the organization's room for them, when
- * the API says (an API key with `schema:write`): the limit is per
- * organization, across its projects, so a push can stop before creating any.
+ * Collections the plan creates, and the project's room for them, when the API
+ * says (an API key with `schema:write`), so a push can stop before creating
+ * any.
  */
 async function collectionRoom(
   ctx: CommandContext,
@@ -238,7 +238,7 @@ function describeRoom({
 }: Room & { creating: number }): string | undefined {
   if (limit === null) return undefined
   const left = Math.max(limit - usage, 0)
-  return `Your organization's plan allows ${limit} ${limit === 1 ? "collection" : "collections"} across its projects and has ${left} left; this would create ${creating}.`
+  return `Your plan allows ${limit} ${limit === 1 ? "collection" : "collections"} per project, and this project has room for ${left}; this would create ${creating}.`
 }
 
 function tooMany(room: Room & { creating: number }): boolean {
@@ -261,7 +261,7 @@ export async function applyPlan(
   const fieldIds = fieldIdsOf(remote)
   const migrations = todo.filter((c) => c.kind === "migrate_field")
 
-  // Refuse a plan that the organization's collection limit won't fit, before
+  // Refuse a plan that the project's collection limit won't fit, before
   // creating any of it.
   const room = await collectionRoom(ctx, todo)
   if (room && tooMany(room))
