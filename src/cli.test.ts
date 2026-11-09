@@ -130,10 +130,11 @@ describe("usage", () => {
     expect(await run(["--json", "records", "get"], missing.runtime)).toBe(
       ExitCode.Usage
     )
+    // commander's wording, so only the argument is checked.
     expect(JSON.parse(missing.err())).toEqual({
       error: {
         type: "invalid_request",
-        message: "missing required argument 'id'",
+        message: expect.stringContaining("'id'"),
       },
     })
 
