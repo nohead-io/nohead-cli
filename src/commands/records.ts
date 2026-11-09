@@ -35,6 +35,7 @@ import {
   usageError,
 } from "../input.ts"
 import {
+  count,
   details,
   formatValue,
   printNotice,
@@ -755,11 +756,11 @@ export function registerRecords(
           printResult(
             ctx,
             { exported: all.length, output: options.output },
-            () => `Exported ${all.length} records to ${options.output}`
+            () => `Exported ${count(all.length, "record")} to ${options.output}`
           )
         } else {
           ctx.runtime.stdout(lines)
-          printNotice(ctx, `Exported ${all.length} records`)
+          printNotice(ctx, `Exported ${count(all.length, "record")}`)
         }
       }
     )
@@ -831,7 +832,7 @@ export function registerRecords(
         const result = { created: created.length, failed }
         printResult(ctx, result, () =>
           [
-            `Imported ${created.length} records`,
+            `Imported ${count(created.length, "record")}`,
             ...failed.map(
               (f) =>
                 `  line ${f.line}: ${f.error.message}${(f.error.details ?? []).map((d) => ` (${d.field ?? ""} ${d.message})`).join("")}`

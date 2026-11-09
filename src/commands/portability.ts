@@ -19,7 +19,13 @@ import {
   type ErrorBody,
 } from "../errors.ts"
 import { isObject, parseJsonObject, readSource } from "../input.ts"
-import { printNotice, printResult, toJson, toJsonLines } from "../output.ts"
+import {
+  count,
+  printNotice,
+  printResult,
+  toJson,
+  toJsonLines,
+} from "../output.ts"
 import {
   fromCollections,
   fromYaml,
@@ -160,7 +166,7 @@ async function importAssets(
     )
     ids.set(asset.id, copy.id)
   }
-  if (ids.size > 0) printNotice(ctx, `Imported ${ids.size} files`)
+  if (ids.size > 0) printNotice(ctx, `Imported ${count(ids.size, "file")}`)
   return ids
 }
 
@@ -269,7 +275,7 @@ export function registerPortability(
           })
           printNotice(
             ctx,
-            `Exported ${records.length} ${collection.slug} records${drafts ? ` and ${drafts.length} drafts` : ""}`
+            `Exported ${count(records.length, `${collection.slug} record`)}${drafts ? ` and ${count(drafts.length, "draft")}` : ""}`
           )
         }
 
@@ -302,7 +308,7 @@ export function registerPortability(
               )
             )
           }
-          printNotice(ctx, `Exported ${assets.length} files`)
+          printNotice(ctx, `Exported ${count(assets.length, "file")}`)
         }
 
         const manifest: Manifest = {
@@ -324,7 +330,8 @@ export function registerPortability(
         printResult(
           ctx,
           manifest,
-          () => `Exported ${counts.length} collections to ${options.output}`
+          () =>
+            `Exported ${count(counts.length, "collection")} to ${options.output}`
         )
       }
     )
@@ -385,7 +392,7 @@ export function registerPortability(
       )
       printResult(ctx, result, () =>
         [
-          `Imported ${result.created} records into ${result.collections} collections (${result.relinked} with relations, ${result.published} published), ${result.drafts} drafts and ${assetIds.size} files.`,
+          `Imported ${count(result.created, "record")} into ${count(result.collections, "collection")} (${result.relinked} with relations, ${result.published} published), ${count(result.drafts, "draft")} and ${count(assetIds.size, "file")}.`,
           ...(result.droppedAssets > 0
             ? [
                 `  ${result.droppedAssets} asset value(s) were left out: export with --include-files to bring the files along.`,
@@ -489,7 +496,7 @@ async function readExport(
     )
     if (records.length !== expected)
       problems.push(
-        `${file} has ${records.length} records; manifest.json says ${expected}`
+        `${file} has ${count(records.length, "record")}; manifest.json says ${expected}`
       )
 
     let drafts: NoheadDraft[] = []
@@ -515,7 +522,7 @@ async function readExport(
         )
         if (drafts.length !== expectedDrafts)
           problems.push(
-            `${draftFile} has ${drafts.length} drafts; manifest.json says ${expectedDrafts}`
+            `${draftFile} has ${count(drafts.length, "draft")}; manifest.json says ${expectedDrafts}`
           )
         const ids = new Set(records.map((record) => record.id))
         for (const draft of drafts)

@@ -140,6 +140,12 @@ function browserLogin(
 }
 
 const lines = (...text: string[]) => [...text, ""].join("\n")
+// What a browser sign-in prints on stderr while it waits.
+const PROMPT = lines(
+  "Your code: WXYZ-4821",
+  `Opening ${PAGE} — check the code matches, then choose Allow.`,
+  "Waiting for you to choose Allow (Ctrl-C to stop)…"
+)
 
 describe("login in the browser", () => {
   it("shows the code, opens the page, waits for Allow and saves the new key under its project", async () => {
@@ -163,13 +169,7 @@ describe("login in the browser", () => {
     // The interval the API asks for while pending is honored.
     expect(t.sleeps).toEqual([5000, 5000, 7000])
     expect(t.openUrl).toHaveBeenCalledExactlyOnceWith(PAGE)
-    expect(t.err()).toBe(
-      lines(
-        "Your code: WXYZ-4821",
-        `Opening ${PAGE} — check the code matches, then choose Allow.`,
-        "Waiting for you to choose Allow (Ctrl-C to stop)…"
-      )
-    )
+    expect(t.err()).toBe(PROMPT)
     expect(t.config()).toEqual({
       keys: {
         [PROJECT_ID]: {
@@ -247,13 +247,7 @@ describe("login in the browser", () => {
       config: CONFIG,
     })
     // Without the code and the page, nobody could approve.
-    expect(t.err()).toBe(
-      lines(
-        "Your code: WXYZ-4821",
-        `Opening ${PAGE} — check the code matches, then choose Allow.`,
-        "Waiting for you to choose Allow (Ctrl-C to stop)…"
-      )
-    )
+    expect(t.err()).toBe(PROMPT)
   })
 
   describe("suggests the project", () => {
@@ -452,12 +446,7 @@ describe("login in the browser", () => {
 
     expect(t.sleeps).toEqual([5000, 5000, 5000, 5000, 5000])
     expect(t.err()).toBe(
-      lines(
-        "Your code: WXYZ-4821",
-        `Opening ${PAGE} — check the code matches, then choose Allow.`,
-        "Waiting for you to choose Allow (Ctrl-C to stop)…",
-        "Could not reach the API; still trying"
-      )
+      PROMPT + lines("Could not reach the API; still trying")
     )
     expect(t.config().keys[PROJECT_ID].api_key).toBe(TOKEN)
   })
@@ -567,6 +556,9 @@ describe("login with a piped key", () => {
     expect(t.requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/v1/me",
     ])
+    expect(t.requests[0].headers.get("Authorization")).toBe(
+      "Bearer nohead_sk_test0000000_secret"
+    )
     expect(t.err()).toBe("")
     expect(t.json()).toEqual({
       api_url: "http://api.test",

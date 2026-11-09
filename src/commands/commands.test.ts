@@ -51,28 +51,6 @@ describe("credentials and project", () => {
     expect(t.out()).toContain("scopes:  records:read")
   })
 
-  it("finds the project from the API key, or uses --project", async () => {
-    const list = () =>
-      contractResponse("collections_list", page([collection()]))
-    const discovered = testRuntime({
-      routes: {
-        "GET /v1/me": me,
-        [`GET /v1/projects/${PROJECT_ID}/collections`]: list,
-      },
-    })
-    await discovered.ok(["collections", "list"])
-    expect(discovered.requests.map((r) => new URL(r.url).pathname)).toEqual([
-      "/v1/me",
-      `/v1/projects/${PROJECT_ID}/collections`,
-    ])
-
-    const explicit = testRuntime({
-      routes: { [`GET /v1/projects/prj_other/collections`]: list },
-    })
-    await explicit.ok(["--project", "prj_other", "collections", "list"])
-    expect(explicit.requests).toHaveLength(1)
-  })
-
   it("explains a missing API key as a usage error", async () => {
     const t = testRuntime({ env: { NOHEAD_API_URL: "http://api.test" } })
 
@@ -145,13 +123,7 @@ describe("collections", () => {
     })
   })
 
-  it("requires --yes to delete", async () => {
-    const refused = testRuntime()
-    expect(await run(["collections", "delete", "posts"], refused.runtime)).toBe(
-      ExitCode.Usage
-    )
-    expect(refused.requests).toHaveLength(0)
-
+  it("deletes a collection with --yes, saying how to restore it", async () => {
     const t = testRuntime({
       routes: {
         "DELETE /v1/collections/posts": () =>
@@ -225,21 +197,6 @@ describe("fields", () => {
     })
     await rich.ok(["fields", "add", "posts", "body", "--type", "rich-text"])
     expect((await body(rich.requests[0])).type).toBe("rich_text")
-  })
-
-  it("rejects unknown field types and numbers before calling the API", async () => {
-    for (const [args, message] of [
-      [["add", "posts", "size", "--type", "float"], "Unknown field type"],
-      [["migrate", "posts", "size", "--type", "float"], "Unknown field type"],
-      [["update", "posts", "size", "--max", "ten"], "--max must be a number"],
-    ] as const) {
-      const t = testRuntime()
-      expect(await run(["fields", ...args], t.runtime), args.join(" ")).toBe(
-        ExitCode.Usage
-      )
-      expect(t.err()).toContain(message)
-      expect(t.requests).toHaveLength(0)
-    }
   })
 
   it("updates a field by API key, sending only the options that change", async () => {
@@ -715,28 +672,6 @@ describe("records", () => {
     ).toBe(ExitCode.Usage)
   })
 
-  it("refuses unclear schedule times before calling the API", async () => {
-    const t = testRuntime({ routes: {} })
-
-    expect(await run(["records", "schedule", REC_A], t.runtime)).toBe(
-      ExitCode.Usage
-    )
-    expect(
-      await run(
-        ["records", "schedule", REC_A, "--publish-at", "tomorrow 9am"],
-        t.runtime
-      )
-    ).toBe(ExitCode.Usage)
-    expect(
-      await run(
-        ["records", "schedule", REC_A, "--publish-at", "2026-10-01T09:00"],
-        t.runtime
-      )
-    ).toBe(ExitCode.Usage) // no time zone
-    expect(t.err()).toContain("must be an ISO 8601 time with a time zone")
-    expect(t.requests).toHaveLength(0)
-  })
-
   it("creates records from --set, --data-file and stdin", async () => {
     const created = () =>
       contractResponse("records_create", record(REC_A, { title: "Hello" }), {
@@ -801,20 +736,6 @@ describe("records", () => {
     expect(t.out()).toContain(`Created ${REC_A} (revision 2, published)`)
   })
 
-  it("rejects malformed input as usage errors", async () => {
-    for (const args of [
-      ["records", "create", "posts"],
-      ["records", "create", "posts", "--set", "views:=three"],
-      ["records", "create", "posts", "--set", "novalue"],
-      ["records", "create", "posts", "--data", "[1]"],
-      ["records", "create", "posts", "--data-file", "missing.json"],
-    ]) {
-      const t = testRuntime()
-      expect(await run(args, t.runtime), args.join(" ")).toBe(ExitCode.Usage)
-      expect(t.requests).toHaveLength(0)
-    }
-  })
-
   it("updates the --set fields, sending If-Match with --if-revision", async () => {
     const t = testRuntime({
       routes: {
@@ -836,7 +757,7 @@ describe("records", () => {
     expect(t.requests[0].headers.get("If-Match")).toBe('"1"')
   })
 
-  it("follows cursors with --all and passes filters", async () => {
+  it("keeps the filters on every page with --all", async () => {
     const t = testRuntime({
       routes: {
         "GET /v1/collections/posts/records": (request) =>
@@ -883,21 +804,6 @@ describe("records", () => {
     })
     expect(second).toEqual({ ...first, cursor: "next-page" })
     expect(t.requests).toHaveLength(2)
-  })
-
-  it("refuses an unknown --status before calling the API", async () => {
-    const t = testRuntime()
-
-    expect(
-      await run(
-        ["--json", "records", "list", "posts", "--status", "draft"],
-        t.runtime
-      )
-    ).toBe(ExitCode.Usage)
-    expect(JSON.parse(t.err()).error.message).toBe(
-      "option '--status <status>' argument 'draft' is invalid. Allowed choices are published, unpublished."
-    )
-    expect(t.requests).toHaveLength(0)
   })
 
   it("writes no export when a later page fails", async () => {
@@ -969,36 +875,11 @@ describe("records", () => {
     expect(t.out()).toContain("title (changed): Helo → Hello")
   })
 
-  it("refuses revision numbers that are not positive integers before calling the API", async () => {
-    for (const [args, message] of [
-      [["diff", REC_A, "--from", "one", "--to", "2"], "--from"],
-      [["revision", REC_A, "0"], "<revision>"],
-      [["revert", REC_A, "1.5"], "<revision>"],
-      [["publish", REC_A, "--if-revision", ""], "--if-revision"],
-    ] as const) {
-      const t = testRuntime()
-      expect(
-        await run(["--json", "records", ...args], t.runtime),
-        args.join(" ")
-      ).toBe(ExitCode.Usage)
-      expect(JSON.parse(t.err()).error).toEqual({
-        type: "invalid_request",
-        message: `${message} must be a positive integer`,
-      })
-      expect(t.requests).toHaveLength(0)
-    }
-  })
-
-  it("pages through history and shows one revision in full", async () => {
+  it("filters history and shows one revision in full", async () => {
     const t = testRuntime({
       routes: {
-        [`GET /v1/records/${REC_A}/revisions`]: (request) =>
-          new URL(request.url).searchParams.get("cursor") === "next"
-            ? contractResponse("record_revisions_list", page([revision(1)]))
-            : contractResponse(
-                "record_revisions_list",
-                page([revision(2)], "next")
-              ),
+        [`GET /v1/records/${REC_A}/revisions`]: () =>
+          contractResponse("record_revisions_list", page([revision(2)])),
         [`GET /v1/records/${REC_A}/revisions/2`]: () =>
           contractResponse("record_revisions_get", {
             ...revision(2),
@@ -1018,12 +899,6 @@ describe("records", () => {
       },
     })
 
-    await t.ok(["records", "history", REC_A, "--limit", "1"])
-    expect(new URL(t.requests[0].url).searchParams.get("limit")).toBe("1")
-    expect(t.out()).toContain("More: --cursor next")
-    await t.ok(["records", "history", REC_A, "--cursor", "next"])
-    expect(new URL(t.requests[1].url).searchParams.get("cursor")).toBe("next")
-
     await t.ok([
       "records",
       "history",
@@ -1035,7 +910,7 @@ describe("records", () => {
       "--since",
       "2026-09-01T00:00:00Z",
     ])
-    const filtered = new URL(t.requests[2].url).searchParams
+    const filtered = new URL(t.requests[0].url).searchParams
     expect(filtered.get("filter[operation]")).toBe("publish")
     expect(filtered.get("filter[actor_id]")).toBe("usr_1")
     expect(filtered.get("filter[created_at][gte]")).toBe("2026-09-01T00:00:00Z")
@@ -1206,6 +1081,7 @@ describe("schema push", () => {
 
     await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
     expect(order).toEqual([title.id, headline.id, code.id])
+    expect(t.out()).toBe("Applied 2 changes.\n")
   })
 
   it("reorders a field renamed in the same push by its new key", async () => {
@@ -1364,6 +1240,182 @@ describe("schema push", () => {
     expect(t.err()).toContain(
       "posts: its fields changed during the push, so they were not put in the file's order; run the push again"
     )
+  })
+})
+
+// Scripts and CI rely on these: the file a pull writes, and what diff and
+// push answer for it (output and exit codes).
+describe("schema pull, diff and push refusals", () => {
+  const title = field({ key: "title", name: "Title", required: true })
+  const summary = field({ key: "summary", name: "Summary", position: 1 })
+  const FILE = "nohead.schema.yaml"
+  const project = (
+    files: Record<string, string> = {},
+    routes: Record<string, Handler> = {}
+  ) =>
+    testRuntime({
+      files,
+      routes: {
+        ...routes,
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse(
+            "collections_list",
+            page([collection({ fields: [title, summary] })])
+          ),
+      },
+    })
+  const file = (fields: string) => ({
+    [FILE]: `collections:\n  posts:\n    name: Posts\n    fields:\n${fields}`,
+  })
+  // The project above plus a field, and with summary as long text.
+  const ADDS_BODY = file(
+    "      title: { type: text, required: true }\n      summary: text\n      body: long_text\n"
+  )
+  const RETYPES_SUMMARY = file(
+    "      title: { type: text, required: true }\n      summary: long_text\n"
+  )
+  const methods = (t: ReturnType<typeof project>) =>
+    t.requests.map((r) => r.method)
+  // The file a pull writes for the project above.
+  const pulled = async () => {
+    const t = project()
+    await t.ok(["schema", "pull"])
+    return t.text(FILE)
+  }
+
+  it("pulls the schema to a file, or to stdout with --output -", async () => {
+    const t = project()
+    await t.ok(["schema", "pull"])
+    expect(fromYaml(t.text(FILE), FILE)).toEqual(
+      fromYaml(
+        "collections:\n  posts:\n    name: Posts\n    fields:\n      title: { type: text, required: true, name: Title }\n      summary: { type: text, name: Summary }\n",
+        FILE
+      )
+    )
+    expect(t.out()).toContain(`to ${FILE}`)
+
+    const stdout = project()
+    await stdout.ok(["schema", "pull", "--output", "-"])
+    expect(stdout.out()).toBe(t.text(FILE))
+    expect(stdout.written).toEqual({})
+  })
+
+  it("finds nothing to change in the file it pulled", async () => {
+    const t = project({ [FILE]: await pulled() })
+
+    await t.ok(["schema", "diff", "--exit-code"])
+    expect(t.out()).toBe("Schema is up to date.\n")
+    await t.ok(["schema", "push", "--yes"])
+    expect(t.out()).toBe("Schema is up to date.\n".repeat(2))
+    expect(new Set(methods(t))).toEqual(new Set(["GET"]))
+  })
+
+  it("exits 1 from diff --exit-code when the file differs, showing the plan", async () => {
+    const t = project(ADDS_BODY)
+
+    expect(await run(["schema", "diff"], t.runtime)).toBe(ExitCode.Success)
+    expect(t.out()).toContain("+ field posts.body")
+    expect(
+      await run(["--json", "schema", "diff", "--exit-code"], t.runtime)
+    ).toBe(ExitCode.ApiError)
+    expect(JSON.parse(t.err()).error.type).toBe("schema_differs")
+    expect(new Set(methods(t))).toEqual(new Set(["GET"]))
+  })
+
+  it("shows the plan and changes nothing when push has no --yes", async () => {
+    const t = project(ADDS_BODY)
+
+    expect(await run(["schema", "push"], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("+ field posts.body")
+    expect(t.err()).toContain("run again with --yes to apply this plan")
+    expect(new Set(methods(t))).toEqual(new Set(["GET"]))
+  })
+
+  it("refuses a push that migrates a field without --allow-migrations, before any dry run", async () => {
+    const t = project(RETYPES_SUMMARY)
+
+    expect(await run(["schema", "push", "--yes"], t.runtime)).toBe(
+      ExitCode.Usage
+    )
+    expect(t.err()).toContain("push with --allow-migrations")
+    expect(new Set(methods(t))).toEqual(new Set(["GET"]))
+  })
+
+  const preview = (
+    to: Partial<{ type: string; required: boolean }>,
+    records: Record<string, number>
+  ) =>
+    contractResponse("migrations_create", {
+      object: "field_migration_preview",
+      field_id: summary.id,
+      from: {
+        type: "text",
+        configuration: {},
+        multiple: false,
+        required: false,
+      },
+      to: {
+        type: "text",
+        configuration: {},
+        multiple: false,
+        required: false,
+        ...to,
+      },
+      conversion: "conditional",
+      records: {
+        total: 1,
+        unchanged: 0,
+        converted: 0,
+        backfilled: 0,
+        cleared: 0,
+        invalid: 0,
+        ...records,
+      },
+      samples: [],
+    })
+
+  it("previews a migration's effect on records in diff", async () => {
+    let sent: Record<string, unknown> = {}
+    let dryRun: string | null = null
+    const t = project(RETYPES_SUMMARY, {
+      [`POST /v1/collections/${COLLECTION_ID}/migrations`]: async (request) => {
+        sent = await body(request)
+        dryRun = new URL(request.url).searchParams.get("dry_run")
+        return preview({ type: "long_text" }, { converted: 1 })
+      },
+    })
+
+    await t.ok(["schema", "diff"])
+    expect(sent).toMatchObject({ type: "long_text" })
+    expect(dryRun).toBe("true")
+    expect(t.out()).toContain(
+      "posts.summary migration preview (conditional): 1 record, 1 converted"
+    )
+  })
+
+  it("refuses to make a field required while records lack it, changing nothing", async () => {
+    const t = project(
+      file(
+        "      title: { type: text, required: true }\n      summary: { type: text, required: true }\n"
+      ),
+      {
+        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: () =>
+          preview({ required: true }, { invalid: 1 }),
+      }
+    )
+
+    expect(await run(["schema", "push", "--yes"], t.runtime)).toBe(
+      ExitCode.ApiError
+    )
+    expect(t.err()).toContain(
+      "posts.summary: 1 record(s) do not meet the new settings"
+    )
+    // Only the dry run was sent.
+    const writes = t.requests.filter((r) => r.method !== "GET")
+    expect(
+      writes.map((r) => new URL(r.url).searchParams.get("dry_run"))
+    ).toEqual(["true"])
   })
 })
 
@@ -2002,45 +2054,6 @@ describe("field migrations", () => {
       "next-page"
     )
   })
-
-  it("rejects contradictory flags", async () => {
-    for (const [args, message] of [
-      [
-        ["migrate", "products", "price", "--multiple", "--single"],
-        "option '--single' cannot be used with option '--multiple'",
-      ],
-      [
-        ["migrate", "products", "price", "--required", "--optional"],
-        "option '--optional' cannot be used with option '--required'",
-      ],
-      [
-        [
-          "migrate",
-          "products",
-          "price",
-          "--backfill",
-          "",
-          "--backfill-json",
-          "0",
-        ],
-        "option '--backfill-json <json>' cannot be used with option '--backfill <text>'",
-      ],
-      [
-        ["update", "products", "price", "--optional", "--required"],
-        "option '--optional' cannot be used with option '--required'",
-      ],
-    ]) {
-      const t = testRuntime()
-      expect(await run(["--json", "fields", ...args], t.runtime)).toBe(
-        ExitCode.Usage
-      )
-      expect(JSON.parse(t.err()).error).toEqual({
-        type: "invalid_request",
-        message,
-      })
-      expect(t.requests).toHaveLength(0)
-    }
-  })
 })
 
 describe("idempotency", () => {
@@ -2106,31 +2119,6 @@ describe("login and saved keys", () => {
         ...ME,
         api_key: { ...ME.api_key, project_id, name },
       })
-
-  it("checks the key from stdin and saves it under its project", async () => {
-    const t = testRuntime({
-      env: { ...env, NOHEAD_API_URL: "http://api.test" },
-      stdin: "nohead_sk_test0000000_secret\n",
-      routes: { "GET /v1/me": me },
-    })
-
-    await t.ok(["login"])
-
-    expect(t.requests[0].headers.get("Authorization")).toBe(
-      "Bearer nohead_sk_test0000000_secret"
-    )
-    expect(config(t)).toEqual({
-      keys: {
-        [PROJECT_ID]: {
-          api_url: "http://api.test",
-          api_key: "nohead_sk_test0000000_secret",
-          name: "ci",
-        },
-      },
-    })
-    expect(t.out()).toContain(`Saved the key for project ${PROJECT_ID}`)
-    expect(t.err()).toBe("")
-  })
 
   it("adds another project's key, and replaces a project's key on a new login", async () => {
     const t = testRuntime({
@@ -2446,10 +2434,15 @@ describe("login and saved keys", () => {
       await t.ok(["collections", "list"])
       t.runtime.env = { ...t.runtime.env, NOHEAD_PROJECT: "prj_env" }
       await t.ok(["collections", "list"])
+      await t.ok(["--project", "prj_flag", "collections", "list"])
+      t.runtime.env = { ...env, NOHEAD_API_KEY: "nohead_sk_env" }
+      await t.ok(["--project", "prj_flag", "collections", "list"])
       expect(sent(t)).toEqual([
         "https://api.nohead.io/v1/me Bearer nohead_sk_env",
         `https://api.nohead.io/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_env`,
         "https://api.nohead.io/v1/projects/prj_env/collections Bearer nohead_sk_env",
+        "https://api.nohead.io/v1/projects/prj_flag/collections Bearer nohead_sk_env",
+        "https://api.nohead.io/v1/projects/prj_flag/collections Bearer nohead_sk_env",
       ])
     })
 
@@ -2737,14 +2730,6 @@ describe("assets", () => {
       expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
     },
   }
-  it("asks for something to update before calling the API", async () => {
-    const t = testRuntime({ routes: {} })
-    expect(await run(["assets", "update", asset().id], t.runtime)).toBe(
-      ExitCode.Usage
-    )
-    expect(t.requests).toHaveLength(0)
-  })
-
   it("searches assets and lists them by kind", async () => {
     let query: URLSearchParams | undefined
     const t = testRuntime({
@@ -2770,44 +2755,21 @@ describe("assets", () => {
     expect(t.out()).toContain(asset().id)
   })
 
-  it("ends at a page with the next cursor, or follows every page with --all", async () => {
-    const api = () =>
-      testRuntime({
-        routes: {
-          "GET /v1/me": me,
-          [`GET /v1/projects/${PROJECT_ID}/assets`]: (request) =>
-            new URL(request.url).searchParams.get("cursor")
-              ? contractResponse("assets_list", page([asset()]))
-              : contractResponse("assets_list", page([asset()], "next-page")),
+  it("leaves an empty kind and an empty search out of the query", async () => {
+    let query: URLSearchParams | undefined
+    const t = testRuntime({
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/assets`]: (request) => {
+          query = new URL(request.url).searchParams
+          return contractResponse("assets_list", page([asset()]))
         },
-      })
-    const assetQueries = (t: ReturnType<typeof api>) =>
-      t.requests
-        .filter((r) => r.url.includes("/assets"))
-        .map((r) => new URL(r.url).searchParams)
+      },
+    })
 
-    const one = api()
-    await one.ok(["assets", "list", "--kind", "image,"])
-    expect(one.out()).toContain("More: --cursor next-page")
-    expect(assetQueries(one)[0].get("filter[kind][in]")).toBe("image")
-
-    const all = api()
-    await all.ok(["--json", "assets", "list", "--all", "--search", ""])
-    expect(all.json().data).toHaveLength(2)
-    const [first, second] = assetQueries(all)
-    expect(first.has("q")).toBe(false)
-    expect(second.get("cursor")).toBe("next-page")
-  })
-
-  it("refuses an unknown kind before calling the API", async () => {
-    const t = testRuntime({ routes: {} })
-    expect(await run(["assets", "list", "--kind", "photo"], t.runtime)).toBe(
-      ExitCode.Usage
-    )
-    expect(t.err()).toContain(
-      '--kind takes image, video, audio, document, other, not "photo"'
-    )
-    expect(t.requests).toHaveLength(0)
+    await t.ok(["assets", "list", "--kind", "image,", "--search", ""])
+    expect(query?.get("filter[kind][in]")).toBe("image")
+    expect(query?.has("q")).toBe(false)
   })
 
   it("imports an export's file with its alt text in the upload itself", async () => {
@@ -3130,18 +3092,6 @@ describe("assets", () => {
       "https://images.test/rs:fill:800:600/plain/p1/a1@webp"
     )
     expect(t.requests).toHaveLength(1)
-
-    const other = testRuntime()
-    expect(
-      await run(
-        ["assets", "url", "ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T", "--fit", "crop"],
-        other.runtime
-      )
-    ).toBe(ExitCode.Usage)
-    expect(other.err()).toContain(
-      "option '--fit <fit>' argument 'crop' is invalid. Allowed choices are contain, cover, fill."
-    )
-    expect(other.requests).toHaveLength(0)
   })
 
   it("narrows a project-wide search by published_at only", async () => {
@@ -3402,21 +3352,13 @@ describe("drafts", () => {
     expect(t.requests[2].method).toBe("DELETE")
   })
 
-  it("discards a draft only with --yes, and never schedules no time", async () => {
+  it("discards a draft with --yes", async () => {
     const t = testRuntime({
       routes: {
         [`DELETE /v1/drafts/${DRF_A}`]: () =>
           contractResponse("drafts_discard", draft({ title: "Hello" })),
       },
     })
-
-    expect(await run(["drafts", "discard", DRF_A], t.runtime)).toBe(
-      ExitCode.Usage
-    )
-    expect(
-      await run(["drafts", "schedule", DRF_A, "--merge-at", "none"], t.runtime)
-    ).toBe(ExitCode.Usage)
-    expect(t.requests).toHaveLength(0)
 
     await t.ok(["drafts", "discard", DRF_A, "--yes"])
     expect(t.out()).toContain(`Discarded ${DRF_A}`)
@@ -3520,18 +3462,6 @@ describe("records bulk", () => {
       data: { category: "news" },
     })
     expect(t.out()).toContain("rec_missing: Record not found")
-  })
-
-  it("refuses to run without a selection", async () => {
-    for (const args of [
-      ["records", "bulk", "publish", "posts"],
-      ["records", "bulk", "archive", "posts", REC_A],
-      ["records", "bulk", "publish", "posts", REC_A, "--status", "unpublished"],
-    ]) {
-      const t = testRuntime()
-      expect(await run(args, t.runtime), args.join(" ")).toBe(ExitCode.Usage)
-      expect(t.requests).toHaveLength(0)
-    }
   })
 })
 
@@ -3637,10 +3567,10 @@ describe("transient failures", () => {
       await withoutWaiting(() => run(["--json", "whoami"], hanging.runtime))
     ).toBe(ExitCode.Network)
     expect(calls).toBe(4)
-    expect(JSON.parse(hanging.err()).error).toEqual({
-      type: "network_error",
-      message: "Could not reach the API: The request timed out after 60000 ms",
-    })
+    // The timeout and its wording are the SDK's.
+    const { error } = JSON.parse(hanging.err())
+    expect(error.type).toBe("network_error")
+    expect(error.message).toMatch(/^Could not reach the API: .*timed out/)
   })
 })
 
@@ -3898,9 +3828,9 @@ describe("import", () => {
     expect(error.message).toContain("nothing was imported")
     expect(error.details.map((d: { message: string }) => d.message)).toEqual([
       expect.stringContaining("records/posts.jsonl line 2"),
-      "records/posts.jsonl has 1 records; manifest.json says 2",
+      "records/posts.jsonl has 1 record; manifest.json says 2",
       "drafts/posts.jsonl line 1 is not a draft (no id, record_id, data or changed_fields)",
-      "drafts/posts.jsonl has 1 drafts; manifest.json says 2",
+      "drafts/posts.jsonl has 1 draft; manifest.json says 2",
       `drafts/posts.jsonl: ${DRF_A} is for ${REC_B}, which is not in records/posts.jsonl`,
       "pages is in manifest.json but not in schema.yaml",
     ])
@@ -3953,7 +3883,9 @@ describe("import", () => {
       { data: { title: "Draft" } },
     ])
     expect(t.requests.some((r) => r.url.endsWith("/publication"))).toBe(false)
-    expect(t.out()).toContain("(0 with relations, 1 published)")
+    expect(t.out()).toContain(
+      "Imported 2 records into 1 collection (0 with relations, 1 published), 0 drafts and 0 files."
+    )
   })
 
   it("creates relation targets first and sets a required relation on create", async () => {
@@ -4544,6 +4476,18 @@ describe("paged lists", () => {
       item: auditEvent,
     },
     {
+      argv: ["records", "list", "posts"],
+      path: "/v1/collections/posts/records",
+      operation: "records_list",
+      item: record(REC_A, { title: "Hello" }),
+    },
+    {
+      argv: ["assets", "list"],
+      path: `/v1/projects/${PROJECT_ID}/assets`,
+      operation: "assets_list",
+      item: asset(),
+    },
+    {
       argv: ["records", "history", REC_A],
       path: `/v1/records/${REC_A}/revisions`,
       operation: "record_revisions_list",
@@ -4617,16 +4561,220 @@ describe("paged lists", () => {
     expect(t.out()).toContain("posts")
     expect(t.out()).not.toContain("More:")
   })
+})
 
-  it.each([["audit"], ["search", "shoes"]])(
-    "%s refuses a --limit that is not a positive integer before calling the API",
-    async (...argv) => {
-      const t = testRuntime({ routes: {} })
-      expect(await run([...argv, "--limit", "ten"], t.runtime)).toBe(
-        ExitCode.Usage
-      )
-      expect(t.err()).toContain("--limit must be a positive integer")
+// The whole message per case: a usage error from commander (an unknown
+// option, say) would pass a test that checks only the exit code. Where the
+// message is commander's, a pattern checks the parts that are ours.
+describe("usage errors, refused before calling the API", () => {
+  const ASSET = asset().id
+  const POSITIVE = "must be a positive integer"
+  // `help`: commander's own refusal, printed with the command's help.
+  const cases: { argv: string[]; message: string | RegExp; help?: true }[] = [
+    {
+      argv: ["collections", "delete", "posts"],
+      message: "Refusing to delete posts without --yes",
+    },
+    {
+      argv: ["fields", "add", "posts", "size", "--type", "float"],
+      message: /^Unknown field type "float"\. Use one of: text, /,
+    },
+    {
+      argv: ["fields", "migrate", "posts", "size", "--type", "float"],
+      message: /^Unknown field type "float"\. Use one of: text, /,
+    },
+    {
+      argv: ["fields", "update", "posts", "size", "--max", "ten"],
+      message: "--max must be a number",
+    },
+    {
+      argv: [
+        "fields",
+        "migrate",
+        "products",
+        "price",
+        "--multiple",
+        "--single",
+      ],
+      message: /'--single'.*'--multiple'/,
+      help: true,
+    },
+    {
+      argv: [
+        "fields",
+        "migrate",
+        "products",
+        "price",
+        "--required",
+        "--optional",
+      ],
+      message: /'--optional'.*'--required'/,
+      help: true,
+    },
+    {
+      argv: [
+        "fields",
+        "migrate",
+        "products",
+        "price",
+        "--backfill",
+        "",
+        "--backfill-json",
+        "0",
+      ],
+      message: /'--backfill-json <json>'.*'--backfill <text>'/,
+      help: true,
+    },
+    {
+      argv: [
+        "fields",
+        "update",
+        "products",
+        "price",
+        "--optional",
+        "--required",
+      ],
+      message: /'--optional'.*'--required'/,
+      help: true,
+    },
+    {
+      argv: ["records", "create", "posts"],
+      message:
+        "Provide record data with --set key=value, --data '{...}' or --data-file <path>",
+    },
+    {
+      argv: ["records", "create", "posts", "--set", "views:=three"],
+      message: '--set views:= expects JSON, got "three"',
+    },
+    {
+      argv: ["records", "create", "posts", "--set", "novalue"],
+      message: '--set expects key=value or key:=json, got "novalue"',
+    },
+    {
+      argv: ["records", "create", "posts", "--data", "[1]"],
+      message: "--data must be a JSON object",
+    },
+    {
+      argv: ["records", "create", "posts", "--data-file", "missing.json"],
+      message: /^Cannot read missing\.json: ENOENT/,
+    },
+    {
+      argv: ["records", "list", "posts", "--status", "draft"],
+      message: /--status.*'draft'.*published, unpublished\.$/,
+      help: true,
+    },
+    {
+      argv: ["records", "schedule", REC_A],
+      message: "Pass --publish-at, --unpublish-at, or both",
+    },
+    {
+      argv: ["records", "schedule", REC_A, "--publish-at", "tomorrow 9am"],
+      message:
+        "--publish-at must be an ISO 8601 time with a time zone (2026-10-01T09:00:00Z), an offset (+2h, +3d), or none",
+    },
+    {
+      // No time zone.
+      argv: ["records", "schedule", REC_A, "--publish-at", "2026-10-01T09:00"],
+      message:
+        "--publish-at must be an ISO 8601 time with a time zone (2026-10-01T09:00:00Z), an offset (+2h, +3d), or none",
+    },
+    {
+      argv: ["records", "diff", REC_A, "--from", "one", "--to", "2"],
+      message: `--from ${POSITIVE}`,
+    },
+    {
+      argv: ["records", "revision", REC_A, "0"],
+      message: `<revision> ${POSITIVE}`,
+    },
+    {
+      argv: ["records", "revert", REC_A, "1.5"],
+      message: `<revision> ${POSITIVE}`,
+    },
+    {
+      argv: ["records", "publish", REC_A, "--if-revision", ""],
+      message: `--if-revision ${POSITIVE}`,
+    },
+    {
+      argv: ["records", "bulk", "publish", "posts"],
+      message:
+        "Give record IDs, or select records with --status, --filter, --deleted or --every",
+    },
+    {
+      argv: ["records", "bulk", "archive", "posts", REC_A],
+      message:
+        /'archive'.*'action'.*publish, unpublish, delete, restore, update\.$/,
+      help: true,
+    },
+    {
+      argv: [
+        "records",
+        "bulk",
+        "publish",
+        "posts",
+        REC_A,
+        "--status",
+        "unpublished",
+      ],
+      message: "Give record IDs or a selection, not both",
+    },
+    {
+      argv: ["drafts", "discard", DRF_A],
+      message: `Refusing to discard ${DRF_A} without --yes`,
+    },
+    {
+      argv: ["drafts", "schedule", DRF_A, "--merge-at", "none"],
+      message: `--merge-at needs a time; cancel with: nohead drafts unschedule ${DRF_A}`,
+    },
+    {
+      argv: ["assets", "update", ASSET],
+      message: "Nothing to update: pass --filename or --alt",
+    },
+    {
+      argv: ["assets", "list", "--kind", "photo"],
+      message: '--kind takes image, video, audio, document, other, not "photo"',
+    },
+    {
+      argv: ["assets", "url", ASSET, "--fit", "crop"],
+      message: /--fit.*'crop'.*contain, cover, fill\.$/,
+      help: true,
+    },
+    {
+      argv: ["audit", "--limit", "ten"],
+      message: `--limit ${POSITIVE}`,
+    },
+    {
+      argv: ["search", "shoes", "--limit", "ten"],
+      message: `--limit ${POSITIVE}`,
+    },
+  ]
+  const named = (argv: string[]) =>
+    argv.map((arg) => (arg === "" ? '""' : arg)).join(" ")
+  it.each(cases.map((c) => [named(c.argv), c] as const))(
+    "nohead %s",
+    async (_, { argv, message, help }) => {
+      const t = testRuntime()
+
+      expect(await run(["--json", ...argv], t.runtime)).toBe(ExitCode.Usage)
+      expect(JSON.parse(t.err())).toEqual({
+        error: {
+          type: "invalid_request",
+          message:
+            typeof message === "string"
+              ? message
+              : expect.stringMatching(message),
+        },
+      })
       expect(t.requests).toHaveLength(0)
+
+      // Without --json, the same message on stderr.
+      const human = testRuntime()
+      expect(await run(argv, human.runtime)).toBe(ExitCode.Usage)
+      const said = JSON.parse(t.err()).error.message
+      if (help) {
+        const first = `error: ${said}\n`
+        expect(human.err().slice(0, first.length)).toBe(first)
+        expect(human.err()).toContain("\nUsage: nohead ")
+      } else expect(human.err()).toBe(`Error: ${said}\n`)
     }
   )
 })

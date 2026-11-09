@@ -1,5 +1,6 @@
 import type { Collection } from "@nohead/sdk"
 import { configurationChange, type FieldType } from "../field-types.ts"
+import { count } from "../output.ts"
 import type { CollectionSpec, FieldSpec } from "./format.ts"
 
 /**
@@ -242,7 +243,7 @@ const show = (value: unknown) => JSON.stringify(value)
 export function describeChange(change: Change): string {
   switch (change.kind) {
     case "create_collection":
-      return `+ collection ${change.collection.slug} (${change.collection.fields.length} fields)`
+      return `+ collection ${change.collection.slug} (${count(change.collection.fields.length, "field")})`
     case "update_collection":
       return `~ collection ${change.slug}: ${[
         change.name !== undefined && `name ${show(change.name)}`,

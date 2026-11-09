@@ -11,7 +11,13 @@ import type {
 import type { CommandContext } from "../context.ts"
 import { CliError, ExitCode, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
-import { formatValue, printNotice, printResult, table } from "../output.ts"
+import {
+  count,
+  formatValue,
+  printNotice,
+  printResult,
+  table,
+} from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 import {
   configuration,
@@ -51,7 +57,7 @@ export function counts(records: FieldMigrationCounts): string {
 function describePreview(preview: FieldMigrationPreview): string {
   const lines = [
     `${definition(preview.from)} -> ${definition(preview.to)} (${preview.conversion})`,
-    `${preview.records.total} records: ${counts(preview.records) || "nothing to change"}`,
+    `${count(preview.records.total, "record")}: ${counts(preview.records) || "nothing to change"}`,
   ]
   if (preview.samples.length > 0) {
     lines.push(
@@ -82,7 +88,7 @@ function describe(migration: FieldMigration): string {
   ]
   if (migration.status === "complete")
     lines.push(
-      `${migration.records.total} records: ${counts(migration.records) || "nothing changed"}`
+      `${count(migration.records.total, "record")}: ${counts(migration.records) || "nothing changed"}`
     )
   if (migration.failure) lines.push(`Failed: ${migration.failure.message}`)
   return lines.join("\n")
