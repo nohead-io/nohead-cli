@@ -238,7 +238,7 @@ function describeRoom({
 }: Room & { creating: number }): string | undefined {
   if (limit === null) return undefined
   const left = Math.max(limit - usage, 0)
-  return `Your plan allows ${limit} ${limit === 1 ? "collection" : "collections"} per project, and this project has room for ${left}; this would create ${creating}.`
+  return `Your plan allows ${count(limit, "collection")} per project, and this project has room for ${left}; this would create ${creating}.`
 }
 
 function tooMany(room: Room & { creating: number }): boolean {
@@ -549,7 +549,7 @@ export function registerSchema(
                 : []),
               ...previews.map(
                 ({ change, preview }) =>
-                  `\n${change.slug}.${change.key} migration preview (${preview.conversion}): ${preview.records.total} ${preview.records.total === 1 ? "record" : "records"}, ${counts(preview.records) || "nothing to change"}${preview.records.invalid > 0 ? "\n  Values that cannot be converted block the push unless you pass --clear-invalid; see `nohead fields migrate --dry-run`." : ""}`
+                  `\n${change.slug}.${change.key} migration preview (${preview.conversion}): ${count(preview.records.total, "record")}, ${counts(preview.records) || "nothing to change"}${preview.records.invalid > 0 ? "\n  Values that cannot be converted block the push unless you pass --clear-invalid; see `nohead fields migrate --dry-run`." : ""}`
               ),
               ...waiting.map((item) => `\n${waitingNote(item)}`),
             ].join("")
@@ -621,7 +621,7 @@ export function registerSchema(
         printResult(
           ctx,
           { changes, applied },
-          () => `Applied ${applied} change${applied === 1 ? "" : "s"}.`
+          () => `Applied ${count(applied, "change")}.`
         )
       }
     )

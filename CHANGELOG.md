@@ -9,9 +9,11 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
-- The counts in what `import`, `export`, `records export`, `records import`
-  and `schema pull` print agree with their number: "Imported 2 records into
-  1 collection", not "1 collections". `--json` output is unchanged.
+- Counts in messages agree with their number: "Imported 2 records into
+  1 collection", "+ collection posts (1 field)", "1 record: 1 converted", not
+  "1 collections", "1 fields" or "1 records" (`import`, `export`,
+  `records export`/`import`, `schema pull`/`diff`/`push`, field migrations).
+  `--json` output is unchanged.
 
 ## 0.8.1
 

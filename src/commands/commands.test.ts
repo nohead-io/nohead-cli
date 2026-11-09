@@ -3828,9 +3828,9 @@ describe("import", () => {
     expect(error.message).toContain("nothing was imported")
     expect(error.details.map((d: { message: string }) => d.message)).toEqual([
       expect.stringContaining("records/posts.jsonl line 2"),
-      "records/posts.jsonl has 1 records; manifest.json says 2",
+      "records/posts.jsonl has 1 record; manifest.json says 2",
       "drafts/posts.jsonl line 1 is not a draft (no id, record_id, data or changed_fields)",
-      "drafts/posts.jsonl has 1 drafts; manifest.json says 2",
+      "drafts/posts.jsonl has 1 draft; manifest.json says 2",
       `drafts/posts.jsonl: ${DRF_A} is for ${REC_B}, which is not in records/posts.jsonl`,
       "pages is in manifest.json but not in schema.yaml",
     ])

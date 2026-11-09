@@ -496,7 +496,7 @@ async function readExport(
     )
     if (records.length !== expected)
       problems.push(
-        `${file} has ${records.length} records; manifest.json says ${expected}`
+        `${file} has ${count(records.length, "record")}; manifest.json says ${expected}`
       )
 
     let drafts: NoheadDraft[] = []
@@ -522,7 +522,7 @@ async function readExport(
         )
         if (drafts.length !== expectedDrafts)
           problems.push(
-            `${draftFile} has ${drafts.length} drafts; manifest.json says ${expectedDrafts}`
+            `${draftFile} has ${count(drafts.length, "draft")}; manifest.json says ${expectedDrafts}`
           )
         const ids = new Set(records.map((record) => record.id))
         for (const draft of drafts)

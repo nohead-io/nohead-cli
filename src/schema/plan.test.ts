@@ -109,7 +109,7 @@ collections:
       '~ field posts.title: options {"max_length":120}',
       "! field posts.price: text -> decimal (field migration)",
       "+ field posts.summary (long_text)",
-      "+ collection testimonials (1 fields)",
+      "+ collection testimonials (1 field)",
     ])
   })
 

@@ -76,8 +76,8 @@ export function printError(
 }
 
 /** A count with its noun: "1 record", "2 records". */
-export function count(n: number, noun: string): string {
-  return `${n} ${n === 1 ? noun : `${noun}s`}`
+export function count(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n} ${n === 1 ? noun : plural}`
 }
 
 /** A compact, human-readable value for tables and diffs. */
