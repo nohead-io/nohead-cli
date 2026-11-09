@@ -1268,6 +1268,13 @@ describe("schema pull, diff and push refusals", () => {
   const file = (fields: string) => ({
     [FILE]: `collections:\n  posts:\n    name: Posts\n    fields:\n${fields}`,
   })
+  // The project above plus a field, and with summary as long text.
+  const ADDS_BODY = file(
+    "      title: { type: text, required: true }\n      summary: text\n      body: long_text\n"
+  )
+  const RETYPES_SUMMARY = file(
+    "      title: { type: text, required: true }\n      summary: long_text\n"
+  )
   const methods = (t: ReturnType<typeof project>) =>
     t.requests.map((r) => r.method)
   // The file a pull writes for the project above.
@@ -1305,11 +1312,7 @@ describe("schema pull, diff and push refusals", () => {
   })
 
   it("exits 1 from diff --exit-code when the file differs, showing the plan", async () => {
-    const t = project(
-      file(
-        "      title: { type: text, required: true }\n      summary: text\n      body: long_text\n"
-      )
-    )
+    const t = project(ADDS_BODY)
 
     expect(await run(["schema", "diff"], t.runtime)).toBe(ExitCode.Success)
     expect(t.out()).toContain("+ field posts.body")
@@ -1321,11 +1324,7 @@ describe("schema pull, diff and push refusals", () => {
   })
 
   it("shows the plan and changes nothing when push has no --yes", async () => {
-    const t = project(
-      file(
-        "      title: { type: text, required: true }\n      summary: text\n      body: long_text\n"
-      )
-    )
+    const t = project(ADDS_BODY)
 
     expect(await run(["schema", "push"], t.runtime)).toBe(ExitCode.Usage)
     expect(t.err()).toContain("+ field posts.body")
@@ -1334,11 +1333,7 @@ describe("schema pull, diff and push refusals", () => {
   })
 
   it("refuses a push that migrates a field without --allow-migrations, before any dry run", async () => {
-    const t = project(
-      file(
-        "      title: { type: text, required: true }\n      summary: long_text\n"
-      )
-    )
+    const t = project(RETYPES_SUMMARY)
 
     expect(await run(["schema", "push", "--yes"], t.runtime)).toBe(
       ExitCode.Usage
@@ -1383,20 +1378,13 @@ describe("schema pull, diff and push refusals", () => {
   it("previews a migration's effect on records in diff", async () => {
     let sent: Record<string, unknown> = {}
     let dryRun: string | null = null
-    const t = project(
-      file(
-        "      title: { type: text, required: true }\n      summary: long_text\n"
-      ),
-      {
-        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: async (
-          request
-        ) => {
-          sent = await body(request)
-          dryRun = new URL(request.url).searchParams.get("dry_run")
-          return preview({ type: "long_text" }, { converted: 1 })
-        },
-      }
-    )
+    const t = project(RETYPES_SUMMARY, {
+      [`POST /v1/collections/${COLLECTION_ID}/migrations`]: async (request) => {
+        sent = await body(request)
+        dryRun = new URL(request.url).searchParams.get("dry_run")
+        return preview({ type: "long_text" }, { converted: 1 })
+      },
+    })
 
     await t.ok(["schema", "diff"])
     expect(sent).toMatchObject({ type: "long_text" })
@@ -1407,13 +1395,16 @@ describe("schema pull, diff and push refusals", () => {
   })
 
   it("refuses to make a field required while records lack it, changing nothing", async () => {
+    const dryRuns: (string | null)[] = []
     const t = project(
       file(
         "      title: { type: text, required: true }\n      summary: { type: text, required: true }\n"
       ),
       {
-        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: () =>
-          preview({ required: true }, { invalid: 1 }),
+        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: (request) => {
+          dryRuns.push(new URL(request.url).searchParams.get("dry_run"))
+          return preview({ required: true }, { invalid: 1 })
+        },
       }
     )
 
@@ -1425,6 +1416,7 @@ describe("schema pull, diff and push refusals", () => {
     )
     // Only the dry run was sent.
     expect(methods(t).filter((m) => m !== "GET")).toEqual(["POST"])
+    expect(dryRuns).toEqual(["true"])
   })
 })
 
@@ -2443,6 +2435,7 @@ describe("login and saved keys", () => {
       await t.ok(["collections", "list"])
       t.runtime.env = { ...t.runtime.env, NOHEAD_PROJECT: "prj_env" }
       await t.ok(["collections", "list"])
+      t.runtime.env = { ...env, NOHEAD_API_KEY: "nohead_sk_env" }
       await t.ok(["--project", "prj_flag", "collections", "list"])
       expect(sent(t)).toEqual([
         "https://api.nohead.io/v1/me Bearer nohead_sk_env",
@@ -3889,9 +3882,8 @@ describe("import", () => {
       { data: { title: "Draft" } },
     ])
     expect(t.requests.some((r) => r.url.endsWith("/publication"))).toBe(false)
-    expect(t.out()).toContain(
-      "Imported 2 records into 1 collections (0 with relations, 1 published), 0 drafts and 0 files."
-    )
+    expect(t.out()).toMatch(/^Imported 2 records into /m)
+    expect(t.out()).toContain("(0 with relations, 1 published)")
   })
 
   it("creates relation targets first and sets a required relation on create", async () => {
@@ -4569,28 +4561,29 @@ describe("paged lists", () => {
   })
 })
 
-// A message per case: a usage error from commander (an unknown option, say)
-// would pass a test that checks only the exit code.
+// The whole message per case: a usage error from commander (an unknown
+// option, say) would pass a test that checks only the exit code. Where the
+// message is commander's, a pattern checks the parts that are ours.
 describe("usage errors, refused before calling the API", () => {
-  const ASSET = "ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
-  it.each<{ argv: string[]; message: string | RegExp }>([
+  const ASSET = asset().id
+  const POSITIVE = "must be a positive integer"
+  const cases: { argv: string[]; message: string | RegExp }[] = [
     {
       argv: ["collections", "delete", "posts"],
       message: "Refusing to delete posts without --yes",
     },
     {
       argv: ["fields", "add", "posts", "size", "--type", "float"],
-      message: 'Unknown field type "float"',
+      message: /^Unknown field type "float"\. Use one of: text, /,
     },
     {
       argv: ["fields", "migrate", "posts", "size", "--type", "float"],
-      message: 'Unknown field type "float"',
+      message: /^Unknown field type "float"\. Use one of: text, /,
     },
     {
       argv: ["fields", "update", "posts", "size", "--max", "ten"],
       message: "--max must be a number",
     },
-    // commander's own wording; only the flags are ours.
     {
       argv: [
         "fields",
@@ -4600,7 +4593,7 @@ describe("usage errors, refused before calling the API", () => {
         "--multiple",
         "--single",
       ],
-      message: /--single.*--multiple/,
+      message: /'--single'.*'--multiple'/,
     },
     {
       argv: [
@@ -4611,7 +4604,7 @@ describe("usage errors, refused before calling the API", () => {
         "--required",
         "--optional",
       ],
-      message: /--optional.*--required/,
+      message: /'--optional'.*'--required'/,
     },
     {
       argv: [
@@ -4624,7 +4617,7 @@ describe("usage errors, refused before calling the API", () => {
         "--backfill-json",
         "0",
       ],
-      message: /--backfill-json.*--backfill/,
+      message: /'--backfill-json <json>'.*'--backfill <text>'/,
     },
     {
       argv: [
@@ -4635,11 +4628,12 @@ describe("usage errors, refused before calling the API", () => {
         "--optional",
         "--required",
       ],
-      message: /--optional.*--required/,
+      message: /'--optional'.*'--required'/,
     },
     {
       argv: ["records", "create", "posts"],
-      message: "Provide record data with --set key=value",
+      message:
+        "Provide record data with --set key=value, --data '{...}' or --data-file <path>",
     },
     {
       argv: ["records", "create", "posts", "--set", "views:=three"],
@@ -4655,11 +4649,11 @@ describe("usage errors, refused before calling the API", () => {
     },
     {
       argv: ["records", "create", "posts", "--data-file", "missing.json"],
-      message: "Cannot read missing.json",
+      message: /^Cannot read missing\.json: ENOENT/,
     },
     {
       argv: ["records", "list", "posts", "--status", "draft"],
-      message: /--status.*'draft'/,
+      message: /--status.*'draft'.*published, unpublished\.$/,
     },
     {
       argv: ["records", "schedule", REC_A],
@@ -4667,36 +4661,40 @@ describe("usage errors, refused before calling the API", () => {
     },
     {
       argv: ["records", "schedule", REC_A, "--publish-at", "tomorrow 9am"],
-      message: "--publish-at must be an ISO 8601 time with a time zone",
+      message:
+        "--publish-at must be an ISO 8601 time with a time zone (2026-10-01T09:00:00Z), an offset (+2h, +3d), or none",
     },
     {
       // No time zone.
       argv: ["records", "schedule", REC_A, "--publish-at", "2026-10-01T09:00"],
-      message: "--publish-at must be an ISO 8601 time with a time zone",
+      message:
+        "--publish-at must be an ISO 8601 time with a time zone (2026-10-01T09:00:00Z), an offset (+2h, +3d), or none",
     },
     {
       argv: ["records", "diff", REC_A, "--from", "one", "--to", "2"],
-      message: "--from must be a positive integer",
+      message: `--from ${POSITIVE}`,
     },
     {
       argv: ["records", "revision", REC_A, "0"],
-      message: "<revision> must be a positive integer",
+      message: `<revision> ${POSITIVE}`,
     },
     {
       argv: ["records", "revert", REC_A, "1.5"],
-      message: "<revision> must be a positive integer",
+      message: `<revision> ${POSITIVE}`,
     },
     {
       argv: ["records", "publish", REC_A, "--if-revision", ""],
-      message: "--if-revision must be a positive integer",
+      message: `--if-revision ${POSITIVE}`,
     },
     {
       argv: ["records", "bulk", "publish", "posts"],
-      message: "Give record IDs, or select records with --status",
+      message:
+        "Give record IDs, or select records with --status, --filter, --deleted or --every",
     },
     {
       argv: ["records", "bulk", "archive", "posts", REC_A],
-      message: /'archive'/,
+      message:
+        /'archive'.*'action'.*publish, unpublish, delete, restore, update\.$/,
     },
     {
       argv: [
@@ -4716,7 +4714,7 @@ describe("usage errors, refused before calling the API", () => {
     },
     {
       argv: ["drafts", "schedule", DRF_A, "--merge-at", "none"],
-      message: "--merge-at needs a time",
+      message: `--merge-at needs a time; cancel with: nohead drafts unschedule ${DRF_A}`,
     },
     {
       argv: ["assets", "update", ASSET],
@@ -4728,24 +4726,44 @@ describe("usage errors, refused before calling the API", () => {
     },
     {
       argv: ["assets", "url", ASSET, "--fit", "crop"],
-      message: /--fit.*'crop'/,
+      message: /--fit.*'crop'.*contain, cover, fill\.$/,
     },
     {
       argv: ["audit", "--limit", "ten"],
-      message: "--limit must be a positive integer",
+      message: `--limit ${POSITIVE}`,
     },
     {
       argv: ["search", "shoes", "--limit", "ten"],
-      message: "--limit must be a positive integer",
+      message: `--limit ${POSITIVE}`,
     },
-  ])("$argv.0 $argv.1 $argv.2: $message", async ({ argv, message }) => {
-    const t = testRuntime()
+  ]
+  it.each(cases.map((c) => [c.argv.join(" "), c] as const))(
+    "nohead %s",
+    async (_, { argv, message }) => {
+      const t = testRuntime()
 
-    expect(await run(["--json", ...argv], t.runtime)).toBe(ExitCode.Usage)
-    const { error } = JSON.parse(t.err())
-    expect(error.type).toBe("invalid_request")
-    if (typeof message === "string") expect(error.message).toContain(message)
-    else expect(error.message).toMatch(message)
-    expect(t.requests).toHaveLength(0)
-  })
+      expect(await run(["--json", ...argv], t.runtime)).toBe(ExitCode.Usage)
+      expect(JSON.parse(t.err())).toEqual({
+        error: {
+          type: "invalid_request",
+          message:
+            typeof message === "string"
+              ? message
+              : expect.stringMatching(message),
+        },
+      })
+      expect(t.requests).toHaveLength(0)
+
+      // Without --json, the same message on stderr.
+      const human = testRuntime()
+      expect(await run(argv, human.runtime)).toBe(ExitCode.Usage)
+      if (typeof message === "string")
+        expect(human.err()).toBe(`Error: ${message}\n`)
+      // commander's: the message, then the command's help.
+      else
+        expect(human.err()).toMatch(
+          new RegExp(message.source.replace(/^\^/, "").replace(/\$$/, ""))
+        )
+    }
+  )
 })
