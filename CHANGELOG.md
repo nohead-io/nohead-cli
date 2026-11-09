@@ -7,6 +7,12 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- The counts in what `import`, `export`, `records export`, `records import`
+  and `schema pull` print agree with their number: "Imported 2 records into
+  1 collection", not "1 collections". `--json` output is unchanged.
+
 ## 0.8.1
 
 - `schema diff` and `schema push` count the plan's collections per project,

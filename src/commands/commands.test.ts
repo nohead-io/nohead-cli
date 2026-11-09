@@ -1395,16 +1395,13 @@ describe("schema pull, diff and push refusals", () => {
   })
 
   it("refuses to make a field required while records lack it, changing nothing", async () => {
-    const dryRuns: (string | null)[] = []
     const t = project(
       file(
         "      title: { type: text, required: true }\n      summary: { type: text, required: true }\n"
       ),
       {
-        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: (request) => {
-          dryRuns.push(new URL(request.url).searchParams.get("dry_run"))
-          return preview({ required: true }, { invalid: 1 })
-        },
+        [`POST /v1/collections/${COLLECTION_ID}/migrations`]: () =>
+          preview({ required: true }, { invalid: 1 }),
       }
     )
 
@@ -1415,8 +1412,10 @@ describe("schema pull, diff and push refusals", () => {
       "posts.summary: 1 record(s) do not meet the new settings"
     )
     // Only the dry run was sent.
-    expect(methods(t).filter((m) => m !== "GET")).toEqual(["POST"])
-    expect(dryRuns).toEqual(["true"])
+    const writes = t.requests.filter((r) => r.method !== "GET")
+    expect(
+      writes.map((r) => new URL(r.url).searchParams.get("dry_run"))
+    ).toEqual(["true"])
   })
 })
 
@@ -2435,12 +2434,14 @@ describe("login and saved keys", () => {
       await t.ok(["collections", "list"])
       t.runtime.env = { ...t.runtime.env, NOHEAD_PROJECT: "prj_env" }
       await t.ok(["collections", "list"])
+      await t.ok(["--project", "prj_flag", "collections", "list"])
       t.runtime.env = { ...env, NOHEAD_API_KEY: "nohead_sk_env" }
       await t.ok(["--project", "prj_flag", "collections", "list"])
       expect(sent(t)).toEqual([
         "https://api.nohead.io/v1/me Bearer nohead_sk_env",
         `https://api.nohead.io/v1/projects/${PROJECT_ID}/collections Bearer nohead_sk_env`,
         "https://api.nohead.io/v1/projects/prj_env/collections Bearer nohead_sk_env",
+        "https://api.nohead.io/v1/projects/prj_flag/collections Bearer nohead_sk_env",
         "https://api.nohead.io/v1/projects/prj_flag/collections Bearer nohead_sk_env",
       ])
     })
@@ -3882,8 +3883,9 @@ describe("import", () => {
       { data: { title: "Draft" } },
     ])
     expect(t.requests.some((r) => r.url.endsWith("/publication"))).toBe(false)
-    expect(t.out()).toMatch(/^Imported 2 records into /m)
-    expect(t.out()).toContain("(0 with relations, 1 published)")
+    expect(t.out()).toContain(
+      "Imported 2 records into 1 collection (0 with relations, 1 published), 0 drafts and 0 files."
+    )
   })
 
   it("creates relation targets first and sets a required relation on create", async () => {
@@ -4567,7 +4569,8 @@ describe("paged lists", () => {
 describe("usage errors, refused before calling the API", () => {
   const ASSET = asset().id
   const POSITIVE = "must be a positive integer"
-  const cases: { argv: string[]; message: string | RegExp }[] = [
+  // `help`: commander's own refusal, printed with the command's help.
+  const cases: { argv: string[]; message: string | RegExp; help?: true }[] = [
     {
       argv: ["collections", "delete", "posts"],
       message: "Refusing to delete posts without --yes",
@@ -4594,6 +4597,7 @@ describe("usage errors, refused before calling the API", () => {
         "--single",
       ],
       message: /'--single'.*'--multiple'/,
+      help: true,
     },
     {
       argv: [
@@ -4605,6 +4609,7 @@ describe("usage errors, refused before calling the API", () => {
         "--optional",
       ],
       message: /'--optional'.*'--required'/,
+      help: true,
     },
     {
       argv: [
@@ -4618,6 +4623,7 @@ describe("usage errors, refused before calling the API", () => {
         "0",
       ],
       message: /'--backfill-json <json>'.*'--backfill <text>'/,
+      help: true,
     },
     {
       argv: [
@@ -4629,6 +4635,7 @@ describe("usage errors, refused before calling the API", () => {
         "--required",
       ],
       message: /'--optional'.*'--required'/,
+      help: true,
     },
     {
       argv: ["records", "create", "posts"],
@@ -4654,6 +4661,7 @@ describe("usage errors, refused before calling the API", () => {
     {
       argv: ["records", "list", "posts", "--status", "draft"],
       message: /--status.*'draft'.*published, unpublished\.$/,
+      help: true,
     },
     {
       argv: ["records", "schedule", REC_A],
@@ -4695,6 +4703,7 @@ describe("usage errors, refused before calling the API", () => {
       argv: ["records", "bulk", "archive", "posts", REC_A],
       message:
         /'archive'.*'action'.*publish, unpublish, delete, restore, update\.$/,
+      help: true,
     },
     {
       argv: [
@@ -4727,6 +4736,7 @@ describe("usage errors, refused before calling the API", () => {
     {
       argv: ["assets", "url", ASSET, "--fit", "crop"],
       message: /--fit.*'crop'.*contain, cover, fill\.$/,
+      help: true,
     },
     {
       argv: ["audit", "--limit", "ten"],
@@ -4737,9 +4747,11 @@ describe("usage errors, refused before calling the API", () => {
       message: `--limit ${POSITIVE}`,
     },
   ]
-  it.each(cases.map((c) => [c.argv.join(" "), c] as const))(
+  const named = (argv: string[]) =>
+    argv.map((arg) => (arg === "" ? '""' : arg)).join(" ")
+  it.each(cases.map((c) => [named(c.argv), c] as const))(
     "nohead %s",
-    async (_, { argv, message }) => {
+    async (_, { argv, message, help }) => {
       const t = testRuntime()
 
       expect(await run(["--json", ...argv], t.runtime)).toBe(ExitCode.Usage)
@@ -4757,13 +4769,12 @@ describe("usage errors, refused before calling the API", () => {
       // Without --json, the same message on stderr.
       const human = testRuntime()
       expect(await run(argv, human.runtime)).toBe(ExitCode.Usage)
-      if (typeof message === "string")
-        expect(human.err()).toBe(`Error: ${message}\n`)
-      // commander's: the message, then the command's help.
-      else
-        expect(human.err()).toMatch(
-          new RegExp(message.source.replace(/^\^/, "").replace(/\$$/, ""))
-        )
+      const said = JSON.parse(t.err()).error.message
+      if (help) {
+        const first = `error: ${said}\n`
+        expect(human.err().slice(0, first.length)).toBe(first)
+        expect(human.err()).toContain("\nUsage: nohead ")
+      } else expect(human.err()).toBe(`Error: ${said}\n`)
     }
   )
 })

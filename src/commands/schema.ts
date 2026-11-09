@@ -8,7 +8,7 @@ import type {
 import type { CommandContext } from "../context.ts"
 import { CliError, ExitCode, unwrap } from "../errors.ts"
 import { readSource, usageError } from "../input.ts"
-import { printNotice, printResult } from "../output.ts"
+import { count, printNotice, printResult } from "../output.ts"
 import {
   fromCollections,
   fromYaml,
@@ -498,7 +498,8 @@ export function registerSchema(
       printResult(
         ctx,
         { file: options.output, collections: collections.length },
-        () => `Wrote ${collections.length} collections to ${options.output}`
+        () =>
+          `Wrote ${count(collections.length, "collection")} to ${options.output}`
       )
     })
 

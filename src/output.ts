@@ -75,6 +75,11 @@ export function printError(
   runtime.stderr(`${forTerminal(lines.join("\n"))}\n`)
 }
 
+/** A count with its noun: "1 record", "2 records". */
+export function count(n: number, noun: string): string {
+  return `${n} ${n === 1 ? noun : `${noun}s`}`
+}
+
 /** A compact, human-readable value for tables and diffs. */
 export function formatValue(value: unknown, max = 60): string {
   if (value === null || value === undefined) return "—"
