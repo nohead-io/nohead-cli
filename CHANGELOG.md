@@ -7,7 +7,7 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.8.1
 
 - `schema diff` and `schema push` count the plan's collections per project,
   as the API now limits them: "Your plan allows 5 collections per project, and
