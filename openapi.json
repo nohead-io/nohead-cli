@@ -1075,12 +1075,7 @@
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
-            "name": "dry_run",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
+            "$ref": "#/components/parameters/DryRun"
           },
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -2728,12 +2723,7 @@
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
-            "name": "dry_run",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": false
-            }
+            "$ref": "#/components/parameters/DryRun"
           },
           {
             "$ref": "#/components/parameters/NoheadClient"
@@ -3389,12 +3379,7 @@
             "$ref": "#/components/parameters/RichText"
           },
           {
-            "name": "q",
-            "in": "query",
-            "description": "The words to search for; empty matches everything.",
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/SearchQuery"
           },
           {
             "$ref": "#/components/parameters/Limit"
@@ -3470,12 +3455,7 @@
             "$ref": "#/components/parameters/RichText"
           },
           {
-            "name": "q",
-            "in": "query",
-            "description": "The words to search for; empty matches everything.",
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/SearchQuery"
           },
           {
             "$ref": "#/components/parameters/Limit"
@@ -4592,6 +4572,7 @@
         "name": "project_id",
         "in": "path",
         "required": true,
+        "description": "The project's ID (`prj_…`).",
         "schema": {
           "type": "string"
         },
@@ -4601,7 +4582,7 @@
         "name": "collection_id",
         "in": "path",
         "required": true,
-        "description": "Collection ID, or the collection slug when authenticating with an API key.",
+        "description": "The collection's ID (`col_…`), or its slug, such as `posts`, when authenticating with an API key.",
         "schema": {
           "type": "string"
         },
@@ -4611,6 +4592,7 @@
         "name": "field_id",
         "in": "path",
         "required": true,
+        "description": "The field's ID (`fld_…`).",
         "schema": {
           "type": "string"
         },
@@ -4620,6 +4602,7 @@
         "name": "migration_id",
         "in": "path",
         "required": true,
+        "description": "The field migration's ID (`mig_…`).",
         "schema": {
           "type": "string",
           "examples": [
@@ -4631,6 +4614,7 @@
         "name": "asset_id",
         "in": "path",
         "required": true,
+        "description": "The asset's ID (`ast_…`).",
         "schema": {
           "type": "string"
         },
@@ -4640,6 +4624,7 @@
         "name": "secret_id",
         "in": "path",
         "required": true,
+        "description": "The webhook secret's ID (`whs_…`).",
         "schema": {
           "type": "string"
         },
@@ -4649,6 +4634,7 @@
         "name": "webhook_id",
         "in": "path",
         "required": true,
+        "description": "The webhook's ID (`wh_…`).",
         "schema": {
           "type": "string"
         },
@@ -4658,6 +4644,7 @@
         "name": "delivery_id",
         "in": "path",
         "required": true,
+        "description": "The delivery's ID (`whd_…`).",
         "schema": {
           "type": "string"
         },
@@ -4667,6 +4654,7 @@
         "name": "record_id",
         "in": "path",
         "required": true,
+        "description": "The record's ID (`rec_…`).",
         "schema": {
           "type": "string"
         },
@@ -4676,6 +4664,7 @@
         "name": "draft_id",
         "in": "path",
         "required": true,
+        "description": "The draft's ID (`drf_…`).",
         "schema": {
           "type": "string"
         },
@@ -4685,10 +4674,28 @@
         "name": "revision_id",
         "in": "path",
         "required": true,
+        "description": "The revision's ID (`rev_…`).",
         "schema": {
           "type": "string"
         },
         "example": "rev_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+      },
+      "DryRun": {
+        "name": "dry_run",
+        "in": "query",
+        "description": "`true` returns a preview of the change and changes nothing.",
+        "schema": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "SearchQuery": {
+        "name": "q",
+        "in": "query",
+        "description": "The words to search for; empty matches everything.",
+        "schema": {
+          "type": "string"
+        }
       },
       "RevisionNumber": {
         "name": "revision",
