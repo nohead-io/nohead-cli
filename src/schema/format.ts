@@ -43,6 +43,12 @@ export interface CollectionSpec {
   fields: FieldSpec[]
 }
 
+/** A relation's settings that list fields of its target collection. */
+export const RELATED_LISTS = ["expanded", "searched"] as const
+
+const isStringList = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string")
+
 const OPTION_KEYS = [
   "description",
   "min_length",
@@ -59,6 +65,9 @@ const OPTION_KEYS = [
   "searchable",
   "filterable",
   "sortable",
+  "included",
+  "expanded",
+  "searched",
 ]
 const FIELD_KEYS = [
   "type",
@@ -79,9 +88,12 @@ const FIELD_KEY = /^[a-z][a-z0-9_]{0,62}$/
 function withoutImplied(
   options: Record<string, unknown>
 ): Record<string, unknown> {
-  if (options.format !== "slug" || options.unique !== true) return options
+  // A slug is unique; and every field is included in search hits by default.
+  const implied = (key: string, value: unknown) =>
+    (key === "unique" && value === true && options.format === "slug") ||
+    (key === "included" && value === true)
   return Object.fromEntries(
-    Object.entries(options).filter(([key]) => key !== "unique")
+    Object.entries(options).filter(([key, value]) => !implied(key, value))
   )
 }
 
@@ -94,9 +106,17 @@ function humanize(key: string): string {
     .join(" ")
 }
 
-/** Collections as specs; relation targets become slugs (or stay IDs if unknown). */
+/**
+ * Collections as specs; relation targets become slugs (or stay IDs if
+ * unknown), and the related fields a relation's search hits return and its
+ * searches match (`expanded`, `searched`) keys (a field deleted since is
+ * left out, as search skips it).
+ */
 export function fromCollections(collections: Collection[]): CollectionSpec[] {
   const slugs = new Map(collections.map((c) => [c.id, c.slug]))
+  const keys = new Map(
+    collections.flatMap((c) => c.fields.map((f) => [f.id, f.key] as const))
+  )
   return collections.map((collection) => ({
     slug: collection.slug,
     name: collection.name,
@@ -105,6 +125,14 @@ export function fromCollections(collections: Collection[]): CollectionSpec[] {
     fields: collection.fields.map((field) => {
       const { target_collection_id: target, ...rest } =
         field.configuration as Record<string, unknown>
+      if (field.type === "relation")
+        for (const option of RELATED_LISTS) {
+          const listed = rest[option]
+          if (Array.isArray(listed))
+            rest[option] = listed.flatMap((id: unknown) =>
+              keys.has(String(id)) ? [keys.get(String(id))] : []
+            )
+        }
       return {
         key: field.key,
         name: field.name,
@@ -233,6 +261,27 @@ export function fromYaml(text: string, source: string): CollectionSpec[] {
           throw usageError(
             `${at}: relation fields need "collection" (the target collection's slug)`
           )
+        if (field.included !== undefined && typeof field.included !== "boolean")
+          throw usageError(`${at}.included: true or false`)
+        if (field.expanded !== undefined) {
+          if (
+            !isStringList(field.expanded) ||
+            (type !== "asset" && type !== "relation")
+          )
+            throw usageError(
+              type === "asset" || type === "relation"
+                ? `${at}.expanded: a list (${type === "asset" ? "image_url, dimensions, alt, file_url, filename, content_type" : "the related collection's field keys"})`
+                : `${at}.expanded: only asset and relation fields expand what they point at`
+            )
+        }
+        if (field.searched !== undefined) {
+          if (!isStringList(field.searched) || type !== "relation")
+            throw usageError(
+              type === "relation"
+                ? `${at}.searched: a list (the related collection's field keys)`
+                : `${at}.searched: only relation fields search fields of the records they point at`
+            )
+        }
 
         const renamedFrom = field.renamed_from
         if (

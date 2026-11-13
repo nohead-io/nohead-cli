@@ -9,6 +9,16 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- The schema file keeps what public search hits include of each field:
+  `included: false` leaves a field out, and an asset or relation field's
+  `expanded` lists what comes along, an asset's parts
+  (`[image_url, width, height, alt]`) or the related collection's fields by
+  key (`expanded: [name, portrait]`), which `schema push` sends as field IDs
+  and `schema pull` writes back as keys. `included: true`, the default,
+  isn't written.
+- `schema push` no longer dry-runs a field change that only touches its
+  description or search settings (searchable, filterable, sortable,
+  included), since those can't make its values invalid.
 - Counts in messages agree with their number: "Imported 2 records into
   1 collection", "+ collection posts (1 field)", "1 record: 1 converted", not
   "1 collections", "1 fields" or "1 records" (`import`, `export`,

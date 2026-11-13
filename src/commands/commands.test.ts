@@ -1419,6 +1419,209 @@ describe("schema pull, diff and push refusals", () => {
   })
 })
 
+// What public search hits include (`included`) and expand (`expanded`), and
+// what a relation's searches match (`searched`): a relation lists the related
+// collection's fields by key in the file and by ID in the API.
+describe("schema: what search hits include", () => {
+  // The SDK's field types learn `included`, `expanded` and `searched` with its next
+  // contract update.
+  const settings = (configuration: Record<string, unknown>) =>
+    configuration as never
+  const PEOPLE_ID = "col_01J9ZQ3F8X5W2K7M4N6P0PEPLE"
+  const name = field({ key: "name", name: "Name", collection_id: PEOPLE_ID })
+  const role = field({
+    key: "role",
+    name: "Role",
+    collection_id: PEOPLE_ID,
+    position: 1,
+  })
+  const people = collection({
+    id: PEOPLE_ID,
+    slug: "people",
+    name: "People",
+    fields: [name, role],
+  })
+  const title = field({ key: "title", name: "Title" })
+  const longText = field({
+    key: "body",
+    name: "Body",
+    type: "long_text",
+    position: 1,
+    configuration: settings({ included: false }),
+  })
+  const cover = field({
+    key: "cover",
+    name: "Cover",
+    type: "asset",
+    position: 2,
+    configuration: settings({ expanded: ["image_url", "alt"] }),
+  })
+  const author = field({
+    key: "author",
+    name: "Author",
+    type: "relation",
+    position: 3,
+    configuration: settings({
+      target_collection_id: PEOPLE_ID,
+      // A field deleted since stays listed in the API; search skips it.
+      expanded: [name.id, "fld_01J9ZQ3F8X5W2K7M4N6P0GONE0"],
+      searchable: true,
+      searched: [role.id],
+    }),
+  })
+  const FILE = "nohead.schema.yaml"
+  const project = (
+    files: Record<string, string> = {},
+    routes: Record<string, Handler> = {}
+  ) =>
+    testRuntime({
+      files,
+      routes: {
+        ...routes,
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse(
+            "collections_list",
+            page([
+              people,
+              collection({ fields: [title, longText, cover, author] }),
+            ])
+          ),
+      },
+    })
+  const fieldsOf = (yaml: string, slug: string) =>
+    Object.fromEntries(
+      fromYaml(yaml, FILE)
+        .find((c) => c.slug === slug)!
+        .fields.map((f) => [f.key, f.options])
+    )
+
+  it("pulls a relation's expanded and searched fields as keys, and leaves out the default", async () => {
+    const t = project()
+    await t.ok(["schema", "pull"])
+
+    expect(fieldsOf(t.text(FILE), "posts")).toEqual({
+      title: {},
+      body: { included: false },
+      cover: { expanded: ["image_url", "alt"] },
+      author: {
+        collection: "people",
+        expanded: ["name"],
+        searchable: true,
+        searched: ["role"],
+      },
+    })
+    // The file it pulled has nothing to change.
+    const again = project({ [FILE]: t.text(FILE) })
+    await again.ok(["schema", "diff", "--exit-code"])
+    expect(again.out()).toBe("Schema is up to date.\n")
+  })
+
+  it.each([
+    [
+      "expanded",
+      "expanded: [name, role], searchable: true, searched: [role]",
+      { expanded: [name.id, role.id] },
+    ],
+    [
+      "searched",
+      "expanded: [name], searchable: true, searched: [name, role]",
+      { searched: [name.id, role.id] },
+    ],
+  ])("pushes a relation's %s fields as IDs", async (_option, options, sent) => {
+    const t = project(
+      {
+        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, ${options} }\n`,
+      },
+      {
+        [`PATCH /v1/fields/${author.id}`]: () =>
+          contractResponse("fields_update", author),
+      }
+    )
+    await t.ok(["schema", "push", "--yes"])
+
+    const patch = t.requests.find((r) => r.method === "PATCH")!
+    expect((await body(patch)).configuration).toEqual(sent)
+  })
+
+  it("adds a field to the target before listing it, in the same push", async () => {
+    const email = field({
+      key: "email",
+      name: "Email",
+      collection_id: PEOPLE_ID,
+      position: 2,
+    })
+    const t = project(
+      {
+        [FILE]:
+          "collections:\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, expanded: [name, email], searchable: true, searched: [role] }\n  people:\n    fields:\n      name: text\n      role: text\n      email: text\n",
+      },
+      {
+        [`POST /v1/collections/${PEOPLE_ID}/fields`]: () =>
+          contractResponse("fields_create", email, { status: 201 }),
+        [`PATCH /v1/fields/${author.id}`]: () =>
+          contractResponse("fields_update", author),
+        [`PUT /v1/collections/${PEOPLE_ID}/field-order`]: () =>
+          contractResponse("fields_reorder", {
+            object: "field_order",
+            collection_id: PEOPLE_ID,
+            field_ids: [],
+          }),
+      }
+    )
+    await t.ok(["schema", "push", "--yes"])
+
+    const writes = t.requests
+      .filter((r) => r.method !== "GET")
+      .map((r) => r.method)
+    expect(writes.indexOf("POST")).toBeLessThan(writes.indexOf("PATCH"))
+    const patch = t.requests.find((r) => r.method === "PATCH")!
+    expect((await body(patch)).configuration).toEqual({
+      expanded: [name.id, email.id],
+    })
+  })
+
+  it.each(["expanded", "searched"])(
+    "refuses a relation's %s key that isn't a field of its target",
+    async (option) => {
+      const t = project({
+        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      author: { type: relation, collection: people, searchable: true, ${option}: [name, email] }\n`,
+      })
+      expect(await run(["schema", "push", "--yes"], t.runtime)).toBe(
+        ExitCode.Usage
+      )
+      expect(t.err()).toContain(
+        `Field author: ${option} lists email, which isn't a field of people`
+      )
+    }
+  )
+
+  it("refuses included, expanded and searched where the type can't have them", () => {
+    expect(() =>
+      fromYaml(
+        "collections:\n  posts:\n    fields:\n      title: { type: text, expanded: [name] }\n",
+        FILE
+      )
+    ).toThrow(
+      "title.expanded: only asset and relation fields expand what they point at"
+    )
+    expect(() =>
+      fromYaml(
+        "collections:\n  posts:\n    fields:\n      cover: { type: asset, searched: [alt] }\n",
+        FILE
+      )
+    ).toThrow(
+      "cover.searched: only relation fields search fields of the records they point at"
+    )
+    expect(() =>
+      fromYaml(
+        "collections:\n  posts:\n    fields:\n      cover: { type: asset, included: yes }\n",
+        FILE
+      )
+    ).toThrow("cover.included: true or false")
+  })
+})
+
 describe("schema push: a relation into a collection the push creates", () => {
   const CATEGORIES_ID = "col_01J9ZQ3F8X5W2K7M4N6P0CATEG"
   const category = field({
