@@ -1072,17 +1072,27 @@ describe("schema push", () => {
       },
     })
 
-  it("adds a field between others, then puts every field in the file's order", async () => {
-    let order: string[] = []
-    const t = push(async (request) => {
-      order = (await body(request)).field_ids
-      return contractResponse("fields_reorder", fieldOrder)
-    })
+  it.each([
+    { added: "a field", spec: "text" },
+    // Added after the other changes, which may add the fields it lists.
+    {
+      added: "a relation that lists fields of its target",
+      spec: "{ type: relation, collection: posts, expanded: [title] }",
+    },
+  ])(
+    "adds $added between others, then puts every field in the file's order",
+    async ({ spec }) => {
+      let order: string[] = []
+      const t = push(async (request) => {
+        order = (await body(request)).field_ids
+        return contractResponse("fields_reorder", fieldOrder)
+      }, `title: { type: text, required: true }\n      headline: ${spec}\n      code: text`)
 
-    await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
-    expect(order).toEqual([title.id, headline.id, code.id])
-    expect(t.out()).toBe("Applied 2 changes.\n")
-  })
+      await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
+      expect(order).toEqual([title.id, headline.id, code.id])
+      expect(t.out()).toBe("Applied 2 changes.\n")
+    }
+  )
 
   it("reorders a field renamed in the same push by its new key", async () => {
     let order: string[] = []
@@ -1887,32 +1897,54 @@ describe("schema push: a relation into a collection the push creates", () => {
     })
   })
 
-  // The relation is added once its target exists, after the other fields.
+  // A relation is added once its target exists, after the other fields; one
+  // that lists fields of its target, once those exist.
+  const company = "company: { type: relation, collection: companies }"
   it.each([
     {
       where: "between other fields, then puts them in the file's order",
-      fields: ["title", "company", "kind"],
+      jobs: ["title: text", company, "kind: text"],
+      companies: ["name: text"],
       reordered: ["title", "company", "kind"],
     },
     {
       where: "last, with no reorder",
-      fields: ["title", "kind", "company"],
+      jobs: ["title: text", "kind: text", company],
+      companies: ["name: text"],
       reordered: undefined,
+    },
+    {
+      where:
+        "listing a field still to come, then puts them in the file's order",
+      jobs: [
+        "title: text",
+        "company: { type: relation, collection: companies, expanded: [parent] }",
+        "kind: text",
+      ],
+      companies: [
+        "name: text",
+        "parent: { type: relation, collection: companies }",
+      ],
+      reordered: ["title", "company", "kind"],
     },
   ])(
     "creates a collection with a relation into a later one $where",
-    async ({ fields, reordered }) => {
+    async ({ jobs, companies, reordered }) => {
       const JOBS_ID = "col_01J9ZQ3F8X5W2K7M4N6P0R1JOBS"
       const COMPANIES_ID = "col_01J9ZQ3F8X5W2K7M4N6P0COMPS"
       const ids: Record<string, string> = {
         jobs: JOBS_ID,
         companies: COMPANIES_ID,
       }
-      const spec: Record<string, string> = {
-        title: "text",
-        company: "{ type: relation, collection: companies }",
-        kind: "text",
-      }
+      const addField = (collectionId: string) => async (request: Request) =>
+        contractResponse(
+          "fields_create",
+          field({
+            key: (await body(request)).key,
+            collection_id: collectionId,
+          }),
+          { status: 201 }
+        )
       let order: string[] | undefined
       const t = testRuntime({
         files: {
@@ -1920,10 +1952,10 @@ describe("schema push: a relation into a collection the push creates", () => {
             "collections:",
             "  jobs:",
             "    fields:",
-            ...fields.map((key) => `      ${key}: ${spec[key]}`),
+            ...jobs.map((line) => `      ${line}`),
             "  companies:",
             "    fields:",
-            "      name: text",
+            ...companies.map((line) => `      ${line}`),
             "",
           ].join("\n"),
         },
@@ -1946,17 +1978,9 @@ describe("schema push: a relation into a collection the push creates", () => {
               { status: 201 }
             )
           },
-          [`POST /v1/collections/${JOBS_ID}/fields`]: () =>
-            contractResponse(
-              "fields_create",
-              field({
-                key: "company",
-                type: "relation",
-                collection_id: JOBS_ID,
-                configuration: { target_collection_id: COMPANIES_ID },
-              }),
-              { status: 201 }
-            ),
+          [`POST /v1/collections/${JOBS_ID}/fields`]: addField(JOBS_ID),
+          [`POST /v1/collections/${COMPANIES_ID}/fields`]:
+            addField(COMPANIES_ID),
           [`PUT /v1/collections/${JOBS_ID}/field-order`]: async (request) => {
             order = (await body(request)).field_ids
             return contractResponse("fields_reorder", {
@@ -2013,7 +2037,7 @@ describe("schema push: the organization's collection limit", () => {
             ])
           ),
         [`POST /v1/projects/${PROJECT_ID}/collections`]: async (request) => {
-          const { slug } = await body(request)
+          const { slug, fields } = await body(request)
           created.push(slug)
           return contractResponse(
             "collections_create",
@@ -2021,7 +2045,7 @@ describe("schema push: the organization's collection limit", () => {
               id: `col_01J9ZQ3F8X5W2K7M4N6P0${slug.toUpperCase().padEnd(5, "0").slice(0, 5)}`,
               name: slug,
               slug,
-              fields: [],
+              fields: fields.map(({ key }: { key: string }) => field({ key })),
             }),
             { status: 201 }
           )
