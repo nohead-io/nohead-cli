@@ -12,6 +12,7 @@ import { count, printNotice, printResult } from "../output.ts"
 import {
   fromCollections,
   fromYaml,
+  RELATED_LISTS,
   toYaml,
   type FieldSpec,
 } from "../schema/format.ts"
@@ -63,16 +64,45 @@ function fieldIdsOf(collections: Collection[]): FieldIds {
 }
 
 /**
+ * A related field's ID from a schema file's list: its key among the target
+ * collection's `known` fields, or an ID written as one.
+ */
+function relatedId(
+  known: Map<string, string> | undefined,
+  item: unknown
+): string | undefined {
+  const key = String(item)
+  return known?.get(key) ?? (key.startsWith("fld_") ? key : undefined)
+}
+
+/**
  * A field's options as the API's configuration: a relation's target
- * collection resolves slug -> ID (null, when an option is removed, stays).
+ * collection resolves slug -> ID (null, when an option is removed, stays),
+ * and the related fields search hits return and searches match key -> ID
+ * (`target`: the relation's target collection, by slug).
  */
 function apiOptions(
   options: Record<string, unknown>,
   ids: Map<string, string>,
-  key: string
+  key: string,
+  fields: FieldIds = new Map(),
+  target?: unknown
 ): Record<string, unknown> {
   const { collection, ...rest } = options
   const configuration: Record<string, unknown> = { ...rest }
+  for (const option of RELATED_LISTS) {
+    const listed = rest[option]
+    if (!Array.isArray(listed) || typeof target !== "string") continue
+    const known = fields.get(target)
+    configuration[option] = listed.map((item: unknown) => {
+      const id = relatedId(known, item)
+      if (!id)
+        throw usageError(
+          `Field ${key}: ${option} lists ${String(item)}, which isn't a field of ${target}`
+        )
+      return id
+    })
+  }
   if (collection === null) configuration.target_collection_id = null
   else if (typeof collection === "string") {
     const target =
@@ -88,14 +118,24 @@ function apiOptions(
 }
 
 /** A field spec as an API field definition. */
-function fieldBody(field: FieldSpec, ids: Map<string, string>): FieldCreate {
+function fieldBody(
+  field: FieldSpec,
+  ids: Map<string, string>,
+  fields?: FieldIds
+): FieldCreate {
   return {
     name: field.name,
     key: field.key,
     type: field.type,
     required: field.required,
     multiple: field.multiple,
-    configuration: apiOptions(field.options, ids, field.key),
+    configuration: apiOptions(
+      field.options,
+      ids,
+      field.key,
+      fields,
+      field.options.collection
+    ),
   } as FieldCreate // any type's options; the API checks them against the type
 }
 
@@ -109,9 +149,10 @@ type UpdateChange = Extract<Change, { kind: "update_field" }>
 function migrationBody(
   change: MigrateChange | UpdateChange,
   ids: Map<string, string>,
-  clearInvalid: boolean
+  clearInvalid: boolean,
+  fields?: FieldIds
 ) {
-  const { type, multiple, required } = fieldBody(change.to, ids)
+  const { type, multiple, required } = fieldBody(change.to, ids, fields)
   // The API merges the change onto the options that carry over.
   const options =
     change.kind === "migrate_field"
@@ -121,7 +162,13 @@ function migrationBody(
     type,
     multiple,
     required,
-    configuration: apiOptions(options, ids, change.to.key),
+    configuration: apiOptions(
+      options,
+      ids,
+      change.to.key,
+      fields,
+      change.to.options.collection
+    ),
     on_invalid: clearInvalid ? ("clear" as const) : ("fail" as const),
   }
 }
@@ -134,9 +181,23 @@ function migrationBody(
 function tightens(change: Change): change is UpdateChange {
   return (
     change.kind === "update_field" &&
-    (change.changes.required === true || change.changes.options !== undefined)
+    (change.changes.required === true ||
+      Object.keys(change.changes.options ?? {}).some(
+        (option) => !LOOSE_OPTIONS.has(option)
+      ))
   )
 }
+
+/** Options that never make a field's values invalid: help text and search. */
+const LOOSE_OPTIONS = new Set([
+  "description",
+  "searchable",
+  "filterable",
+  "sortable",
+  "included",
+  "expanded",
+  "searched",
+])
 
 /**
  * The collection a field change makes a relation point at, when this push
@@ -168,6 +229,7 @@ async function previewMigrations(
   waiting: { change: MigrateChange; target: string }[]
 }> {
   const ids = new Map(remote.map((c) => [c.slug, c.id]))
+  const fields = fieldIdsOf(remote)
   const previews = []
   const waiting = []
   for (const change of todo) {
@@ -181,7 +243,12 @@ async function previewMigrations(
       await unwrap(
         ctx.api.migrations.create(own, {
           field_id: change.field_id,
-          ...migrationBody(change, new Map(ids).set(target, own), clearInvalid),
+          ...migrationBody(
+            change,
+            new Map(ids).set(target, own),
+            clearInvalid,
+            fields
+          ),
           dry_run: true,
         })
       )
@@ -191,7 +258,7 @@ async function previewMigrations(
     const preview = await unwrap(
       ctx.api.migrations.create(ids.get(change.slug) ?? change.slug, {
         field_id: change.field_id,
-        ...migrationBody(change, ids, clearInvalid),
+        ...migrationBody(change, ids, clearInvalid, fields),
         dry_run: true,
       })
     )
@@ -279,7 +346,7 @@ export async function applyPlan(
     const preview = await unwrap(
       ctx.api.migrations.create(ids.get(change.slug) ?? change.slug, {
         field_id: change.field_id,
-        ...migrationBody(change, ids, false),
+        ...migrationBody(change, ids, false, fieldIds),
         dry_run: true,
       })
     )
@@ -318,6 +385,18 @@ export async function applyPlan(
   const creating = new Set(creates.map((c) => c.collection.slug))
   // Relations to collections created in this push are added once those exist.
   const deferred: { slug: string; field: FieldSpec }[] = []
+  // Relations that list fields this push adds to their target are added
+  // last, once those exist.
+  const last: { slug: string; field: FieldSpec }[] = []
+  const listsUnknown = (field: FieldSpec) => {
+    const known = fieldIds.get(String(field.options.collection))
+    return RELATED_LISTS.some((option) => {
+      const listed = field.options[option]
+      return (
+        Array.isArray(listed) && listed.some((key) => !relatedId(known, key))
+      )
+    })
+  }
   for (const change of creates) {
     const now: FieldSpec[] = []
     for (const field of change.collection.fields) {
@@ -328,6 +407,8 @@ export async function applyPlan(
         !ids.has(target)
       )
         deferred.push({ slug: change.collection.slug, field })
+      else if (listsUnknown(field))
+        last.push({ slug: change.collection.slug, field })
       else now.push(field)
     }
     const created = await unwrap(
@@ -337,7 +418,7 @@ export async function applyPlan(
           slug: change.collection.slug,
           description: change.collection.description,
           public_search: change.collection.public_search,
-          fields: now.map((f) => fieldBody(f, ids)),
+          fields: now.map((f) => fieldBody(f, ids, fieldIds)),
         },
         writes
       )
@@ -350,13 +431,35 @@ export async function applyPlan(
     applied++
   }
   for (const { slug, field } of deferred) {
+    if (listsUnknown(field)) {
+      last.push({ slug, field })
+      continue
+    }
     const added = await unwrap(
-      ctx.api.fields.create(ids.get(slug)!, fieldBody(field, ids), writes)
+      ctx.api.fields.create(
+        ids.get(slug)!,
+        fieldBody(field, ids, fieldIds),
+        writes
+      )
     )
     fieldIds.get(slug)?.set(added.key, added.id)
   }
 
-  for (const change of todo) {
+  // Field changes that list fields of their target go after the rest,
+  // which may add or rename those fields.
+  const listsRelated = (change: Change) =>
+    RELATED_LISTS.some(
+      (option) =>
+        (change.kind === "update_field" &&
+          Array.isArray(change.changes.options?.[option])) ||
+        (change.kind === "add_field" &&
+          Array.isArray(change.field.options[option]))
+    )
+  const ordered = [
+    ...todo.filter((c) => !listsRelated(c)),
+    ...todo.filter(listsRelated),
+  ]
+  for (const change of ordered) {
     switch (change.kind) {
       case "update_collection":
         await unwrap(
@@ -379,7 +482,7 @@ export async function applyPlan(
         const added = await unwrap(
           ctx.api.fields.create(
             ids.get(change.slug)!,
-            fieldBody(change.field, ids),
+            fieldBody(change.field, ids, fieldIds),
             writes
           )
         )
@@ -389,7 +492,13 @@ export async function applyPlan(
       case "update_field": {
         const { key, name, required, options: fieldOptions } = change.changes
         const configuration = fieldOptions
-          ? apiOptions(fieldOptions, ids, change.key)
+          ? apiOptions(
+              fieldOptions,
+              ids,
+              change.key,
+              fieldIds,
+              change.to.options.collection
+            )
           : undefined
         await unwrap(
           ctx.api.fields.update(
@@ -446,6 +555,17 @@ export async function applyPlan(
   }
 
   // Migrations last and one at a time: each makes its collection read-only.
+  for (const { slug, field } of last) {
+    const added = await unwrap(
+      ctx.api.fields.create(
+        ids.get(slug)!,
+        fieldBody(field, ids, fieldIds),
+        writes
+      )
+    )
+    fieldIds.get(slug)?.set(added.key, added.id)
+  }
+
   for (const change of migrations) {
     if (change.kind !== "migrate_field") continue
     const started = await unwrap(
@@ -453,7 +573,7 @@ export async function applyPlan(
         ids.get(change.slug) ?? change.slug,
         {
           field_id: change.field_id,
-          ...migrationBody(change, ids, options.clearInvalid),
+          ...migrationBody(change, ids, options.clearInvalid, fieldIds),
         },
         writes
       )
