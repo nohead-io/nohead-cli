@@ -314,8 +314,8 @@ function tooMany(room: Room & { creating: number }): boolean {
 
 /**
  * Applies a plan (see planChanges): collections first (relations to new
- * collections once those exist), then collection and field changes, then field
- * migrations one at a time, each waited for. Migrations are previewed before
+ * collections once those exist, then the file's field order), then collection
+ * and field changes, then field migrations one at a time, each waited for. Migrations are previewed before
  * anything is changed. Returns the number of changes applied and slug -> ID.
  */
 export async function applyPlan(
@@ -388,6 +388,8 @@ export async function applyPlan(
   // Relations that list fields this push adds to their target are added
   // last, once those exist.
   const last: { slug: string; field: FieldSpec }[] = []
+  // Each new collection's field keys in the order they were added.
+  const addedKeys = new Map<string, string[]>()
   const listsUnknown = (field: FieldSpec) => {
     const known = fieldIds.get(String(field.options.collection))
     return RELATED_LISTS.some((option) => {
@@ -424,6 +426,10 @@ export async function applyPlan(
       )
     )
     ids.set(created.slug, created.id)
+    addedKeys.set(
+      created.slug,
+      now.map((f) => f.key)
+    )
     fieldIds.set(
       created.slug,
       new Map(created.fields.map((f) => [f.key, f.id]))
@@ -443,6 +449,7 @@ export async function applyPlan(
       )
     )
     fieldIds.get(slug)?.set(added.key, added.id)
+    addedKeys.get(slug)!.push(added.key)
   }
 
   // Field changes that list fields of their target go after the rest,
@@ -554,7 +561,6 @@ export async function applyPlan(
     applied++
   }
 
-  // Migrations last and one at a time: each makes its collection read-only.
   for (const { slug, field } of last) {
     const added = await unwrap(
       ctx.api.fields.create(
@@ -564,8 +570,25 @@ export async function applyPlan(
       )
     )
     fieldIds.get(slug)?.set(added.key, added.id)
+    addedKeys.get(slug)!.push(added.key)
   }
 
+  // Fields added after their collection was created came last: put the new
+  // collections' fields in the file's order.
+  for (const { collection } of creates) {
+    const keys = collection.fields.map((f) => f.key)
+    if (addedKeys.get(collection.slug)!.join() === keys.join()) continue
+    const known = fieldIds.get(collection.slug)!
+    await unwrap(
+      ctx.api.fields.reorder(
+        ids.get(collection.slug)!,
+        { field_ids: keys.map((key) => known.get(key)!) },
+        writes
+      )
+    )
+  }
+
+  // Migrations last and one at a time: each makes its collection read-only.
   for (const change of migrations) {
     if (change.kind !== "migrate_field") continue
     const started = await unwrap(

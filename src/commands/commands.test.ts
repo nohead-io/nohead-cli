@@ -1886,6 +1886,92 @@ describe("schema push: a relation into a collection the push creates", () => {
       configuration: { target_collection_id: CATEGORIES_ID },
     })
   })
+
+  // The relation is added once its target exists, after the other fields.
+  it.each([
+    {
+      where: "between other fields, then puts them in the file's order",
+      fields: ["title", "company", "kind"],
+      reordered: ["title", "company", "kind"],
+    },
+    {
+      where: "last, with no reorder",
+      fields: ["title", "kind", "company"],
+      reordered: undefined,
+    },
+  ])(
+    "creates a collection with a relation into a later one $where",
+    async ({ fields, reordered }) => {
+      const JOBS_ID = "col_01J9ZQ3F8X5W2K7M4N6P0R1JOBS"
+      const COMPANIES_ID = "col_01J9ZQ3F8X5W2K7M4N6P0COMPS"
+      const ids: Record<string, string> = {
+        jobs: JOBS_ID,
+        companies: COMPANIES_ID,
+      }
+      const spec: Record<string, string> = {
+        title: "text",
+        company: "{ type: relation, collection: companies }",
+        kind: "text",
+      }
+      let order: string[] | undefined
+      const t = testRuntime({
+        files: {
+          "nohead.schema.yaml": [
+            "collections:",
+            "  jobs:",
+            "    fields:",
+            ...fields.map((key) => `      ${key}: ${spec[key]}`),
+            "  companies:",
+            "    fields:",
+            "      name: text",
+            "",
+          ].join("\n"),
+        },
+        routes: {
+          "GET /v1/me": me,
+          [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+            contractResponse("collections_list", page([])),
+          [`POST /v1/projects/${PROJECT_ID}/collections`]: async (request) => {
+            const { slug, fields } = await body(request)
+            return contractResponse(
+              "collections_create",
+              collection({
+                id: ids[slug],
+                slug,
+                name: slug,
+                fields: fields.map(({ key }: { key: string }) =>
+                  field({ key, collection_id: ids[slug] })
+                ),
+              }),
+              { status: 201 }
+            )
+          },
+          [`POST /v1/collections/${JOBS_ID}/fields`]: () =>
+            contractResponse(
+              "fields_create",
+              field({
+                key: "company",
+                type: "relation",
+                collection_id: JOBS_ID,
+                configuration: { target_collection_id: COMPANIES_ID },
+              }),
+              { status: 201 }
+            ),
+          [`PUT /v1/collections/${JOBS_ID}/field-order`]: async (request) => {
+            order = (await body(request)).field_ids
+            return contractResponse("fields_reorder", {
+              object: "field_order",
+              collection_id: JOBS_ID,
+              field_ids: order,
+            })
+          },
+        },
+      })
+
+      await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
+      expect(order).toEqual(reordered?.map((key) => field({ key }).id))
+    }
+  )
 })
 
 describe("schema push: the organization's collection limit", () => {
