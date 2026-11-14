@@ -7,15 +7,20 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.9.0
 
-- The schema file keeps what public search hits include of each field:
-  `included: false` leaves a field out, and an asset or relation field's
-  `expanded` lists what comes along, an asset's parts
-  (`[image_url, width, height, alt]`) or the related collection's fields by
-  key (`expanded: [name, portrait]`), which `schema push` sends as field IDs
-  and `schema pull` writes back as keys. `included: true`, the default,
-  isn't written.
+- The schema file keeps each field's public search options:
+  - `included: false` leaves a field out of public search hits.
+    `included: true`, the default, isn't written.
+  - An asset or relation field's `expanded` lists what hits return of what
+    it points at: an asset's parts (`[image_url, dimensions, alt]`), or the
+    related collection's fields by key (`expanded: [name, portrait]`).
+  - A relation field's `searched` lists the related fields searches match
+    (`searched: [name]`).
+
+  `schema push` sends related fields as field IDs, and `schema pull` writes
+  them back as keys.
+
 - `schema push` no longer dry-runs a field change that only touches its
   description or search settings (searchable, filterable, sortable,
   included), since those can't make its values invalid.
