@@ -5953,7 +5953,10 @@
             "description": "The related collection's fields, by ID (`fld_...`), that public search hits return of each published related record under `expanded`, while the field is included, by their current keys (a list holds the first 100 related records that exist). None by default: the IDs only, whether or not the related collection is in public search. A filterable relation field also filters on them. API reads expand what `?expand=` asks for.",
             "items": {
               "type": "string",
-              "pattern": "^fld_"
+              "pattern": "^fld_",
+              "examples": [
+                "fld_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+              ]
             }
           },
           "searched": {
@@ -5963,7 +5966,10 @@
             "description": "The related collection's fields, by ID (`fld_...`), whose words searches match in each published related record while the field is `searchable`, in every search, whether or not hits return them; only text, long text, rich text and enum fields are matched. None by default. A filterable relation field also filters on them: under `expanded.<key>.data.<field>` when hits return them, `expanded.<key>.searched.<field>` when they don't.",
             "items": {
               "type": "string",
-              "pattern": "^fld_"
+              "pattern": "^fld_",
+              "examples": [
+                "fld_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+              ]
             }
           },
           "target_collection_id": {
