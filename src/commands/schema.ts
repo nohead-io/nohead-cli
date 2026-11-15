@@ -313,10 +313,49 @@ function tooMany(room: Room & { creating: number }): boolean {
 }
 
 /**
+ * Puts a collection's fields in the order of `keys`, every field by its key.
+ * A reorder lists every field, so it fails if they changed since the plan
+ * (another push, the web app); what was applied stays.
+ */
+async function reorderFields(
+  ctx: CommandContext,
+  slug: string,
+  collectionId: string,
+  keys: string[],
+  fieldIds: FieldIds,
+  writes: ReturnType<CommandContext["writeOptions"]>
+) {
+  const changed = new CliError(ExitCode.ApiError, {
+    type: "schema_changed",
+    message: `${slug}: its fields changed during the push, so they were not put in the file's order; run the push again`,
+  })
+  const known = fieldIds.get(slug)
+  const ordered = keys.map((key) => known?.get(key))
+  if (ordered.some((id) => id === undefined)) throw changed
+  try {
+    await unwrap(
+      ctx.api.fields.reorder(
+        collectionId,
+        { field_ids: ordered as string[] },
+        writes
+      )
+    )
+  } catch (error) {
+    if (
+      error instanceof CliError &&
+      error.body.details?.some((d) => d.field === "field_ids")
+    )
+      throw changed
+    throw error
+  }
+}
+
+/**
  * Applies a plan (see planChanges): collections first (relations to new
- * collections once those exist), then collection and field changes, then field
- * migrations one at a time, each waited for. Migrations are previewed before
- * anything is changed. Returns the number of changes applied and slug -> ID.
+ * collections once those exist, then the file's field order), then collection
+ * and field changes, then field migrations one at a time, each waited for.
+ * Migrations are previewed before anything is changed. Returns the number of
+ * changes applied and slug -> ID.
  */
 export async function applyPlan(
   ctx: CommandContext,
@@ -446,7 +485,8 @@ export async function applyPlan(
   }
 
   // Field changes that list fields of their target go after the rest,
-  // which may add or rename those fields.
+  // which may add or rename those fields; reorders go after every field
+  // exists.
   const listsRelated = (change: Change) =>
     RELATED_LISTS.some(
       (option) =>
@@ -456,8 +496,9 @@ export async function applyPlan(
           Array.isArray(change.field.options[option]))
     )
   const ordered = [
-    ...todo.filter((c) => !listsRelated(c)),
+    ...todo.filter((c) => !listsRelated(c) && c.kind !== "reorder_fields"),
     ...todo.filter(listsRelated),
+    ...todo.filter((c) => c.kind === "reorder_fields"),
   ]
   for (const change of ordered) {
     switch (change.kind) {
@@ -520,41 +561,22 @@ export async function applyPlan(
         }
         break
       }
-      case "reorder_fields": {
-        // A reorder lists every field, so it fails if they changed since the
-        // plan (another push, the web app); what was applied stays.
-        const changed = new CliError(ExitCode.ApiError, {
-          type: "schema_changed",
-          message: `${change.slug}: its fields changed during the push, so they were not put in the file's order; run the push again`,
-        })
-        const known = fieldIds.get(change.slug)
-        const ordered = change.api_keys.map((key) => known?.get(key))
-        if (ordered.some((id) => id === undefined)) throw changed
-        try {
-          await unwrap(
-            ctx.api.fields.reorder(
-              change.id,
-              { field_ids: ordered as string[] },
-              writes
-            )
-          )
-        } catch (error) {
-          if (
-            error instanceof CliError &&
-            error.body.details?.some((d) => d.field === "field_ids")
-          )
-            throw changed
-          throw error
-        }
+      case "reorder_fields":
+        await reorderFields(
+          ctx,
+          change.slug,
+          change.id,
+          change.api_keys,
+          fieldIds,
+          writes
+        )
         break
-      }
       default:
         continue
     }
     applied++
   }
 
-  // Migrations last and one at a time: each makes its collection read-only.
   for (const { slug, field } of last) {
     const added = await unwrap(
       ctx.api.fields.create(
@@ -566,6 +588,24 @@ export async function applyPlan(
     fieldIds.get(slug)?.set(added.key, added.id)
   }
 
+  // Fields added after their collection was created came last: put the new
+  // collections' fields in the file's order. (Their IDs are known in the
+  // order they were added.)
+  for (const { collection } of creates) {
+    const keys = collection.fields.map((f) => f.key)
+    const added = [...(fieldIds.get(collection.slug)?.keys() ?? [])]
+    if (added.join() === keys.join()) continue
+    await reorderFields(
+      ctx,
+      collection.slug,
+      ids.get(collection.slug)!,
+      keys,
+      fieldIds,
+      writes
+    )
+  }
+
+  // Migrations last and one at a time: each makes its collection read-only.
   for (const change of migrations) {
     if (change.kind !== "migrate_field") continue
     const started = await unwrap(
