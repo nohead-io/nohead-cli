@@ -6,6 +6,7 @@ It needs Node 26 or newer. Until 1.0, any release may break scripts and CI jobs 
 
 ```bash
 npm install -g @nohead/cli               # or run it without installing: npx nohead
+brew install nohead-io/tap/nohead        # or with Homebrew, which installs Node too
 nohead login                             # sign in with the browser
 nohead link prj_...                      # optional: use that project in this folder
 nohead whoami
