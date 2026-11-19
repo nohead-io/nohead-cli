@@ -4635,6 +4635,25 @@ describe("commands with a single request", () => {
       output: /record\.published \(published only\)\s+enabled/,
     },
     {
+      argv: ["webhooks", "list"],
+      request: `GET /v1/projects/${PROJECT_ID}/webhooks?limit=100`,
+      response: () =>
+        contractResponse(
+          "webhooks_list",
+          page([
+            { ...webhook, last_status_code: 401, failing_since: NOW },
+            {
+              ...webhook,
+              enabled: false,
+              disabled_reason: "failing",
+              failing_since: NOW,
+            },
+          ])
+        ),
+      output:
+        /record\.published\s+failing\n.*record\.published\s+disabled \(failing\)/,
+    },
+    {
       argv: ["webhooks", "delete", WEBHOOK_ID],
       request: `DELETE /v1/webhooks/${WEBHOOK_ID}`,
       response: () =>

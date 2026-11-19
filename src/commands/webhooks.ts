@@ -1,6 +1,6 @@
 import { Option, type Command } from "commander"
 
-import type { WebhookCreate } from "@nohead/sdk"
+import type { Webhook, WebhookCreate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
 import { unwrap } from "../errors.ts"
 import { printResult, table } from "../output.ts"
@@ -33,7 +33,7 @@ export function registerWebhooks(
             w.url,
             w.event_types.join(",") +
               (w.published_only ? " (published only)" : ""),
-            w.enabled ? "enabled" : "disabled",
+            status(w),
           ])
         )
     )
@@ -197,4 +197,16 @@ export function registerWebhooks(
       )
       printResult(ctx, delivery, () => `Retrying ${delivery.id}`)
     })
+}
+
+/**
+ * "enabled", "failing" while its deliveries fail, "disabled", or "disabled
+ * (failing)" when Nohead disabled it after 3 days of failures.
+ */
+function status(webhook: Webhook): string {
+  if (!webhook.enabled)
+    return webhook.disabled_reason === "failing"
+      ? "disabled (failing)"
+      : "disabled"
+  return webhook.failing_since ? "failing" : "enabled"
 }
