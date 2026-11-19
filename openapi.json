@@ -8517,6 +8517,11 @@
           "event_types",
           "published_only",
           "enabled",
+          "last_attempt_at",
+          "last_status_code",
+          "last_error",
+          "last_succeeded_at",
+          "failing_since",
           "deleted_at",
           "purge_after",
           "created_at",
@@ -8558,6 +8563,32 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "last_attempt_at": {
+            "description": "When a delivery to it was last attempted; null before the first attempt.",
+            "$ref": "#/components/schemas/NullableTimestamp"
+          },
+          "last_status_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The HTTP status the last attempt got; null if it got no response (`last_error` says why) or before the first attempt."
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the last attempt got no response, such as a timeout or a refused connection; null when it got one."
+          },
+          "last_succeeded_at": {
+            "description": "When an attempt last got a 2xx response; null if none has.",
+            "$ref": "#/components/schemas/NullableTimestamp"
+          },
+          "failing_since": {
+            "description": "When its attempts started failing: set by a failed attempt after a success (or by a first attempt that fails), and cleared by the next success. Null while it works, and before the first attempt. To check a webhook at once, send it a test event (`POST /v1/webhooks/{webhook_id}/test`).",
+            "$ref": "#/components/schemas/NullableTimestamp"
           },
           "deleted_at": {
             "description": "When the webhook was deleted; null unless it is.",
