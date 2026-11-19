@@ -7,6 +7,15 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## 0.10.0
+
+- **Breaking:** `nohead webhooks list` says how each webhook is doing: its
+  STATUS is `failing` while its deliveries fail, and `disabled (failing)`
+  when Nohead disabled it after 3 days of failures (enable it again in the
+  web app). A script reading that column for `enabled` should use `--json`
+  (`enabled`, `failing_since`, `disabled_reason`).
+- Built on `@nohead/sdk` 0.23.0.
+
 ## 0.9.0
 
 - The schema file keeps each field's public search options:
