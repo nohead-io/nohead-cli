@@ -8517,6 +8517,7 @@
           "event_types",
           "published_only",
           "enabled",
+          "disabled_reason",
           "last_attempt_at",
           "last_status_code",
           "last_error",
@@ -8563,6 +8564,17 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "disabled_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "failing",
+              null
+            ],
+            "description": "Why it was disabled, when Nohead did it: `failing`, after its attempts failed for 3 days. Its project's owners and admins are emailed after it has failed for a day (an hour, if it has never worked), and again when it's disabled. Null when it's enabled, or was disabled by someone; enabling it again clears it."
           },
           "last_attempt_at": {
             "description": "When a delivery to it was last attempted; null before the first attempt.",
