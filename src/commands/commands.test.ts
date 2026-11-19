@@ -3417,6 +3417,16 @@ describe("assets", () => {
   })
 })
 
+/** A webhook's health before its first delivery attempt. */
+const HEALTHY = {
+  disabled_reason: null,
+  last_attempt_at: null,
+  last_status_code: null,
+  last_error: null,
+  last_succeeded_at: null,
+  failing_since: null,
+}
+
 describe("webhooks", () => {
   it("creates a webhook for chosen events and prints its secret", async () => {
     const t = testRuntime({
@@ -3432,6 +3442,7 @@ describe("webhooks", () => {
               published_only: false,
               ...(await body(request)),
               enabled: true,
+              ...HEALTHY,
               deleted_at: null,
               purge_after: null,
               secret: "whsec_c2VjcmV0",
@@ -3474,6 +3485,7 @@ describe("webhooks", () => {
               project_id: PROJECT_ID,
               ...(await body(request)),
               enabled: true,
+              ...HEALTHY,
               deleted_at: null,
               purge_after: null,
               secret: "whsec_c2VjcmV0",
@@ -4412,6 +4424,7 @@ const webhook = {
   event_types: ["record.published"],
   published_only: false,
   enabled: true,
+  ...HEALTHY,
   deleted_at: null,
   purge_after: null,
   created_at: NOW,
