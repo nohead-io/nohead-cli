@@ -9,6 +9,25 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- `--idempotency-key` works with commands that send several requests: each
+  gets its own key, `<key>:0`, `<key>:1` and so on. `records bulk` with more
+  than 100 records no longer fails on its second batch, and `assets upload`
+  no longer drops the key. `import <dir>` and `schema push` ignore the flag,
+  as its help now says.
+- `nohead webhooks get <id>` shows a webhook and how its deliveries are
+  doing: since when they fail, the last attempt's status code or error, and
+  the last success.
+- `nohead webhooks update <id>` changes a webhook's URL, events, description
+  or `--[no-]published-only`, and turns it off (`--disable`) or on again
+  (`--enable`), as after Nohead disabled it for failing.
+- `webhooks create --events` refuses a list with no event type (`--events ""`)
+  instead of sending an empty one, and `--description ""` leaves the
+  description empty (null), as in `webhooks update`.
+- `schema push` (and `schema diff`'s previews) no longer refuse a relation
+  that becomes required, or migrates (such as to `multiple`), while its
+  `expanded` or `searched` lists a field the same push adds to the related
+  collection. They stopped with "isn't a field of" (exit 2) before changing
+  anything.
 - **Breaking:** `nohead drafts list --record <id>` takes no collection: one
   given with `--record` is a usage error instead of being ignored. Before,
   `--record` needed one.
