@@ -27,7 +27,7 @@ import {
   withoutWaiting,
   type Handler,
 } from "../test/runtime.ts"
-import { fromYaml, toYaml, type CollectionSpec } from "../schema/format.ts"
+import { fromYaml, toYaml } from "../schema/format.ts"
 
 const page = <T>(data: T[], next_cursor: string | null = null) => ({
   data,
@@ -35,6 +35,19 @@ const page = <T>(data: T[], next_cursor: string | null = null) => ({
 })
 const me = () => contractResponse("me_get", ME)
 const body = async (request: Request) => JSON.parse(await request.text())
+/** An export's manifest.json, as `export` writes it, with `overrides`. */
+const exportManifest = (overrides: Record<string, unknown> = {}) =>
+  JSON.stringify({
+    format: "nohead-export",
+    version: 1,
+    exported_at: NOW,
+    api_url: "http://api.test",
+    project_id: PROJECT_ID,
+    include_history: false,
+    include_deleted: false,
+    collections: [],
+    ...overrides,
+  })
 const validation = (message: string, field: string, code: string) => ({
   error: {
     type: "validation_error",
@@ -275,6 +288,26 @@ describe("fields", () => {
       flags: ["--searched", "title"],
       configuration: { searched: [collection().fields[0].id] },
     },
+    {
+      field: field({
+        key: "category",
+        type: "enum",
+        configuration: { options: ["news"], filterable: true },
+      }),
+      flags: [
+        "--options",
+        "news, reviews",
+        "--searchable",
+        "--no-filterable",
+        "--sortable",
+      ],
+      configuration: {
+        options: ["news", "reviews"],
+        searchable: true,
+        filterable: false,
+        sortable: true,
+      },
+    },
   ])(
     "updates field options ($field.type): $flags",
     async ({ field: updated, flags, configuration }) => {
@@ -499,12 +532,8 @@ describe("fields", () => {
     })
     const t = testRuntime({
       routes: {
-        "GET /v1/collections/posts/fields": (request) => {
-          expect(new URL(request.url).searchParams.get("filter[deleted]")).toBe(
-            "true"
-          )
-          return contractResponse("fields_list", page([legacy]))
-        },
+        "GET /v1/collections/posts/fields": () =>
+          contractResponse("fields_list", page([legacy])),
         [`POST /v1/fields/${legacy.id}/restore`]: () =>
           contractResponse("fields_restore", {
             ...legacy,
@@ -515,6 +544,10 @@ describe("fields", () => {
     })
 
     await t.ok(["fields", "restore", "posts", "legacy"])
+    expect(new URL(t.requests[0].url).searchParams.get("filter[deleted]")).toBe(
+      "true"
+    )
+    expect(t.requests[1].url).toContain(`/v1/fields/${legacy.id}/restore`)
   })
 
   it("finds a field by API key on a later page, reading no further", async () => {
@@ -529,12 +562,13 @@ describe("fields", () => {
       routes: {
         "GET /v1/collections/posts/fields": (request) => {
           const cursor = new URL(request.url).searchParams.get("cursor")
-          if (cursor === "page-3") throw new Error("read past the field")
           return contractResponse(
             "fields_list",
-            cursor === "page-2"
-              ? page([title], "page-3")
-              : page(others, "page-2")
+            cursor === "page-3"
+              ? page([])
+              : cursor === "page-2"
+                ? page([title], "page-3")
+                : page(others, "page-2")
           )
         },
         [`PATCH /v1/fields/${title.id}`]: () =>
@@ -768,9 +802,6 @@ describe("records", () => {
     await t.ok(["records", "scheduled", "posts", "--all", "--sort", "-at"])
     expect(new URL(t.requests[0].url).searchParams.get("sort")).toBe("-at")
     expect(t.out().trim()).toBe("Nothing is scheduled.")
-    expect(
-      await run(["records", "scheduled", "posts", "--sort", "soon"], t.runtime)
-    ).toBe(ExitCode.Usage)
   })
 
   it("creates records from --set, --data-file and stdin", async () => {
@@ -1016,7 +1047,6 @@ describe("records", () => {
     expect(filtered.get("filter[actor_id]")).toBe("usr_1")
     expect(filtered.get("filter[created_at][gte]")).toBe("2026-09-01T00:00:00Z")
 
-    t.requests.length = 0
     await t.ok(["records", "revision", REC_A, "2"])
     expect(t.out()).toMatch(/title:\s+Hello/)
     expect(t.out()).toContain("title (changed): Helo → Hello")
@@ -1087,6 +1117,27 @@ describe("records", () => {
     expect(toFile.text("backup.jsonl").trim().split("\n")).toHaveLength(2)
   })
 
+  it.each([["list"], ["export"]])(
+    "%ss deleted records with --deleted",
+    async (command) => {
+      const t = testRuntime({
+        routes: {
+          "GET /v1/collections/posts/records": () =>
+            contractResponse(
+              "records_list",
+              page([record(REC_A, {}, { deleted_at: NOW, purge_after: NOW })])
+            ),
+        },
+      })
+
+      await t.ok(["records", command, "posts", "--deleted"])
+      expect(
+        new URL(t.requests[0].url).searchParams.get("filter[deleted]")
+      ).toBe("true")
+      expect(t.out()).toContain(REC_A)
+    }
+  )
+
   it("imports JSON Lines, reporting failed lines and exiting 1", async () => {
     const lines = [
       JSON.stringify(
@@ -1095,27 +1146,45 @@ describe("records", () => {
       JSON.stringify({ title: "" }),
       "",
       JSON.stringify({ title: "Plain" }),
+      JSON.stringify(record(REC_B, { title: "Unpublished" })),
     ].join("\n")
+    // Each line's copy has an ID of its own, which names the line.
+    const copyOf = (line: number) => `rec_01J9ZQ3F8X5W2K7M4N6P0R1S2${line}`
+    const lineOf: Record<string, number> = {
+      Exported: 1,
+      Plain: 4,
+      Unpublished: 5,
+    }
+    const published: string[] = []
     const t = testRuntime({
       files: { "in.jsonl": lines },
       routes: {
         "POST /v1/collections/posts/records": async (request) => {
           const { data } = await body(request)
           return data.title
-            ? contractResponse("records_create", record(REC_B, data), {
-                status: 201,
-              })
+            ? contractResponse(
+                "records_create",
+                record(copyOf(lineOf[data.title]), data),
+                { status: 201 }
+              )
             : contractResponse(
                 "records_create",
                 validation("Record validation failed", "title", "required"),
                 { status: 422 }
               )
         },
-        [`POST /v1/records/${REC_B}/publication`]: () =>
-          contractResponse(
-            "records_publish",
-            record(REC_B, {}, { published_at: NOW })
-          ),
+        ...Object.fromEntries(
+          Object.values(lineOf).map((line) => [
+            `POST /v1/records/${copyOf(line)}/publication`,
+            () => {
+              published.push(copyOf(line))
+              return contractResponse(
+                "records_publish",
+                record(copyOf(line), {}, { published_at: NOW })
+              )
+            },
+          ])
+        ),
       },
     })
 
@@ -1126,7 +1195,7 @@ describe("records", () => {
       )
     ).toBe(ExitCode.ApiError)
     expect(t.json()).toEqual({
-      created: 2,
+      created: 3,
       failed: [
         {
           line: 2,
@@ -1134,10 +1203,8 @@ describe("records", () => {
         },
       ],
     })
-    const paths = t.requests.map(
-      (r) => `${r.method} ${new URL(r.url).pathname}`
-    )
-    expect(paths.filter((p) => p.endsWith("/publication"))).toHaveLength(1)
+    // Only the exported record that was published.
+    expect(published).toEqual([copyOf(1)])
   })
 })
 
@@ -1505,6 +1572,15 @@ describe("schema pull, diff and push refusals", () => {
     )
   })
 
+  it("shows a migration without previewing it in diff --no-preview", async () => {
+    const t = project(RETYPES_SUMMARY)
+
+    await t.ok(["schema", "diff", "--no-preview"])
+    expect(t.out()).toContain("! field posts.summary")
+    expect(t.out()).not.toContain("migration preview")
+    expect(new Set(methods(t))).toEqual(new Set(["GET"]))
+  })
+
   it("refuses to make a field required while records lack it, changing nothing", async () => {
     const t = project(
       file(
@@ -1809,31 +1885,6 @@ describe("schema: what search hits include", () => {
       expect(t.requests.filter((r) => r.method !== "GET")).toEqual([])
     }
   )
-
-  it("refuses included, expanded and searched where the type can't have them", () => {
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    fields:\n      title: { type: text, expanded: [name] }\n",
-        FILE
-      )
-    ).toThrow(
-      "title.expanded: only asset and relation fields expand what they point at"
-    )
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    fields:\n      cover: { type: asset, searched: [alt] }\n",
-        FILE
-      )
-    ).toThrow(
-      "cover.searched: only relation fields search fields of the records they point at"
-    )
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    fields:\n      cover: { type: asset, included: yes }\n",
-        FILE
-      )
-    ).toThrow("cover.included: true or false")
-  })
 })
 
 describe("schema push: a relation into a collection the push creates", () => {
@@ -2292,7 +2343,8 @@ describe("schema push: the organization's collection limit", () => {
     const t = setup(40, null, created)
 
     await t.ok(["schema", "diff", "nohead.schema.yaml"])
-    expect(t.out()).not.toContain("left")
+    expect(t.out()).toContain("+ collection pages")
+    expect(t.out()).not.toContain("room for")
     await t.ok(["schema", "push", "nohead.schema.yaml", "--yes"])
     expect(created).toEqual(["people", "pages"])
   })
@@ -2317,54 +2369,56 @@ describe("flags", () => {
   })
 })
 
+// A migration of products.price from text to decimal.
+const price = field({ key: "price", type: "text" })
+const text = {
+  type: "text",
+  configuration: {},
+  multiple: false,
+  required: false,
+} as const
+const decimal = { ...text, type: "decimal" } as const
+const counts = (overrides = {}) => ({
+  total: 2,
+  unchanged: 0,
+  converted: 1,
+  backfilled: 0,
+  cleared: 0,
+  invalid: 0,
+  ...overrides,
+})
+const migration = (status: string, overrides = {}) => ({
+  id: "mig_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+  object: "field_migration",
+  collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+  field_id: price.id,
+  status,
+  from: text,
+  to: decimal,
+  backfill: null,
+  on_invalid: "fail",
+  time_zone: null,
+  records: counts(),
+  failure: null,
+  schema_change_id:
+    status === "complete" ? "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T" : null,
+  cancel_requested_at: null,
+  actor: {
+    type: "api_key",
+    id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+    name: "ci",
+  },
+  via: "cli",
+  note: null,
+  request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+  created_at: NOW,
+  started_at: status === "pending" ? null : NOW,
+  completed_at: ["complete", "failed"].includes(status) ? NOW : null,
+  ...overrides,
+})
+
 describe("field migrations", () => {
-  const price = field({ key: "price", type: "text" })
   const fieldsPage = () => contractResponse("fields_list", page([price]))
-  const text = {
-    type: "text",
-    configuration: {},
-    multiple: false,
-    required: false,
-  } as const
-  const decimal = { ...text, type: "decimal" } as const
-  const counts = (overrides = {}) => ({
-    total: 2,
-    unchanged: 0,
-    converted: 1,
-    backfilled: 0,
-    cleared: 0,
-    invalid: 0,
-    ...overrides,
-  })
-  const migration = (status: string, overrides = {}) => ({
-    id: "mig_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-    object: "field_migration",
-    collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-    field_id: price.id,
-    status,
-    from: text,
-    to: decimal,
-    backfill: null,
-    on_invalid: "fail",
-    time_zone: null,
-    records: counts(),
-    failure: null,
-    schema_change_id:
-      status === "complete" ? "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T" : null,
-    cancel_requested_at: null,
-    actor: {
-      type: "api_key",
-      id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-      name: "ci",
-    },
-    via: "cli",
-    note: null,
-    request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
-    created_at: NOW,
-    started_at: status === "pending" ? null : NOW,
-    completed_at: ["complete", "failed"].includes(status) ? NOW : null,
-    ...overrides,
-  })
 
   it("previews a migration with sample records", async () => {
     const t = testRuntime({
@@ -2468,6 +2522,30 @@ describe("field migrations", () => {
     expect(t.out()).toContain("2 records: 1 converted")
   })
 
+  it("returns once the migration is accepted with --no-wait", async () => {
+    const t = testRuntime({
+      routes: {
+        "GET /v1/collections/products/fields": fieldsPage,
+        [`POST /v1/collections/${price.collection_id}/migrations`]: () =>
+          contractResponse("migrations_create", migration("pending"), {
+            status: 202,
+          }),
+      },
+    })
+
+    await t.ok([
+      "fields",
+      "migrate",
+      "products",
+      "price",
+      "--type",
+      "decimal",
+      "--no-wait",
+    ])
+    expect(t.requests.map((r) => r.method)).toEqual(["GET", "POST"])
+    expect(t.out()).toContain("mig_01J9ZQ3F8X5W2K7M4N6P0R1S2T  pending")
+  })
+
   it("polls soon, then backs off to once a second", async () => {
     let polls = 0
     const sleeps: number[] = []
@@ -2542,35 +2620,6 @@ describe("field migrations", () => {
     expect(cancel.headers.get("Idempotency-Key")).toBeTruthy()
     expect(t.out()).toContain("rolls back at its next batch")
   })
-
-  it("pages migrations, following cursors with --all", async () => {
-    const api = () =>
-      testRuntime({
-        routes: {
-          "GET /v1/collections/products/migrations": (request) =>
-            contractResponse(
-              "migrations_list",
-              new URL(request.url).searchParams.get("cursor")
-                ? page([migration("complete")])
-                : page([migration("running")], "next-page")
-            ),
-        },
-      })
-
-    const one = api()
-    await one.ok(["migrations", "list", "products"])
-    expect(one.out()).toContain("More: --cursor next-page")
-
-    const all = api()
-    await all.ok(["--json", "migrations", "list", "products", "--all"])
-    expect(all.json().data.map((m: { status: string }) => m.status)).toEqual([
-      "running",
-      "complete",
-    ])
-    expect(new URL(all.requests[1].url).searchParams.get("cursor")).toBe(
-      "next-page"
-    )
-  })
 })
 
 // The SDK reads the upload URL's expiry against the real clock.
@@ -2583,6 +2632,20 @@ const pendingUpload = {
     expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
   },
 }
+
+/** The API and storage taking an upload: started, put, then completed. */
+const uploadRoutes = (
+  put: Handler = () => new Response(null, { status: 200 })
+): Record<string, Handler> => ({
+  "GET /v1/me": me,
+  [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
+    contractResponse("assets_upload", pendingUpload, { status: 201 }),
+  [`GET /v1/assets/${asset().id}`]: () =>
+    contractResponse("assets_get", asset("pending")),
+  "PUT /bucket/key": put,
+  [`POST /v1/assets/${asset().id}/complete`]: () =>
+    contractResponse("assets_complete", asset("ready")),
+})
 
 describe("idempotency", () => {
   const created = () =>
@@ -2637,16 +2700,7 @@ describe("idempotency", () => {
     },
     {
       command: ["assets", "upload", "a.png", "b.png"],
-      routes: {
-        "GET /v1/me": me,
-        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
-          contractResponse("assets_upload", pendingUpload, { status: 201 }),
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
-          contractResponse("assets_get", asset("pending")),
-        "PUT /bucket/key": () => new Response(null, { status: 200 }),
-        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
-          contractResponse("assets_complete", asset("ready")),
-      },
+      routes: uploadRoutes(),
       writes: `/projects/${PROJECT_ID}/assets`,
     },
   ])(
@@ -2690,7 +2744,7 @@ describe("idempotency", () => {
   })
 })
 
-describe("login and saved keys", () => {
+describe("saved keys", () => {
   const env = { HOME: "/home/ada" }
   const configFile = "/home/ada/.config/nohead/config.json"
   const saved = (keys: Record<string, unknown>) => ({
@@ -2698,82 +2752,6 @@ describe("login and saved keys", () => {
   })
   const config = (t: ReturnType<typeof testRuntime>) =>
     JSON.parse(t.text(configFile))
-  // GET /v1/me for another project's key.
-  const meOf =
-    (project_id: string, name = "ci") =>
-    () =>
-      contractResponse("me_get", {
-        ...ME,
-        api_key: { ...ME.api_key, project_id, name },
-      })
-
-  it("adds another project's key, and replaces a project's key on a new login", async () => {
-    const t = testRuntime({
-      env: { ...env, NOHEAD_API_URL: "http://api.test" },
-      files: saved({
-        [PROJECT_ID]: { api_url: "http://api.test", api_key: "nohead_sk_a" },
-      }),
-      stdin: "nohead_sk_b\n",
-      routes: { "GET /v1/me": meOf("prj_two", "local") },
-    })
-
-    await t.ok(["login"])
-    expect(Object.keys(config(t).keys)).toEqual([PROJECT_ID, "prj_two"])
-    expect(config(t).keys.prj_two).toEqual({
-      api_url: "http://api.test",
-      api_key: "nohead_sk_b",
-      name: "local",
-    })
-    expect(t.out()).toContain("with API key local (project prj_two)")
-
-    t.runtime.readStdin = async () => "nohead_sk_c\n"
-    await t.ok(["login"])
-    expect(config(t).keys.prj_two.api_key).toBe("nohead_sk_c")
-    expect(config(t).keys[PROJECT_ID].api_key).toBe("nohead_sk_a")
-    expect(t.out()).toContain("Replaced the saved key for project prj_two")
-  })
-
-  it("refuses a key that is not a project API key", async () => {
-    const t = testRuntime({
-      env,
-      stdin: "nohead_sk_user\n",
-      routes: {
-        "GET /v1/me": () =>
-          contractResponse("me_get", {
-            object: "principal",
-            type: "user",
-            user: {
-              id: "usr_1",
-              email: "ada@example.com",
-              name: "Ada",
-              staff: false,
-            },
-            api_key: null,
-          }),
-      },
-    })
-
-    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
-    expect(t.err()).toContain("That is not a project API key")
-    expect(t.written).toEqual({})
-  })
-
-  // The saved key would be ignored, which would be a surprise.
-  it("says NOHEAD_API_KEY wins over the key it saves", async () => {
-    const t = testRuntime({
-      env: { ...env, NOHEAD_API_KEY: "nohead_sk_env" },
-      stdin: "nohead_sk_new\n",
-      routes: { "GET /v1/me": me },
-    })
-
-    await t.ok(["login"])
-    expect(t.requests[0].headers.get("Authorization")).toBe(
-      "Bearer nohead_sk_new"
-    )
-    expect(t.err()).toContain(
-      "NOHEAD_API_KEY is set, so commands use it rather than the saved key"
-    )
-  })
 
   it("never sends a saved key to another API, or any key over plain http", async () => {
     const elsewhere = testRuntime({
@@ -3241,14 +3219,11 @@ describe("link", () => {
     })
   })
 
-  it("refuses what is not a project ID, or a nohead.json it cannot merge into", async () => {
+  it("refuses a nohead.json it cannot merge into", async () => {
     const t = testRuntime({
       env,
       files: { "/work/nohead.json": "[1, 2" },
     })
-
-    expect(await run(["link", "key_123"], t.runtime)).toBe(ExitCode.Usage)
-    expect(t.err()).toContain("key_123 is not a project ID (prj_...)")
 
     expect(await run(["link", PROJECT_ID], t.runtime)).toBe(ExitCode.Usage)
     expect(t.err()).toContain(
@@ -3305,32 +3280,17 @@ describe("assets", () => {
     const exported = asset("ready")
     const t = testRuntime({
       files: {
-        "out/manifest.json": JSON.stringify({
-          format: "nohead-export",
-          version: 1,
-          exported_at: NOW,
-          api_url: "http://api.test",
-          project_id: PROJECT_ID,
-          include_history: false,
-          include_deleted: false,
+        "out/manifest.json": exportManifest({
           include_files: true,
-          collections: [],
         }),
         "out/schema.yaml": "collections: {}\n",
         "out/assets.jsonl": `${JSON.stringify({ ...exported, alt: "The spring menu" })}\n`,
         [`out/assets/${exported.id}`]: new Uint8Array([1, 2, 3]),
       },
       routes: {
-        "GET /v1/me": me,
+        ...uploadRoutes(),
         [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
           contractResponse("collections_list", page([])),
-        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
-          contractResponse("assets_upload", pendingUpload, { status: 201 }),
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
-          contractResponse("assets_get", asset("pending")),
-        "PUT /bucket/key": () => new Response(null, { status: 200 }),
-        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
-          contractResponse("assets_complete", asset("ready")),
       },
     })
 
@@ -3348,19 +3308,10 @@ describe("assets", () => {
     let stored: Uint8Array | undefined
     const t = testRuntime({
       files: { "cover.png": new Uint8Array([1, 2, 3]) },
-      routes: {
-        "GET /v1/me": me,
-        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
-          contractResponse("assets_upload", pendingUpload, { status: 201 }),
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
-          contractResponse("assets_get", asset("pending")),
-        "PUT /bucket/key": async (request) => {
-          stored = new Uint8Array(await request.arrayBuffer())
-          return new Response(null, { status: 200 })
-        },
-        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
-          contractResponse("assets_complete", asset("ready")),
-      },
+      routes: uploadRoutes(async (request) => {
+        stored = new Uint8Array(await request.arrayBuffer())
+        return new Response(null, { status: 200 })
+      }),
     })
 
     await t.ok(["assets", "upload", "cover.png"])
@@ -3383,16 +3334,7 @@ describe("assets", () => {
         "Clip.MOV": new Uint8Array([1]),
         "notes.unknownext": new Uint8Array([2]),
       },
-      routes: {
-        "GET /v1/me": me,
-        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
-          contractResponse("assets_upload", pendingUpload, { status: 201 }),
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
-          contractResponse("assets_get", asset("pending")),
-        "PUT /bucket/key": () => new Response(null, { status: 200 }),
-        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
-          contractResponse("assets_complete", asset("ready")),
-      },
+      routes: uploadRoutes(),
     })
 
     await t.ok(["assets", "upload", "Clip.MOV", "notes.unknownext"])
@@ -3413,48 +3355,24 @@ describe("assets", () => {
     expect(types).toEqual([undefined, undefined, "text/plain"])
   })
 
-  it("uploads a file with its alt text, one file at a time", async () => {
+  it("uploads a file with its alt text", async () => {
     const t = testRuntime({
       files: {
         "cover.png": new Uint8Array([1, 2, 3]),
         "back.png": new Uint8Array([4]),
       },
-      routes: {
-        "GET /v1/me": me,
-        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
-          contractResponse("assets_upload", pendingUpload, { status: 201 }),
-        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
-          contractResponse("assets_get", asset("pending")),
-        "PUT /bucket/key": () => new Response(null, { status: 200 }),
-        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
-          contractResponse("assets_complete", asset("ready")),
-      },
+      routes: uploadRoutes(),
     })
 
     await t.ok(["assets", "upload", "cover.png", "--alt", "A harbour"])
     expect(await body(t.requests[1])).toMatchObject({ alt: "A harbour" })
-
-    const several = t.requests.length
-    expect(
-      await run(
-        ["assets", "upload", "cover.png", "back.png", "--alt", "A harbour"],
-        t.runtime
-      )
-    ).toBe(ExitCode.Usage)
-    expect(t.err()).toContain("--alt describes one file")
-    expect(t.requests).toHaveLength(several)
   })
 
   it("reports storage that is down or refuses the bytes", async () => {
     const storage = (put: Handler) =>
       testRuntime({
         files: { "cover.png": new Uint8Array([1, 2, 3]) },
-        routes: {
-          "GET /v1/me": me,
-          [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
-            contractResponse("assets_upload", pendingUpload, { status: 201 }),
-          "PUT /bucket/key": put,
-        },
+        routes: uploadRoutes(put),
       })
 
     const down = storage(() => {
@@ -3621,15 +3539,6 @@ describe("assets", () => {
       "https://images.test/rs:fill:800:600/plain/p1/a1@webp"
     )
     expect(t.requests).toHaveLength(1)
-  })
-
-  it("narrows a project-wide search by published_at only", async () => {
-    const t = testRuntime({ routes: {} })
-
-    expect(
-      await run(["search", "hello", "--filter", "price<5"], t.runtime)
-    ).toBe(ExitCode.Usage)
-    expect(t.err()).toContain('only --filter "published_at exists"')
   })
 })
 
@@ -3932,44 +3841,53 @@ describe("records bulk", () => {
       ),
     })
 
-  it("selects records with filters and applies the action", async () => {
-    const t = testRuntime({
-      routes: {
-        "GET /v1/collections/posts/records": () =>
-          contractResponse(
-            "records_list",
-            page([
-              record(REC_A, { title: "One" }),
-              record(REC_B, { title: "Two" }),
-            ])
-          ),
-        "POST /v1/collections/posts/record-batches": () =>
-          bulkResult("publish", [
-            { id: REC_A, ok: true },
-            { id: REC_B, ok: true, changed: false },
-          ]),
-      },
-    })
-
-    await t.ok([
-      "records",
-      "bulk",
-      "publish",
-      "posts",
-      "--status",
-      "unpublished",
-    ])
-    expect(
-      new URL(t.requests[0].url).searchParams.get(
-        "filter[published_at][exists]"
-      )
-    ).toBe("false")
-    expect(await body(t.requests[1])).toEqual({
+  it.each([
+    {
       action: "publish",
-      record_ids: [REC_A, REC_B],
-    })
-    expect(t.out()).toContain("publish: 1 changed, 1 unchanged, 0 failed")
-  })
+      selection: ["--status", "unpublished"],
+      filter: { "filter[published_at][exists]": "false" },
+    },
+    {
+      action: "restore",
+      selection: ["--deleted"],
+      filter: { "filter[deleted]": "true" },
+    },
+    { action: "delete", selection: ["--every"], filter: {} },
+  ])(
+    "selects records with $selection.0 and applies the action",
+    async ({ action, selection, filter }) => {
+      const t = testRuntime({
+        routes: {
+          "GET /v1/collections/posts/records": () =>
+            contractResponse(
+              "records_list",
+              page([
+                record(REC_A, { title: "One" }),
+                record(REC_B, { title: "Two" }),
+              ])
+            ),
+          "POST /v1/collections/posts/record-batches": () =>
+            bulkResult(action, [
+              { id: REC_A, ok: true },
+              { id: REC_B, ok: true, changed: false },
+            ]),
+        },
+      })
+
+      await t.ok(["records", "bulk", action, "posts", ...selection])
+      const query = new URL(t.requests[0].url).searchParams
+      expect(
+        Object.fromEntries(
+          [...query].filter(([key]) => key.startsWith("filter["))
+        )
+      ).toEqual(filter)
+      expect(await body(t.requests[1])).toEqual({
+        action,
+        record_ids: [REC_A, REC_B],
+      })
+      expect(t.out()).toContain(`${action}: 1 changed, 1 unchanged, 0 failed`)
+    }
+  )
 
   it("sends update data and fails when any record fails", async () => {
     const t = testRuntime({
@@ -4089,26 +4007,22 @@ describe("transient failures", () => {
     // The SDK's per-attempt timeout; the CLI has no timeout option to
     // shorten it instead.
     fakeTimeouts()
-    let calls = 0
     const hanging = testRuntime({
       routes: {
-        "GET /v1/me": (request) => {
-          calls++
-          // As fetch does: rejects with the reason once the signal aborts.
-          return new Promise((_, reject) =>
+        // As fetch does: rejects with the reason once the signal aborts.
+        "GET /v1/me": (request) =>
+          new Promise((_, reject) =>
             request.signal.addEventListener("abort", () =>
               reject(request.signal.reason as Error)
             )
-          )
-        },
+          ),
       },
     })
 
     expect(
       await withoutWaiting(() => run(["--json", "whoami"], hanging.runtime))
     ).toBe(ExitCode.Network)
-    expect(calls).toBe(4)
-    // The timeout and its wording are the SDK's.
+    // How many attempts, the timeout and its wording are the SDK's.
     const { error } = JSON.parse(hanging.err())
     expect(error.type).toBe("network_error")
     expect(error.message).toMatch(/^Could not reach the API: .*timed out/)
@@ -4330,7 +4244,13 @@ describe("C1 controls in output", () => {
 
   it("escapes them in schema YAML, keeping the value", () => {
     const yaml = toYaml([
-      { slug: "posts", name: hostile, fields: [] } as unknown as CollectionSpec,
+      {
+        slug: "posts",
+        name: hostile,
+        description: null,
+        public_search: false,
+        fields: [],
+      },
     ])
 
     expect(yaml).not.toMatch(/[\u007f-\u009f]/)
@@ -4342,14 +4262,7 @@ describe("import", () => {
   it("checks the whole export before writing anything", async () => {
     const t = testRuntime({
       files: {
-        "out/manifest.json": JSON.stringify({
-          format: "nohead-export",
-          version: 1,
-          exported_at: NOW,
-          api_url: "http://api.test",
-          project_id: PROJECT_ID,
-          include_history: false,
-          include_deleted: false,
+        "out/manifest.json": exportManifest({
           collections: [
             { slug: "posts", records: 2, drafts: 2 },
             { slug: "pages", records: 1 },
@@ -4446,17 +4359,7 @@ describe("import", () => {
     async ({ manifest, records = "", problems }) => {
       const t = testRuntime({
         files: {
-          "out/manifest.json": JSON.stringify({
-            format: "nohead-export",
-            version: 1,
-            exported_at: NOW,
-            api_url: "http://api.test",
-            project_id: PROJECT_ID,
-            include_history: false,
-            include_deleted: false,
-            collections: [],
-            ...manifest,
-          }),
+          "out/manifest.json": exportManifest(manifest),
           "out/schema.yaml":
             "collections:\n  posts:\n    fields:\n      title: text\n",
           "out/records/posts.jsonl": records,
@@ -4478,14 +4381,8 @@ describe("import", () => {
   it("creates a published record with no relations published, in one request", async () => {
     const t = testRuntime({
       files: {
-        "out/manifest.json": JSON.stringify({
-          format: "nohead-export",
-          version: 1,
-          exported_at: NOW,
-          api_url: "http://api.test",
+        "out/manifest.json": exportManifest({
           project_id: "prj_01J9ZQ3F8X5W2K7M4N6P0R1OLD",
-          include_history: false,
-          include_deleted: false,
           collections: [{ slug: "posts", records: 2 }],
         }),
         "out/schema.yaml":
@@ -4551,14 +4448,8 @@ describe("import", () => {
     })
     const t = testRuntime({
       files: {
-        "out/manifest.json": JSON.stringify({
-          format: "nohead-export",
-          version: 1,
-          exported_at: NOW,
-          api_url: "http://api.test",
+        "out/manifest.json": exportManifest({
           project_id: "prj_01J9ZQ3F8X5W2K7M4N6P0R1OLD",
-          include_history: false,
-          include_deleted: false,
           // Posts first, as an export may list them.
           collections: [
             { slug: "posts", records: 1 },
@@ -4629,14 +4520,8 @@ describe("import", () => {
     const NEW_B = "rec_01J9ZQ3F8X5W2K7M4N6P0NEWBB"
     const t = testRuntime({
       files: {
-        "out/manifest.json": JSON.stringify({
-          format: "nohead-export",
-          version: 1,
-          exported_at: NOW,
-          api_url: "http://api.test",
+        "out/manifest.json": exportManifest({
           project_id: "prj_01J9ZQ3F8X5W2K7M4N6P0R1OLD",
-          include_history: false,
-          include_deleted: false,
           collections: [{ slug: "posts", records: 2 }],
         }),
         "out/schema.yaml":
@@ -4699,19 +4584,115 @@ describe("import", () => {
     expect(t.out()).toContain("(1 with relations, 2 published)")
   })
 
+  it("deletes the copies of the records an --include-deleted export has as deleted, and only those", async () => {
+    const REC_C = "rec_01J9ZQ3F8X5W2K7M4N6P0R1S2C"
+    const deleted = { deleted_at: NOW, purge_after: NOW }
+    // Each copy's ID names its record's title.
+    const copies: Record<string, string> = {
+      Live: "rec_01J9ZQ3F8X5W2K7M4N6P0NEWAA",
+      "Published, then deleted": "rec_01J9ZQ3F8X5W2K7M4N6P0NEWBB",
+      Deleted: "rec_01J9ZQ3F8X5W2K7M4N6P0NEWCC",
+    }
+    const t = testRuntime({
+      files: {
+        "out/manifest.json": exportManifest({
+          project_id: "prj_01J9ZQ3F8X5W2K7M4N6P0R1OLD",
+          include_deleted: true,
+          collections: [{ slug: "posts", records: 3 }],
+        }),
+        "out/schema.yaml":
+          "collections:\n  posts:\n    name: Posts\n    fields:\n      title:\n        name: title\n        type: text\n        required: true\n",
+        "out/records/posts.jsonl": [
+          record(REC_A, { title: "Live" }, { published_at: NOW }),
+          record(
+            REC_B,
+            { title: "Published, then deleted" },
+            { published_at: NOW, ...deleted }
+          ),
+          record(REC_C, { title: "Deleted" }, deleted),
+        ]
+          .map((r) => `${JSON.stringify(r)}\n`)
+          .join(""),
+      },
+      routes: {
+        "GET /v1/me": me,
+        [`GET /v1/projects/${PROJECT_ID}/collections`]: () =>
+          contractResponse("collections_list", page([collection()])),
+        [`POST /v1/collections/${COLLECTION_ID}/records`]: async (request) => {
+          const { data, publish } = await body(request)
+          return contractResponse(
+            "records_create",
+            record(copies[data.title], data, {
+              published_at: publish ? NOW : null,
+            }),
+            { status: 201 }
+          )
+        },
+        ...Object.fromEntries(
+          Object.values(copies).flatMap((copy) => [
+            [
+              `POST /v1/records/${copy}/publication`,
+              () =>
+                contractResponse(
+                  "records_publish",
+                  record(copy, {}, { published_at: NOW })
+                ),
+            ],
+            [
+              `DELETE /v1/records/${copy}`,
+              () =>
+                contractResponse("records_delete", record(copy, {}, deleted)),
+            ],
+          ])
+        ),
+      },
+    })
+
+    await t.ok(["import", "out"])
+
+    const writes = await Promise.all(
+      t.requests
+        .filter((r) => r.method !== "GET")
+        .map(async (r) => [
+          r.method,
+          new URL(r.url).pathname,
+          r.method === "POST" && !r.url.endsWith("/publication")
+            ? await body(r)
+            : null,
+        ])
+    )
+    // Created first, then published and deleted as exported.
+    expect(writes).toEqual([
+      [
+        "POST",
+        `/v1/collections/${COLLECTION_ID}/records`,
+        { data: { title: "Live" }, publish: true },
+      ],
+      [
+        "POST",
+        `/v1/collections/${COLLECTION_ID}/records`,
+        { data: { title: "Published, then deleted" } },
+      ],
+      [
+        "POST",
+        `/v1/collections/${COLLECTION_ID}/records`,
+        { data: { title: "Deleted" } },
+      ],
+      [
+        "POST",
+        `/v1/records/${copies["Published, then deleted"]}/publication`,
+        null,
+      ],
+      ["DELETE", `/v1/records/${copies["Published, then deleted"]}`, null],
+      ["DELETE", `/v1/records/${copies.Deleted}`, null],
+    ])
+  })
+
   it("refuses asset IDs that would read files outside the export", async () => {
     const t = testRuntime({
       files: {
-        "out/manifest.json": JSON.stringify({
-          format: "nohead-export",
-          version: 1,
-          exported_at: NOW,
-          api_url: "http://api.test",
-          project_id: PROJECT_ID,
-          include_history: false,
-          include_deleted: false,
+        "out/manifest.json": exportManifest({
           include_files: true,
-          collections: [],
         }),
         "out/schema.yaml": "collections: {}\n",
         "out/assets.jsonl": `${JSON.stringify({ id: "../../.ssh/id_ed25519", filename: "x", content_type: "text/plain" })}\n`,
@@ -4815,6 +4796,17 @@ describe("commands with a single request", () => {
       output: "Updated collection posts (schema v2)",
     },
     {
+      argv: ["collections", "update", "posts", "--slug", "articles"],
+      request: "PATCH /v1/collections/posts",
+      body: { slug: "articles" },
+      response: () =>
+        contractResponse(
+          "collections_update",
+          collection({ slug: "articles" })
+        ),
+      output: "Updated collection articles (schema v2)",
+    },
+    {
       argv: ["collections", "search-index", "posts"],
       request: "GET /v1/collections/posts/search-index",
       response: () =>
@@ -4828,6 +4820,25 @@ describe("commands with a single request", () => {
           rebuild_requested_at: null,
         }),
       output: /index:\s+01M481FV9XEG39KB7YDGFQ7VPJ_01M5AP23VCFN28W4QZT9NSQBTC/,
+    },
+    {
+      argv: ["collections", "search-index", "posts", "--rebuild"],
+      request: "POST /v1/collections/posts/search-index/rebuild",
+      response: () =>
+        contractResponse(
+          "search_index_rebuild",
+          {
+            object: "search_index",
+            collection_id: COLLECTION_ID,
+            index: "01M481FV9XEG39KB7YDGFQ7VPJ_01M5AP23VCFN28W4QZT9NSQBTC",
+            status: "building",
+            documents: 3,
+            last_built_at: NOW,
+            rebuild_requested_at: NOW,
+          },
+          { status: 202 }
+        ),
+      output: /status:\s+building/,
     },
     {
       argv: ["collections", "restore", "posts"],
@@ -5240,6 +5251,30 @@ describe("paged lists", () => {
       operation: "record_revisions_list",
       item: revision(1),
     },
+    {
+      argv: ["records", "scheduled", "posts"],
+      path: "/v1/collections/posts/scheduled-changes",
+      operation: "scheduled_changes_list",
+      item: {
+        object: "scheduled_change",
+        action: "publish",
+        at: "2026-09-28T09:00:00.000Z",
+        record_id: REC_A,
+        draft_id: null,
+      },
+    },
+    {
+      argv: ["drafts", "list", "posts"],
+      path: "/v1/collections/posts/drafts",
+      operation: "drafts_list",
+      item: draft({ title: "Hello again" }),
+    },
+    {
+      argv: ["migrations", "list", "products"],
+      path: "/v1/collections/products/migrations",
+      operation: "migrations_list",
+      item: migration("running"),
+    },
   ])(
     "$argv.0 $argv.1 ends at a page with the next cursor, or follows every page with --all",
     async ({ argv, path, operation, item }) => {
@@ -5424,6 +5459,11 @@ describe("usage errors, refused before calling the API", () => {
       help: true,
     },
     {
+      argv: ["records", "scheduled", "posts", "--sort", "soon"],
+      message: /--sort.*'soon'.*at, -at\.$/,
+      help: true,
+    },
+    {
       argv: ["records", "schedule", REC_A],
       message: "Pass --publish-at, --unpublish-at, or both",
     },
@@ -5512,6 +5552,11 @@ describe("usage errors, refused before calling the API", () => {
       help: true,
     },
     {
+      argv: ["assets", "upload", "cover.png", "back.png", "--alt", "A harbour"],
+      message:
+        "--alt describes one file: upload the files one at a time to give each its own",
+    },
+    {
       argv: ["assets", "list", "--kind", "photo"],
       message: '--kind takes image, video, audio, document, other, not "photo"',
     },
@@ -5527,6 +5572,15 @@ describe("usage errors, refused before calling the API", () => {
     {
       argv: ["search", "shoes", "--limit", "ten"],
       message: `--limit ${POSITIVE}`,
+    },
+    {
+      argv: ["search", "shoes", "--filter", "price<5"],
+      message:
+        'Across a project only --filter "published_at exists" (or !exists) works; pass --collection for more',
+    },
+    {
+      argv: ["link", "key_123"],
+      message: "key_123 is not a project ID (prj_...)",
     },
   ]
   const named = (argv: string[]) =>

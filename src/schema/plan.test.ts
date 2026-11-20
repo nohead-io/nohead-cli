@@ -32,44 +32,154 @@ const plan = (yaml: string) =>
   planChanges(fromYaml(yaml, "schema.yaml"), fromCollections(remote), remote)
 
 describe("schema files", () => {
-  it("round-trips the project's schema, with relations by slug and default names left out", () => {
-    const yaml = toYaml(fromCollections(remote))
+  const fields = (yaml: string) =>
+    `collections:\n  posts:\n    fields:\n${yaml}\n`
 
-    expect(yaml).toContain(
-      "author:\n        type: relation\n        collection: authors"
-    )
-    expect(yaml).not.toContain("name: Title")
-    expect(applicable(plan(yaml))).toEqual([])
+  // Pulled, then planned against the same project: nothing to change.
+  it.each([
+    {
+      what: "the project's schema, with relations by slug and default names left out",
+      collections: remote,
+      has: "author:\n        type: relation\n        collection: authors",
+      lacks: "name: Title",
+    },
+    {
+      what: "a collection in public search",
+      collections: [authors, { ...posts, public_search: true }],
+      has: "posts:\n    public_search: true",
+      lacks: "authors:\n    public_search",
+    },
+    {
+      what: "an asset field's accepted file types",
+      collections: [
+        collection({
+          slug: "media",
+          name: "Media",
+          fields: [
+            field({
+              key: "cover",
+              name: "Cover",
+              type: "asset",
+              configuration: { accepted_types: ["image/*", "application/pdf"] },
+            }),
+          ],
+        }),
+      ],
+      has: "accepted_types",
+    },
+    {
+      what: "a unique slug, its uniqueness implied",
+      collections: [
+        collection({
+          slug: "articles",
+          name: "Articles",
+          fields: [
+            field({ key: "title", name: "Title", position: 0 }),
+            field({
+              key: "slug",
+              name: "Slug",
+              position: 1,
+              configuration: { format: "slug", unique: true },
+            }),
+          ],
+        }),
+      ],
+      has: "format: slug",
+      lacks: "unique",
+    },
+    {
+      what: "a field's search settings",
+      collections: [
+        collection({
+          fields: [
+            field({
+              key: "title",
+              name: "Title",
+              configuration: { sortable: true },
+            }),
+          ],
+        }),
+      ],
+      has: "sortable: true",
+    },
+  ])("round-trips $what", ({ collections, has, lacks }) => {
+    const yaml = toYaml(fromCollections(collections))
+
+    expect(yaml).toContain(has)
+    if (lacks) expect(yaml).not.toContain(lacks)
+    expect(
+      planChanges(
+        fromYaml(yaml, "schema.yaml"),
+        fromCollections(collections),
+        collections
+      )
+    ).toEqual([])
   })
 
-  it("rejects unknown keys and types with the path to the problem", () => {
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    fields:\n      title: { type: txt }",
-        "s.yaml"
-      )
-    ).toThrow('s.yaml: collections.posts.fields.title: unknown type "txt"')
-    expect(() =>
-      fromYaml("collections:\n  posts:\n    feilds: {}", "s.yaml")
-    ).toThrow("unknown key feilds")
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    fields:\n      a: { type: relation }",
-        "s.yaml"
-      )
-    ).toThrow('relation fields need "collection"')
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    fields:\n      title: text\n      headline: { type: text, renamed_from: title }",
-        "s.yaml"
-      )
-    ).toThrow("renamed_from title, but title is also in the file")
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    fields:\n      a: { type: text, renamed_from: Old }",
-        "s.yaml"
-      )
-    ).toThrow("renamed_from is the field's previous API key")
+  it.each([
+    {
+      problem: "an unknown type",
+      yaml: fields("      title: { type: txt }"),
+      error: 's.yaml: collections.posts.fields.title: unknown type "txt"',
+    },
+    {
+      problem: "a misspelt key",
+      yaml: "collections:\n  posts:\n    feilds: {}",
+      error: "collections.posts: unknown key feilds",
+    },
+    {
+      problem: "an option no format has",
+      yaml: fields(
+        "      slug: { type: text, format: slug, source_field: title }"
+      ),
+      error: "collections.posts.fields.slug: unknown key source_field",
+    },
+    {
+      problem: "the old search setting",
+      yaml: "collections:\n  posts:\n    search: true\n    fields:\n      title: text\n",
+      error: "collections.posts.search: no longer a setting",
+    },
+    {
+      problem: "a public_search that is not true or false",
+      yaml: "collections:\n  posts:\n    public_search: yes please\n    fields:\n      title: text\n",
+      error: "collections.posts.public_search must be true or false",
+    },
+    {
+      problem: "a relation without its collection",
+      yaml: fields("      a: { type: relation }"),
+      error: 'relation fields need "collection"',
+    },
+    {
+      problem: "a rename from a key still in the file",
+      yaml: fields(
+        "      title: text\n      headline: { type: text, renamed_from: title }"
+      ),
+      error: "renamed_from title, but title is also in the file",
+    },
+    {
+      problem: "a rename from a name, not a key",
+      yaml: fields("      a: { type: text, renamed_from: Old }"),
+      error: "renamed_from is the field's previous API key",
+    },
+    {
+      problem: "expanded on a text field",
+      yaml: fields("      title: { type: text, expanded: [name] }"),
+      error:
+        "title.expanded: only asset and relation fields expand what they point at",
+    },
+    {
+      problem: "searched on an asset field",
+      yaml: fields("      cover: { type: asset, searched: [alt] }"),
+      error:
+        "cover.searched: only relation fields search fields of the records they point at",
+    },
+    {
+      problem: "an included that is not true or false",
+      yaml: fields("      cover: { type: asset, included: yes }"),
+      error: "cover.included: true or false",
+    },
+  ])("refuses $problem", ({ yaml, error }) => {
+    expect(() => fromYaml(yaml, "s.yaml")).toThrow(error)
   })
 })
 
@@ -140,18 +250,6 @@ collections:
 
   it("includes collections in public search, and takes them out", () => {
     const public_ = [authors, { ...posts, public_search: true }]
-    const yaml = toYaml(fromCollections(public_))
-    expect(yaml).toContain("posts:\n    public_search: true")
-    expect(yaml).not.toContain("authors:\n    public_search")
-    expect(
-      applicable(
-        planChanges(
-          fromYaml(yaml, "schema.yaml"),
-          fromCollections(public_),
-          public_
-        )
-      )
-    ).toEqual([])
 
     // Left out means off: the file is the whole truth for a collection.
     expect(
@@ -166,15 +264,6 @@ collections:
         public_
       ).map(describeChange)
     ).toContain("~ collection posts: public_search false")
-    expect(() =>
-      fromYaml(
-        base.replace(
-          "  authors:\n",
-          "  authors:\n    public_search: yes please\n"
-        ),
-        "schema.yaml"
-      )
-    ).toThrow("collections.authors.public_search must be true or false")
   })
 
   it("reports what the file leaves out without touching it", () => {
@@ -386,62 +475,7 @@ describe("date fields in schema files", () => {
   })
 })
 
-describe("asset fields in schema files", () => {
-  it("round-trips the accepted file types and plans no change", () => {
-    const media = collection({
-      slug: "media",
-      name: "Media",
-      fields: [
-        field({
-          key: "cover",
-          name: "Cover",
-          type: "asset",
-          configuration: { accepted_types: ["image/*", "application/pdf"] },
-        }),
-      ],
-    })
-    const yaml = toYaml(fromCollections([media]))
-    expect(yaml).toContain("accepted_types")
-    expect(
-      applicable(
-        planChanges(fromYaml(yaml, "schema.yaml"), fromCollections([media]), [
-          media,
-        ])
-      )
-    ).toEqual([])
-  })
-})
-
 describe("slugs in schema files", () => {
-  it("round-trips a unique slug and plans no change when it matches", () => {
-    const articles = collection({
-      slug: "articles",
-      name: "Articles",
-      fields: [
-        field({ key: "title", name: "Title", position: 0 }),
-        field({
-          key: "slug",
-          name: "Slug",
-          position: 1,
-          configuration: { format: "slug", unique: true },
-        }),
-      ],
-    })
-    const yaml = toYaml(fromCollections([articles]))
-    expect(yaml).toContain("format: slug")
-    // Implied by the slug.
-    expect(yaml).not.toContain("unique")
-    expect(
-      applicable(
-        planChanges(
-          fromYaml(yaml, "schema.yaml"),
-          fromCollections([articles]),
-          [articles]
-        )
-      )
-    ).toEqual([])
-  })
-
   it("plans no change whether a file spells out a slug's unique or not", () => {
     const articles = collection({
       slug: "articles",
@@ -467,15 +501,6 @@ describe("slugs in schema files", () => {
           )
         )
       ).toEqual([])
-  })
-
-  it("refuses options formats don't have", () => {
-    expect(() =>
-      fromYaml(
-        "collections:\n  a:\n    fields:\n      slug: { type: text, format: slug, source_field: title }\n",
-        "schema.yaml"
-      )
-    ).toThrow(/source_field/)
   })
 })
 
@@ -505,34 +530,5 @@ describe("search in schema files", () => {
     expect(changes.map(describeChange)).toEqual([
       '~ field posts.title: options {"filterable":true}',
     ])
-  })
-
-  it("says a collection's old search setting is gone", () => {
-    expect(() =>
-      fromYaml(
-        "collections:\n  posts:\n    search: true\n    fields:\n      title: text\n",
-        "s.yaml"
-      )
-    ).toThrow(/posts\.search: no longer a setting/)
-  })
-
-  it("writes search settings back", () => {
-    const searched = [
-      collection({
-        fields: [
-          field({
-            key: "title",
-            name: "Title",
-            configuration: { sortable: true },
-          }),
-        ],
-      }),
-    ]
-    const yaml = toYaml(fromCollections(searched))
-
-    expect(yaml).toContain("sortable: true")
-    expect(
-      planChanges(fromYaml(yaml, "s.yaml"), fromCollections(searched), searched)
-    ).toEqual([])
   })
 })

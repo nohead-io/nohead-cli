@@ -99,20 +99,21 @@ function browserLogin(
 ) {
   const starts = [...start]
   const answers = [...polls]
+  // Requests past the stubbed answers, which fail the test once it ends.
+  const unanswered: string[] = []
+  onTestFinished(() => expect(unanswered).toEqual([]))
+  const next = (list: Handler[], request: Request) => {
+    const answer = list.shift()
+    if (answer) return answer(request)
+    unanswered.push(new URL(request.url).pathname)
+    return unavailable()
+  }
   const t = testRuntime({
     env: { HOME, NOHEAD_API_URL: "http://api.test", ...env },
     files,
     routes: {
-      "POST /auth/cli-logins": (request) => {
-        const answer = starts.shift()
-        if (!answer) throw new Error("started once too often")
-        return answer(request)
-      },
-      "POST /auth/cli-logins/token": (request) => {
-        const answer = answers.shift()
-        if (!answer) throw new Error("polled once too often")
-        return answer(request)
-      },
+      "POST /auth/cli-logins": (request) => next(starts, request),
+      "POST /auth/cli-logins/token": (request) => next(answers, request),
     },
   })
   let clock = Date.parse("2026-09-27T12:00:00.000Z")
@@ -372,7 +373,10 @@ describe("login in the browser", () => {
 
     expect(await run(["--json", "login"], t.runtime)).toBe(ExitCode.ApiError)
 
-    expect(JSON.parse(t.err().split("…\n")[1]).error).toEqual({
+    // The error document comes last, after what the sign-in said while
+    // waiting.
+    const error = t.err().slice(t.err().lastIndexOf("\n{") + 1)
+    expect(JSON.parse(error).error).toEqual({
       type: "not_found",
       message:
         "The sign-in request expired or was already used; run nohead login again",
@@ -517,7 +521,7 @@ describe("login in the browser", () => {
 
     expect(await run(["--json", "login"], t.runtime)).toBe(ExitCode.ApiError)
 
-    expect(t.json).toThrow() // nothing on stdout
+    expect(t.out()).toBe("")
     expect(JSON.parse(t.err()).error).toEqual({
       type: "validation_error",
       message: "Validation failed",
@@ -615,6 +619,48 @@ describe("login with a piped key", () => {
     expect(await login).toBe(ExitCode.Success)
     await vi.advanceTimersByTimeAsync(1000)
     expect(t.err()).toBe("")
+  })
+
+  it("refuses a key that is not a project API key", async () => {
+    const t = testRuntime({
+      env: { HOME },
+      stdin: "nohead_sk_user\n",
+      routes: {
+        "GET /v1/me": () =>
+          contractResponse("me_get", {
+            object: "principal",
+            type: "user",
+            user: {
+              id: "usr_1",
+              email: "ada@example.com",
+              name: "Ada",
+              staff: false,
+            },
+            api_key: null,
+          }),
+      },
+    })
+
+    expect(await run(["login"], t.runtime)).toBe(ExitCode.Usage)
+    expect(t.err()).toContain("That is not a project API key")
+    expect(t.written).toEqual({})
+  })
+
+  // The saved key would be ignored, which would be a surprise.
+  it("says NOHEAD_API_KEY wins over the key it saves", async () => {
+    const t = testRuntime({
+      env: { HOME, NOHEAD_API_KEY: "nohead_sk_env" },
+      stdin: "nohead_sk_new\n",
+      routes: { "GET /v1/me": () => contractResponse("me_get", ME) },
+    })
+
+    await t.ok(["login"])
+    expect(t.requests[0].headers.get("Authorization")).toBe(
+      "Bearer nohead_sk_new"
+    )
+    expect(t.err()).toContain(
+      "NOHEAD_API_KEY is set, so commands use it rather than the saved key"
+    )
   })
 
   it("refuses an empty pipe (an unset variable) instead of waiting for a browser", async () => {
