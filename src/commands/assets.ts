@@ -4,7 +4,7 @@ import { Option, type Command } from "commander"
 
 import type { Asset, AssetKind } from "@nohead/sdk"
 import { imageUrl } from "@nohead/sdk/images"
-import type { CommandContext } from "../context.ts"
+import { requestKey, type CommandContext } from "../context.ts"
 import { CliError, ExitCode, storageUnreachable, unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printNotice, printResult, table } from "../output.ts"
@@ -25,7 +25,8 @@ const transferTimeout = (bytes: number) => Math.max(60_000, bytes / 64)
 /**
  * Uploads a file the platform way: start the upload, PUT the bytes
  * straight to storage, then complete it. With a key, a re-run picks up where
- * it stopped (the SDK returns an asset the first run finished).
+ * it stopped (the SDK returns an asset the first run finished); with null,
+ * the SDK makes one up.
  */
 export async function uploadAsset(
   ctx: CommandContext,
@@ -36,7 +37,7 @@ export async function uploadAsset(
     contentType?: string
     alt?: string | null
   },
-  idempotencyKey?: string
+  idempotencyKey: string | null
 ): Promise<Asset> {
   const api = await ctx.project()
   return unwrap(
@@ -48,7 +49,7 @@ export async function uploadAsset(
         ...(file.alt && { alt: file.alt }),
       },
       {
-        ...ctx.writeOptions(idempotencyKey ?? null),
+        ...ctx.writeOptions(idempotencyKey),
         timeout: transferTimeout(file.bytes.byteLength),
       }
     )
@@ -186,19 +187,23 @@ export function registerAssets(
           )
         await ctx.project()
         const uploaded: Asset[] = []
-        for (const path of files) {
+        for (const [index, path] of files.entries()) {
           let bytes: Uint8Array
           try {
             bytes = await ctx.runtime.readBinaryFile(path)
           } catch {
             throw usageError(`Cannot read ${path}`)
           }
-          const asset = await uploadAsset(ctx, {
-            bytes,
-            filename: basename(path),
-            contentType: options.contentType,
-            alt: options.alt,
-          })
+          const asset = await uploadAsset(
+            ctx,
+            {
+              bytes,
+              filename: basename(path),
+              contentType: options.contentType,
+              alt: options.alt,
+            },
+            requestKey(ctx, index)
+          )
           printNotice(ctx, `Uploaded ${asset.filename}`)
           uploaded.push(asset)
         }

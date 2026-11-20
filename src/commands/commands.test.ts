@@ -2365,6 +2365,17 @@ describe("field migrations", () => {
   })
 })
 
+// The SDK reads the upload URL's expiry against the real clock.
+const pendingUpload = {
+  ...asset("pending"),
+  upload: {
+    method: "PUT",
+    url: "https://storage.test/bucket/key?X-Amz-Signature=x",
+    headers: { "Content-Type": "image/png" },
+    expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+  },
+}
+
 describe("idempotency", () => {
   const created = () =>
     contractResponse("records_create", record(REC_A, { title: "Hi" }), {
@@ -2388,6 +2399,65 @@ describe("idempotency", () => {
 
     expect(t.requests[0].headers.get("Idempotency-Key")).toBe("deploy-42")
   })
+
+  // Each request has its own key: the API would refuse the second request
+  // for reusing the first one's key with another body.
+  it.each<{
+    command: string[]
+    routes: Record<string, Handler>
+    writes: string
+  }>([
+    {
+      command: [
+        "records",
+        "bulk",
+        "publish",
+        "posts",
+        ...Array.from({ length: 101 }, (_, n) => `rec_${n}`),
+      ],
+      routes: {
+        "POST /v1/collections/posts/record-batches": () =>
+          contractResponse("records_bulk", {
+            object: "record_batch",
+            action: "publish",
+            succeeded: 0,
+            failed: 0,
+            results: [],
+          }),
+      },
+      writes: "/record-batches",
+    },
+    {
+      command: ["assets", "upload", "a.png", "b.png"],
+      routes: {
+        "GET /v1/me": me,
+        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
+          contractResponse("assets_upload", pendingUpload, { status: 201 }),
+        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+          contractResponse("assets_get", asset("pending")),
+        "PUT /bucket/key": () => new Response(null, { status: 200 }),
+        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
+          contractResponse("assets_complete", asset("ready")),
+      },
+      writes: `/projects/${PROJECT_ID}/assets`,
+    },
+  ])(
+    "gives each request of $command.0 $command.1 a key of its own from --idempotency-key",
+    async ({ command, routes, writes }) => {
+      const t = testRuntime({
+        files: { "a.png": new Uint8Array([1]), "b.png": new Uint8Array([2]) },
+        routes,
+      })
+
+      await t.ok(["--idempotency-key", "deploy-42", ...command])
+
+      expect(
+        t.requests
+          .filter((r) => r.url.endsWith(writes))
+          .map((r) => r.headers.get("Idempotency-Key"))
+      ).toEqual(["deploy-42:0", "deploy-42:1"])
+    }
+  )
 
   it("gives each imported line a key that is the same on every re-run", async () => {
     const file = [
@@ -3029,16 +3099,6 @@ describe("link", () => {
 })
 
 describe("assets", () => {
-  // The SDK reads the upload URL's expiry against the real clock.
-  const pendingUpload = {
-    ...asset("pending"),
-    upload: {
-      method: "PUT",
-      url: "https://storage.test/bucket/key?X-Amz-Signature=x",
-      headers: { "Content-Type": "image/png" },
-      expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
-    },
-  }
   it("searches assets and lists them by kind", async () => {
     let query: URLSearchParams | undefined
     const t = testRuntime({

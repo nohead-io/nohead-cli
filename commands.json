@@ -23,7 +23,7 @@
     },
     {
       "flags": "--idempotency-key <key>",
-      "description": "makes retrying a mutation safe: the same key and request return the first result"
+      "description": "makes retrying a mutation safe: the same key and request return the first result (import <dir> and schema push ignore it)"
     }
   ],
   "commands": [

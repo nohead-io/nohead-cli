@@ -9,6 +9,11 @@ release's section is its GitHub release's notes.
 
 ## Unreleased
 
+- `--idempotency-key` works with commands that send several requests: each
+  gets its own key, `<key>:0`, `<key>:1` and so on. `records bulk` with more
+  than 100 records no longer fails on its second batch, and `assets upload`
+  no longer drops the key. `import <dir>` and `schema push` ignore the flag,
+  as its help now says.
 - `nohead webhooks get <id>` shows a webhook and how its deliveries are
   doing: since when they fail, the last attempt's status code or error, and
   the last success.
