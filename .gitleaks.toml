@@ -1,0 +1,20 @@
+# gitleaks' default rules, plus Nohead's own secrets by their exact shape, as
+# the API issues them (change the rules if it changes them): the defaults only
+# catch them beside a word like "key". CI scans the whole history with it
+# (.github/workflows/ci.yml); to scan by hand, run `gitleaks git .` from the
+# repository root. The tests' keys (nohead_sk_test0000000_secret, whsec_c2Vj...)
+# are shorter than real ones, so no rule matches them.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "nohead-api-key"
+description = "Nohead API key, full-access (nohead_sk_) or published-only (nohead_pk_)"
+regex = '''nohead_[sp]k_[a-z0-9]{12}_[A-Za-z0-9]{40}'''
+keywords = ["nohead_sk_", "nohead_pk_"]
+
+[[rules]]
+id = "nohead-webhook-secret"
+description = "Nohead webhook signing secret (32 bytes, base64)"
+regex = '''whsec_[A-Za-z0-9+/]{43}='''
+keywords = ["whsec_"]

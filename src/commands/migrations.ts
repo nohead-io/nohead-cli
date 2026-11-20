@@ -202,7 +202,7 @@ export function registerMigrations(
     ) => {
       const ctx = context()
       const field = await resolveField(ctx, collection, ref)
-      const config = await configuration(ctx, options)
+      const config = await configuration(ctx, options, field)
       const body: Omit<FieldMigrationRequest, "field_id"> = {
         on_invalid: options.clearInvalid ? "clear" : "fail",
       }

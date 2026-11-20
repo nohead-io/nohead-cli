@@ -19,6 +19,7 @@ jobs:
   checks:
     name: Lint, types and tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -39,12 +40,30 @@ jobs:
       - name: Install the packages
         run: scripts/install-packed.sh
 
+  secrets:
+    name: Secrets in the git history
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # gitleaks' default rules and Nohead's own key shapes (.gitleaks.toml),
+      # over the whole history of the commit under test (not other branches):
+      # it takes seconds. The image is gitleaks 8.30.1 (gitleaks-action needs
+      # a license for organizations).
+      - run: >-
+          docker run --rm -v "$PWD:/repo:ro"
+          ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          git /repo --log-opts=HEAD --no-banner --redact --exit-code 1
+
   # The one check main's ruleset requires, so the required checks don't change
   # when the jobs do.
   ci-success:
     name: CI passed
     if: always()
-    needs: [checks]
+    needs: [checks, secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

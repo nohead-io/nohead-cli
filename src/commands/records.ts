@@ -103,7 +103,8 @@ export function allRecords(
   return unwrap(Array.fromAsync(ctx.api.records.list(collection, query)))
 }
 
-function label(record: RecordModel): string {
+/** A record's first text value, for a table row. */
+export function recordLabel(record: RecordModel): string {
   const value = Object.values(record.data).find(
     (v) => typeof v === "string" && v.trim()
   )
@@ -124,7 +125,7 @@ function recordTable(records: RecordModel[]): string {
       recordStatus(r),
       String(r.revision),
       r.updated_at,
-      label(r),
+      recordLabel(r),
     ])
   )
 }

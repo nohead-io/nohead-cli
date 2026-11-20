@@ -3,14 +3,10 @@ import type { Command } from "commander"
 import type { SearchIndex } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
 import { unwrap } from "../errors.ts"
-import { positiveInteger, usageError } from "../input.ts"
+import { collect, positiveInteger, usageError } from "../input.ts"
 import { parseFilters } from "../filters.ts"
-import { details, formatValue, printResult, table } from "../output.ts"
-import { recordStatus } from "./records.ts"
-
-function collect(value: string, previous: string[] = []) {
-  return [...previous, value]
-}
+import { details, printResult, table } from "../output.ts"
+import { recordLabel, recordStatus } from "./records.ts"
 
 function describeIndex(index: SearchIndex): string {
   return details([
@@ -99,12 +95,7 @@ export function registerSearch(
                 record.id,
                 record.collection,
                 recordStatus(record),
-                formatValue(
-                  Object.values(record.data).find(
-                    (v) => typeof v === "string"
-                  ) ?? "",
-                  50
-                ),
+                recordLabel(record),
               ])
             ),
             `\n${page.meta.total_estimate} match${page.meta.total_estimate === 1 ? "" : "es"}`,

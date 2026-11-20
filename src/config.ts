@@ -17,13 +17,6 @@ export interface ConfigFile {
   keys: Record<string, SavedKey>
 }
 
-/** The shape before keys were saved by project: named profiles. */
-interface Profile {
-  api_url: string
-  api_key?: string
-  project_id?: string
-}
-
 /**
  * $NOHEAD_CONFIG, else $XDG_CONFIG_HOME/nohead/config.json, else
  * ~/.config/nohead/config.json. Without $HOME (Windows, some containers) ~ is
@@ -44,24 +37,8 @@ export async function readConfig(runtime: Runtime): Promise<ConfigFile> {
   } catch {
     return { keys: {} }
   }
-  const parsed = parseOwnFile(path, text) as {
-    keys?: ConfigFile["keys"]
-    profiles?: Record<string, Profile>
-  }
-  return { keys: { ...fromProfiles(parsed.profiles), ...parsed.keys } }
-}
-
-/**
- * Keys saved as profiles, by their project: the next write saves them in the
- * new shape. A profile without a project (or key) has nothing to go under.
- */
-function fromProfiles(profiles: Record<string, Profile> = {}) {
-  const keys: ConfigFile["keys"] = {}
-  for (const { api_url, api_key, project_id } of Object.values(profiles)) {
-    if (!project_id || !api_key || project_id in keys) continue
-    keys[project_id] = { api_url, api_key }
-  }
-  return keys
+  const parsed = parseOwnFile(path, text) as { keys?: ConfigFile["keys"] }
+  return { keys: { ...parsed.keys } }
 }
 
 /**

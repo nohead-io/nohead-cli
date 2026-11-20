@@ -98,7 +98,7 @@ function withoutImplied(
 }
 
 /** "lead_author" / "blog-posts" -> "Lead Author" / "Blog Posts". */
-function humanize(key: string): string {
+export function humanize(key: string): string {
   return key
     .split(/[_-]+/)
     .filter(Boolean)

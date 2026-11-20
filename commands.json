@@ -362,8 +362,16 @@
               "description": "relation target collection (slug or ID)"
             },
             {
+              "flags": "--min-length <n>",
+              "description": "minimum length for text, long text and rich text fields"
+            },
+            {
               "flags": "--max-length <n>",
-              "description": "maximum length for plain text fields"
+              "description": "maximum length for text, long text and rich text fields"
+            },
+            {
+              "flags": "--accepted-types <list>",
+              "description": "asset fields: MIME types or type/* wildcards new values must have, comma-separated"
             },
             {
               "flags": "--min <n>",
@@ -428,6 +436,22 @@
             {
               "flags": "--no-sortable",
               "description": "disallow sorting search results"
+            },
+            {
+              "flags": "--included",
+              "description": "return this field in public search hits"
+            },
+            {
+              "flags": "--no-included",
+              "description": "leave this field out of public search hits"
+            },
+            {
+              "flags": "--expanded <list>",
+              "description": "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
+            },
+            {
+              "flags": "--searched <list>",
+              "description": "relation fields: the related collection's field keys searches match, comma-separated"
             }
           ],
           "commands": []
@@ -476,8 +500,16 @@
               "description": "relation target collection (slug or ID)"
             },
             {
+              "flags": "--min-length <n>",
+              "description": "minimum length for text, long text and rich text fields"
+            },
+            {
               "flags": "--max-length <n>",
-              "description": "maximum length for plain text fields"
+              "description": "maximum length for text, long text and rich text fields"
+            },
+            {
+              "flags": "--accepted-types <list>",
+              "description": "asset fields: MIME types or type/* wildcards new values must have, comma-separated"
             },
             {
               "flags": "--min <n>",
@@ -542,6 +574,22 @@
             {
               "flags": "--no-sortable",
               "description": "disallow sorting search results"
+            },
+            {
+              "flags": "--included",
+              "description": "return this field in public search hits"
+            },
+            {
+              "flags": "--no-included",
+              "description": "leave this field out of public search hits"
+            },
+            {
+              "flags": "--expanded <list>",
+              "description": "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
+            },
+            {
+              "flags": "--searched <list>",
+              "description": "relation fields: the related collection's field keys searches match, comma-separated"
             }
           ],
           "commands": []
@@ -662,8 +710,16 @@
               "description": "relation target collection (slug or ID)"
             },
             {
+              "flags": "--min-length <n>",
+              "description": "minimum length for text, long text and rich text fields"
+            },
+            {
               "flags": "--max-length <n>",
-              "description": "maximum length for plain text fields"
+              "description": "maximum length for text, long text and rich text fields"
+            },
+            {
+              "flags": "--accepted-types <list>",
+              "description": "asset fields: MIME types or type/* wildcards new values must have, comma-separated"
             },
             {
               "flags": "--min <n>",
@@ -728,6 +784,22 @@
             {
               "flags": "--no-sortable",
               "description": "disallow sorting search results"
+            },
+            {
+              "flags": "--included",
+              "description": "return this field in public search hits"
+            },
+            {
+              "flags": "--no-included",
+              "description": "leave this field out of public search hits"
+            },
+            {
+              "flags": "--expanded <list>",
+              "description": "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
+            },
+            {
+              "flags": "--searched <list>",
+              "description": "relation fields: the related collection's field keys searches match, comma-separated"
             }
           ],
           "commands": []

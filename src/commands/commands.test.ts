@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import type { Field } from "@nohead/sdk"
+
 import { run } from "../cli.ts"
 import { ExitCode } from "../errors.ts"
 import { contractResponse } from "../test/contract.ts"
@@ -82,7 +84,7 @@ describe("collections", () => {
         [`POST /v1/projects/${PROJECT_ID}/collections`]: () =>
           contractResponse(
             "collections_create",
-            collection({ slug: "blog-posts", name: "Blog posts" }),
+            collection({ slug: "blog-posts", name: "Blog Posts" }),
             { status: 201 }
           ),
       },
@@ -92,7 +94,7 @@ describe("collections", () => {
     const create = t.requests[1]
     expect(await body(create)).toEqual({
       slug: "blog-posts",
-      name: "Blog posts",
+      name: "Blog Posts",
     })
     expect(create.headers.get("Nohead-Client")).toMatch(/^cli\//)
     // Percent-encoded (UTF-8), so a note in any language fits in a header.
@@ -139,7 +141,7 @@ describe("collections", () => {
 })
 
 describe("fields", () => {
-  it("adds a field with a derived API key, dashed type names and a relation target", async () => {
+  it("adds a field with a derived API key, dashed type names and a relation target, its related fields by key", async () => {
     const t = testRuntime({
       routes: {
         "GET /v1/collections/authors": () =>
@@ -175,14 +177,23 @@ describe("fields", () => {
       "--target",
       "authors",
       "--required",
+      "--expanded",
+      "title",
+      "--searched",
+      "title",
     ])
+    const authorTitle = collection().fields[0].id
     expect(await body(t.requests[1])).toEqual({
       name: "Lead Author",
       key: "lead_author",
       type: "relation",
       required: true,
       multiple: false,
-      configuration: { target_collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR" },
+      configuration: {
+        target_collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR",
+        expanded: [authorTitle],
+        searched: [authorTitle],
+      },
     })
 
     const rich = testRuntime({
@@ -230,6 +241,96 @@ describe("fields", () => {
       // The API keeps the description: it merges the change onto the options.
       configuration: { max_length: 80 },
     })
+  })
+
+  it.each<{ field: Field; flags: string[]; configuration: object }>([
+    {
+      field: field({ key: "title" }),
+      flags: ["--min-length", "3", "--no-included"],
+      configuration: { min_length: 3, included: false },
+    },
+    {
+      field: field({ key: "cover", type: "asset" }),
+      flags: [
+        "--accepted-types",
+        "image/*, application/pdf",
+        "--expanded",
+        "image_url,alt",
+      ],
+      // An asset's parts, as they are.
+      configuration: {
+        accepted_types: ["image/*", "application/pdf"],
+        expanded: ["image_url", "alt"],
+      },
+    },
+    {
+      // The field's own target collection resolves the key.
+      field: field({
+        key: "author",
+        type: "relation",
+        configuration: {
+          target_collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR",
+        },
+      }),
+      flags: ["--searched", "title"],
+      configuration: { searched: [collection().fields[0].id] },
+    },
+  ])(
+    "updates field options ($field.type): $flags",
+    async ({ field: updated, flags, configuration }) => {
+      const t = testRuntime({
+        routes: {
+          "GET /v1/collections/posts/fields": () =>
+            contractResponse("fields_list", page([updated])),
+          "GET /v1/collections/col_01J9ZQ3F8X5W2K7M4N6P0AUTHR": () =>
+            contractResponse(
+              "collections_get",
+              collection({
+                id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR",
+                slug: "authors",
+              })
+            ),
+          [`PATCH /v1/fields/${updated.id}`]: () =>
+            contractResponse("fields_update", updated),
+        },
+      })
+
+      await t.ok(["fields", "update", "posts", updated.key, ...flags])
+      expect(await body(t.requests.at(-1)!)).toEqual({ configuration })
+    }
+  )
+
+  it("refuses a related field the target collection doesn't have", async () => {
+    const author = field({
+      key: "author",
+      type: "relation",
+      configuration: { target_collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR" },
+    })
+    const t = testRuntime({
+      routes: {
+        "GET /v1/collections/posts/fields": () =>
+          contractResponse("fields_list", page([author])),
+        "GET /v1/collections/col_01J9ZQ3F8X5W2K7M4N6P0AUTHR": () =>
+          contractResponse(
+            "collections_get",
+            collection({
+              id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR",
+              slug: "authors",
+            })
+          ),
+      },
+    })
+
+    expect(
+      await run(
+        ["fields", "update", "posts", "author", "--searched", "nope"],
+        t.runtime
+      )
+    ).toBe(ExitCode.Usage)
+    expect(t.err()).toContain(
+      "Field author: searched lists nope, which isn't a field of authors"
+    )
+    expect(t.requests.map((r) => r.method)).toEqual(["GET", "GET"])
   })
 
   it("turns a format on with its own lengths, and off with --no-format", async () => {
@@ -2499,54 +2600,6 @@ describe("login and saved keys", () => {
     expect(t.err()).toContain(
       "NOHEAD_API_KEY is set, so commands use it rather than the saved key"
     )
-  })
-
-  it("reads profiles saved by earlier versions as keys by project", async () => {
-    const t = testRuntime({
-      env: { ...env, NOHEAD_API_URL: "http://api.test" },
-      files: {
-        [configFile]: JSON.stringify({
-          profiles: {
-            default: {
-              api_url: "http://saved.test",
-              api_key: "nohead_sk_saved",
-              project_id: PROJECT_ID,
-            },
-            ci: {
-              api_url: "http://api.test",
-              api_key: "nohead_sk_ci",
-              project_id: "prj_ci",
-            },
-            // Nothing to save it under.
-            old: { api_url: "http://api.test", api_key: "nohead_sk_old" },
-          },
-        }),
-      },
-      stdin: "nohead_sk_two\n",
-      routes: { "GET /v1/me": meOf("prj_two") },
-    })
-
-    await t.ok(["--project", "prj_ci", "whoami"])
-    expect(t.requests[0].headers.get("Authorization")).toBe(
-      "Bearer nohead_sk_ci"
-    )
-
-    // Writing saves the new shape only.
-    await t.ok(["login"])
-    expect(config(t)).toEqual({
-      keys: {
-        [PROJECT_ID]: {
-          api_url: "http://saved.test",
-          api_key: "nohead_sk_saved",
-        },
-        prj_ci: { api_url: "http://api.test", api_key: "nohead_sk_ci" },
-        prj_two: {
-          api_url: "http://api.test",
-          api_key: "nohead_sk_two",
-          name: "ci",
-        },
-      },
-    })
   })
 
   it("never sends a saved key to another API, or any key over plain http", async () => {
@@ -4927,6 +4980,19 @@ describe("usage errors, refused before calling the API", () => {
     {
       argv: ["fields", "migrate", "posts", "size", "--type", "float"],
       message: /^Unknown field type "float"\. Use one of: text, /,
+    },
+    {
+      argv: [
+        "fields",
+        "add",
+        "posts",
+        "Author",
+        "--type",
+        "relation",
+        "--searched",
+        "name",
+      ],
+      message: "Field author has no target collection: pass --target",
     },
     {
       argv: ["fields", "update", "posts", "size", "--max", "ten"],

@@ -1,6 +1,6 @@
 import { Option, type Command } from "commander"
 
-import type { Field, FieldCreate, FieldUpdate } from "@nohead/sdk"
+import type { Collection, Field, FieldCreate, FieldUpdate } from "@nohead/sdk"
 import type { CommandContext } from "../context.ts"
 import {
   configurationChange,
@@ -12,6 +12,7 @@ import { unwrap, unwrapFind } from "../errors.ts"
 import { toFieldKey, usageError } from "../input.ts"
 import { printResult, table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
+import { apiOptions, fieldIdsOf } from "./schema.ts"
 
 /** Accepts the spec's dashed spelling too: rich-text -> rich_text. */
 export function fieldType(value: string): FieldType {
@@ -31,12 +32,19 @@ function number(value: string, flag: string): number {
 }
 
 export interface ConfigOptions {
+  /** A new type (add, migrate). */
+  type?: FieldType
   searchable?: boolean
   filterable?: boolean
   sortable?: boolean
   options?: string
   target?: string
+  minLength?: number
   maxLength?: number
+  acceptedTypes?: string
+  included?: boolean
+  expanded?: string
+  searched?: string
   min?: number
   max?: number
   description?: string
@@ -47,18 +55,34 @@ export interface ConfigOptions {
   unique?: boolean
 }
 
-/** Type-specific configuration from flags; relation targets resolve slugs to IDs. */
+const list = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+/**
+ * Type-specific configuration from flags for `field` (its key, and its
+ * current configuration when it exists): relation targets resolve slugs to
+ * IDs, and the related fields a relation's search hits return and searches
+ * match keys to IDs.
+ */
 export async function configuration(
   ctx: CommandContext,
-  options: ConfigOptions
+  options: ConfigOptions,
+  field: {
+    key: string
+    type?: string
+    configuration?: Record<string, unknown>
+  }
 ): Promise<Record<string, unknown>> {
   const config: Record<string, unknown> = {}
-  if (options.options !== undefined)
-    config.options = options.options
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean)
+  if (options.options !== undefined) config.options = list(options.options)
+  if (options.minLength !== undefined) config.min_length = options.minLength
   if (options.maxLength !== undefined) config.max_length = options.maxLength
+  if (options.acceptedTypes !== undefined)
+    config.accepted_types = list(options.acceptedTypes)
+  if (options.included !== undefined) config.included = options.included
   if (options.min !== undefined) config.min = options.min
   if (options.max !== undefined) config.max = options.max
   if (options.description !== undefined)
@@ -70,10 +94,38 @@ export async function configuration(
   if (options.unique !== undefined) config.unique = options.unique
   for (const flag of ["searchable", "filterable", "sortable"] as const)
     if (options[flag] !== undefined) config[flag] = options[flag]
+  let target: Collection | undefined
   if (options.target !== undefined) {
-    const target = await unwrap(ctx.api.collections.get(options.target))
+    target = await unwrap(ctx.api.collections.get(options.target))
     config.target_collection_id = target.id
   }
+  const related: Record<string, string[]> = {}
+  if (options.expanded !== undefined) related.expanded = list(options.expanded)
+  if (options.searched !== undefined) related.searched = list(options.searched)
+  // A relation's related fields by key become IDs, as schema push sends
+  // them; an asset's parts stay as they are.
+  if (
+    Object.keys(related).length > 0 &&
+    (options.type ?? field.type) === "relation"
+  ) {
+    const current = field.configuration?.target_collection_id
+    if (!target && typeof current === "string")
+      target = await unwrap(ctx.api.collections.get(current))
+    if (!target)
+      throw usageError(
+        `Field ${field.key} has no target collection: pass --target`
+      )
+    Object.assign(
+      config,
+      apiOptions(
+        related,
+        new Map(),
+        field.key,
+        fieldIdsOf([target]),
+        target.slug
+      )
+    )
+  } else Object.assign(config, related)
   return config
 }
 
@@ -121,9 +173,18 @@ export function withConfigFlags(command: Command): Command {
     .option("--options <list>", "enum options, comma-separated")
     .option("--target <collection>", "relation target collection (slug or ID)")
     .option(
+      "--min-length <n>",
+      "minimum length for text, long text and rich text fields",
+      (value) => number(value, "--min-length")
+    )
+    .option(
       "--max-length <n>",
-      "maximum length for plain text fields",
+      "maximum length for text, long text and rich text fields",
       (value) => number(value, "--max-length")
+    )
+    .option(
+      "--accepted-types <list>",
+      "asset fields: MIME types or type/* wildcards new values must have, comma-separated"
     )
     .option("--min <n>", "minimum for number fields", (value) =>
       number(value, "--min")
@@ -148,6 +209,16 @@ export function withConfigFlags(command: Command): Command {
     .option("--no-filterable", "disallow filtering in search")
     .option("--sortable", "allow sorting search results by this field")
     .option("--no-sortable", "disallow sorting search results")
+    .option("--included", "return this field in public search hits")
+    .option("--no-included", "leave this field out of public search hits")
+    .option(
+      "--expanded <list>",
+      "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
+    )
+    .option(
+      "--searched <list>",
+      "relation fields: the related collection's field keys searches match, comma-separated"
+    )
 }
 
 export function registerFields(
@@ -221,18 +292,19 @@ export function registerFields(
       }
     ) => {
       const ctx = context()
+      const key = options.key ?? toFieldKey(name)
       const result = await unwrap(
         ctx.api.fields.create(
           collection,
           {
             name,
-            key: options.key ?? toFieldKey(name),
+            key,
             type: options.type,
             required: options.required,
             multiple: options.multiple,
             configuration: mergeConfiguration(
               {},
-              await configuration(ctx, options)
+              await configuration(ctx, options, { key })
             ),
             // Any type's options; the API checks them against the type.
           } as FieldCreate,
@@ -279,7 +351,7 @@ export function registerFields(
     ) => {
       const ctx = context()
       const field = await resolveField(ctx, collection, ref)
-      const config = await configuration(ctx, options)
+      const config = await configuration(ctx, options, field)
       const body: FieldUpdate = {}
       if (options.name) body.name = options.name
       if (options.key) body.key = options.key

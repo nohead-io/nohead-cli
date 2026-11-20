@@ -2,7 +2,7 @@
 
 The `nohead` command-line interface for [Nohead](https://nohead.io), for developers, CI and coding agents. It talks to the **public API only**, through the TypeScript SDK, [`@nohead/sdk`](https://www.npmjs.com/package/@nohead/sdk). Every change it makes is recorded in history as made "via the CLI".
 
-It needs Node 26 or newer. Until 1.0, any release may break scripts and CI jobs that use it: pin a version there (`npx nohead@0.4`), and read the changelog's **Breaking** entries before upgrading.
+It needs Node 26 or newer. Until 1.0, any release may break scripts and CI jobs that use it: pin the version you use there (`npx nohead@<version>`, as `nohead --version` prints it), and read the changelog's **Breaking** entries before upgrading.
 
 ```bash
 npm install -g @nohead/cli               # or run it without installing: npx nohead
