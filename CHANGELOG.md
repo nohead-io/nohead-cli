@@ -40,6 +40,17 @@ release's section is its GitHub release's notes.
   record or draft IDs with spaces or control characters, as a damaged
   export, exit code 2, before importing anything, instead of an unexpected
   error partway through.
+- **Breaking:** API keys saved by 0.3.0 or earlier, which no later version
+  has saved again, are no longer read: run `nohead login` again.
+- `nohead fields add`, `update` and `migrate` take the field settings the
+  schema file has: `--min-length`, `--accepted-types` (asset fields),
+  `--included`/`--no-included` (public search hits), `--expanded` (an
+  asset's parts, or the related collection's fields by key) and
+  `--searched` (relation fields, the related collection's fields by key).
+- `nohead collections create blog-posts` names the collection "Blog Posts",
+  as the schema file does, so the next `schema pull` writes no `name`.
+- `nohead search` labels each hit with its first text value that isn't
+  blank, as `nohead records list` does.
 
 ## 0.10.0
 
@@ -48,6 +59,9 @@ release's section is its GitHub release's notes.
   when Nohead disabled it after 3 days of failures (enable it again in the
   web app). A script reading that column for `enabled` should use `--json`
   (`enabled`, `failing_since`, `disabled_reason`).
+- `nohead schema push` puts the fields of collections it creates in the
+  file's order in one push, relations into collections the same push creates
+  included; a second push did that before.
 - Built on `@nohead/sdk` 0.23.0.
 
 ## 0.9.0

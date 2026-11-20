@@ -52,9 +52,9 @@ function describePlan(changes: Change[]): string {
 }
 
 /** Field IDs by collection slug, then API key, as the push learns them. */
-type FieldIds = Map<string, Map<string, string>>
+export type FieldIds = Map<string, Map<string, string>>
 
-function fieldIdsOf(collections: Collection[]): FieldIds {
+export function fieldIdsOf(collections: Collection[]): FieldIds {
   return new Map(
     collections.map((c) => [
       c.slug,
@@ -81,7 +81,7 @@ function relatedId(
  * and the related fields search hits return and searches match key -> ID
  * (`target`: the relation's target collection, by slug).
  */
-function apiOptions(
+export function apiOptions(
   options: Record<string, unknown>,
   ids: Map<string, string>,
   key: string,

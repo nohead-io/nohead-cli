@@ -6,6 +6,7 @@ import { unwrap } from "../errors.ts"
 import { usageError } from "../input.ts"
 import { details, printResult, table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
+import { humanize } from "../schema/format.ts"
 
 function summary(collection: Collection): string {
   return [
@@ -94,9 +95,8 @@ export function registerCollections(
         options: { name?: string; description?: string; publicSearch?: true }
       ) => {
         const ctx = context()
-        const name =
-          options.name ??
-          slug.replace(/[-_]+/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+        // As the schema file names it, so a pull adds no name.
+        const name = options.name ?? humanize(slug)
         const result = await unwrap(
           (await ctx.project()).collections.create(
             {
