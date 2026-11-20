@@ -2,7 +2,7 @@ import { join } from "node:path"
 
 import type { Command } from "commander"
 
-import { readConfig, savedKey } from "../config.ts"
+import { savedKey } from "../config.ts"
 import type { CommandContext } from "../context.ts"
 import { parseOwnFile, usageError } from "../input.ts"
 import { printNotice, printResult } from "../output.ts"
@@ -20,6 +20,10 @@ export function registerLink(program: Command, context: () => CommandContext) {
       const { runtime, options } = ctx
       if (!project.startsWith("prj_"))
         throw usageError(`${project} is not a project ID (prj_...)`)
+      // Linking comes first in a fresh checkout, so a missing key is only
+      // a reminder here; commands that need it say so too. Read before
+      // writing, so a broken config file changes nothing.
+      const saved = savedKey(ctx.config(), project) !== undefined
 
       // Other settings in an existing file stay as they are.
       const path = join(runtime.cwd(), LINK_FILE)
@@ -33,10 +37,6 @@ export function registerLink(program: Command, context: () => CommandContext) {
         path,
         `${JSON.stringify({ ...existing, project }, null, 2)}\n`
       )
-
-      // Linking comes first in a fresh checkout, so a missing key is only
-      // a reminder here; commands that need it say so too.
-      const saved = savedKey(await readConfig(runtime), project) !== undefined
       printResult(
         ctx,
         { project, link_file: path, saved_key: saved },

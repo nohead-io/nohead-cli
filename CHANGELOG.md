@@ -7,6 +7,13 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- A broken saved config file (not JSON, say) no longer stops commands that
+  use no saved API key: `--help`, `health`, and commands run with
+  `NOHEAD_API_KEY`. `login`, `logout` and `link` still refuse it, before
+  changing anything.
+
 ## 0.10.0
 
 - **Breaking:** `nohead webhooks list` says how each webhook is doing: its
