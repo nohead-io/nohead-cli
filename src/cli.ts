@@ -16,7 +16,7 @@ import { registerLogin } from "./commands/login.ts"
 import { registerWebhooks } from "./commands/webhooks.ts"
 import { registerAudit } from "./commands/audit.ts"
 import { registerWhoami } from "./commands/whoami.ts"
-import { readConfig, type ConfigFile } from "./config.ts"
+import { loadConfig, type ConfigFile } from "./config.ts"
 import { registerLink } from "./commands/link.ts"
 import {
   createContext,
@@ -33,7 +33,7 @@ export { VERSION }
 
 function buildProgram(
   runtime: Runtime,
-  saved: { config: ConfigFile; link?: LinkFile },
+  saved: { config: () => ConfigFile; link?: LinkFile },
   json: boolean
 ) {
   const program = new Command()
@@ -55,7 +55,7 @@ function buildProgram(
     )
     .option(
       "--idempotency-key <key>",
-      "makes retrying a mutation safe: the same key and request return the first result"
+      "makes retrying a mutation safe: the same key and request return the first result (import <dir> and schema push ignore it)"
     )
     // Subcommands copy these settings when .command() makes them, so they
     // are set before any command is registered.
@@ -104,7 +104,7 @@ export async function run(argv: string[], runtime: Runtime): Promise<number> {
   let program: Command | undefined
   try {
     const [config, link] = await Promise.all([
-      readConfig(runtime),
+      loadConfig(runtime),
       findLinkFile(runtime),
     ])
     program = buildProgram(runtime, { config, link }, json)
@@ -213,7 +213,7 @@ export function describeCommands(): DescribedCommand {
     openUrl: () => false,
     hostname: () => "",
   }
-  return describe(buildProgram(inert, { config: { keys: {} } }, false))
+  return describe(buildProgram(inert, { config: () => ({ keys: {} }) }, false))
 }
 
 function describe(command: Command): DescribedCommand {

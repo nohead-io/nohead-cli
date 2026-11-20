@@ -15,7 +15,7 @@ import type {
   RevertPreview,
   ScheduledChange,
 } from "@nohead/sdk"
-import type { CommandContext } from "../context.ts"
+import { requestKey, type CommandContext } from "../context.ts"
 import {
   CliError,
   ExitCode,
@@ -332,7 +332,7 @@ export function registerRecords(
               record_ids: targets.slice(i, i + 100),
               ...(data ? { data } : {}),
             },
-            ctx.writeOptions()
+            ctx.writeOptions(requestKey(ctx, i / 100))
           )
         )
         results.push(...result.results)

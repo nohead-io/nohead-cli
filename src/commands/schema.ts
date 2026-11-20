@@ -144,20 +144,35 @@ type UpdateChange = Extract<Change, { kind: "update_field" }>
 
 /**
  * A field migration for a change. A unique target is refused while values
- * would be shared (`duplicate_values`), dry runs included.
+ * would be shared (`duplicate_values`), dry runs included. A relation's
+ * related lists leave out the fields the push has yet to add to its target
+ * (`adding`: dry runs come before any): they can't make values invalid.
  */
 function migrationBody(
   change: MigrateChange | UpdateChange,
   ids: Map<string, string>,
   clearInvalid: boolean,
-  fields?: FieldIds
+  fields: FieldIds,
+  adding: FieldKeys
 ) {
-  const { type, multiple, required } = fieldBody(change.to, ids, fields)
+  const { type, multiple, required } = change.to
   // The API merges the change onto the options that carry over.
   const options =
     change.kind === "migrate_field"
       ? configurationChange(change.from.options, change.to.options)
-      : (change.changes.options ?? {})
+      : { ...change.changes.options }
+  const target = change.to.options.collection
+  if (typeof target === "string") {
+    const known = fields.get(target)
+    for (const option of RELATED_LISTS) {
+      const listed = options[option]
+      if (Array.isArray(listed))
+        options[option] = listed.filter(
+          (item: unknown) =>
+            relatedId(known, item) || !adding.get(target)?.has(String(item))
+        )
+    }
+  }
   return {
     type,
     multiple,
@@ -199,6 +214,25 @@ const LOOSE_OPTIONS = new Set([
   "searched",
 ])
 
+/** Field keys by collection slug. */
+type FieldKeys = Map<string, Set<string>>
+
+/** The fields this push adds, or renames to, by collection. */
+function fieldsAdded(todo: Change[]): FieldKeys {
+  const added: FieldKeys = new Map()
+  const add = (slug: string, key: string) =>
+    added.set(slug, (added.get(slug) ?? new Set()).add(key))
+  for (const change of todo) {
+    if (change.kind === "create_collection")
+      for (const field of change.collection.fields)
+        add(change.collection.slug, field.key)
+    else if (change.kind === "add_field") add(change.slug, change.field.key)
+    else if (change.kind === "update_field" && change.changes.key)
+      add(change.slug, change.changes.key)
+  }
+  return added
+}
+
 /**
  * The collection a field change makes a relation point at, when this push
  * creates it: it doesn't exist yet, so nothing can be dry-run against it.
@@ -230,6 +264,7 @@ async function previewMigrations(
 }> {
   const ids = new Map(remote.map((c) => [c.slug, c.id]))
   const fields = fieldIdsOf(remote)
+  const adding = fieldsAdded(todo)
   const previews = []
   const waiting = []
   for (const change of todo) {
@@ -247,7 +282,8 @@ async function previewMigrations(
             change,
             new Map(ids).set(target, own),
             clearInvalid,
-            fields
+            fields,
+            adding
           ),
           dry_run: true,
         })
@@ -258,7 +294,7 @@ async function previewMigrations(
     const preview = await unwrap(
       ctx.api.migrations.create(ids.get(change.slug) ?? change.slug, {
         field_id: change.field_id,
-        ...migrationBody(change, ids, clearInvalid, fields),
+        ...migrationBody(change, ids, clearInvalid, fields, adding),
         dry_run: true,
       })
     )
@@ -380,12 +416,13 @@ export async function applyPlan(
   // `unique` refuse the dry run.) A relation pointed at a collection this push
   // creates can't be checked yet; the API refuses that change if the field
   // holds values.
+  const adding = fieldsAdded(todo)
   for (const change of todo.filter(tightens)) {
     if (newTarget(change, todo)) continue
     const preview = await unwrap(
       ctx.api.migrations.create(ids.get(change.slug) ?? change.slug, {
         field_id: change.field_id,
-        ...migrationBody(change, ids, false, fieldIds),
+        ...migrationBody(change, ids, false, fieldIds, adding),
         dry_run: true,
       })
     )
@@ -613,7 +650,14 @@ export async function applyPlan(
         ids.get(change.slug) ?? change.slug,
         {
           field_id: change.field_id,
-          ...migrationBody(change, ids, options.clearInvalid, fieldIds),
+          // Every field exists by now.
+          ...migrationBody(
+            change,
+            ids,
+            options.clearInvalid,
+            fieldIds,
+            new Map()
+          ),
         },
         writes
       )
