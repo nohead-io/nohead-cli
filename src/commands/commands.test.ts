@@ -1433,10 +1433,6 @@ describe("schema pull, diff and push refusals", () => {
 // what a relation's searches match (`searched`): a relation lists the related
 // collection's fields by key in the file and by ID in the API.
 describe("schema: what search hits include", () => {
-  // The SDK's field types learn `included`, `expanded` and `searched` with its next
-  // contract update.
-  const settings = (configuration: Record<string, unknown>) =>
-    configuration as never
   const PEOPLE_ID = "col_01J9ZQ3F8X5W2K7M4N6P0PEPLE"
   const name = field({ key: "name", name: "Name", collection_id: PEOPLE_ID })
   const role = field({
@@ -1457,27 +1453,27 @@ describe("schema: what search hits include", () => {
     name: "Body",
     type: "long_text",
     position: 1,
-    configuration: settings({ included: false }),
+    configuration: { included: false },
   })
   const cover = field({
     key: "cover",
     name: "Cover",
     type: "asset",
     position: 2,
-    configuration: settings({ expanded: ["image_url", "alt"] }),
+    configuration: { expanded: ["image_url", "alt"] },
   })
   const author = field({
     key: "author",
     name: "Author",
     type: "relation",
     position: 3,
-    configuration: settings({
+    configuration: {
       target_collection_id: PEOPLE_ID,
       // A field deleted since stays listed in the API; search skips it.
       expanded: [name.id, "fld_01J9ZQ3F8X5W2K7M4N6P0GONE0"],
       searchable: true,
       searched: [role.id],
-    }),
+    },
   })
   const FILE = "nohead.schema.yaml"
   const project = (
@@ -1554,48 +1550,154 @@ describe("schema: what search hits include", () => {
     expect((await body(patch)).configuration).toEqual(sent)
   })
 
-  it("adds a field to the target before listing it, in the same push", async () => {
-    const email = field({
-      key: "email",
-      name: "Email",
-      collection_id: PEOPLE_ID,
-      position: 2,
-    })
-    const t = project(
-      {
-        [FILE]:
-          "collections:\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, expanded: [name, email], searchable: true, searched: [role] }\n  people:\n    fields:\n      name: text\n      role: text\n      email: text\n",
-      },
-      {
-        [`POST /v1/collections/${PEOPLE_ID}/fields`]: () =>
-          contractResponse("fields_create", email, { status: 201 }),
-        [`PATCH /v1/fields/${author.id}`]: () =>
-          contractResponse("fields_update", author),
-        [`PUT /v1/collections/${PEOPLE_ID}/field-order`]: () =>
-          contractResponse("fields_reorder", {
-            object: "field_order",
-            collection_id: PEOPLE_ID,
-            field_ids: [],
-          }),
+  // Becoming required, or multiple, is dry-run before anything changes,
+  // while the field the relation lists doesn't exist yet.
+  it.each([
+    {
+      change: "lists it",
+      options: "",
+      dryRun: undefined,
+      write: `PATCH /v1/fields/${author.id}`,
+      sent: {},
+    },
+    {
+      change: "becomes required and lists it",
+      options: "required: true, ",
+      dryRun: { multiple: false, required: true },
+      write: `PATCH /v1/fields/${author.id}`,
+      sent: { required: true },
+    },
+    {
+      change: "becomes multiple and lists it",
+      options: "multiple: true, ",
+      dryRun: { multiple: true, required: false },
+      write: `POST /v1/collections/${COLLECTION_ID}/migrations`,
+      sent: { multiple: true },
+    },
+  ])(
+    "adds a field to the target before a relation $change, in the same push",
+    async ({ options, dryRun, write, sent }) => {
+      const email = field({
+        key: "email",
+        name: "Email",
+        collection_id: PEOPLE_ID,
+        position: 2,
+      })
+      const relation = {
+        type: "relation",
+        configuration: { target_collection_id: PEOPLE_ID },
+        multiple: false,
+        required: false,
+      } as const
+      const counts = {
+        total: 0,
+        unchanged: 0,
+        converted: 0,
+        backfilled: 0,
+        cleared: 0,
+        invalid: 0,
       }
-    )
-    await t.ok(["schema", "push", "--yes"])
+      const t = project(
+        {
+          [FILE]: `collections:\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, ${options}expanded: [name, email], searchable: true, searched: [role] }\n  people:\n    fields:\n      name: text\n      role: text\n      email: text\n`,
+        },
+        {
+          [`POST /v1/collections/${COLLECTION_ID}/migrations`]: (request) =>
+            new URL(request.url).searchParams.get("dry_run") === "true"
+              ? contractResponse("migrations_create", {
+                  object: "field_migration_preview",
+                  field_id: author.id,
+                  from: relation,
+                  to: relation,
+                  conversion: "conditional",
+                  records: counts,
+                  samples: [],
+                })
+              : contractResponse(
+                  "migrations_create",
+                  {
+                    id: "mig_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                    object: "field_migration",
+                    collection_id: COLLECTION_ID,
+                    field_id: author.id,
+                    status: "complete",
+                    from: relation,
+                    to: { ...relation, multiple: true },
+                    backfill: null,
+                    on_invalid: "fail",
+                    time_zone: null,
+                    records: counts,
+                    failure: null,
+                    schema_change_id: "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                    cancel_requested_at: null,
+                    actor: {
+                      type: "api_key",
+                      id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                      name: "ci",
+                    },
+                    via: "cli",
+                    note: null,
+                    request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                    created_at: NOW,
+                    started_at: NOW,
+                    completed_at: NOW,
+                  },
+                  { status: 202 }
+                ),
+          [`POST /v1/collections/${PEOPLE_ID}/fields`]: () =>
+            contractResponse("fields_create", email, { status: 201 }),
+          [`PATCH /v1/fields/${author.id}`]: () =>
+            contractResponse("fields_update", author),
+          [`PUT /v1/collections/${PEOPLE_ID}/field-order`]: () =>
+            contractResponse("fields_reorder", {
+              object: "field_order",
+              collection_id: PEOPLE_ID,
+              field_ids: [],
+            }),
+        }
+      )
+      await t.ok(["schema", "push", "--yes", "--allow-migrations"])
 
-    const writes = t.requests
-      .filter((r) => r.method !== "GET")
-      .map((r) => r.method)
-    expect(writes.indexOf("POST")).toBeLessThan(writes.indexOf("PATCH"))
-    const patch = t.requests.find((r) => r.method === "PATCH")!
-    expect((await body(patch)).configuration).toEqual({
-      expanded: [name.id, email.id],
-    })
-  })
+      const requests = t.requests.map((r) => {
+        const url = new URL(r.url)
+        return `${r.method} ${url.pathname}${url.search}`
+      })
+      // The dry run leaves out the field the push hasn't added yet.
+      const dryRuns = t.requests.filter((r) => r.url.includes("dry_run=true"))
+      expect(await Promise.all(dryRuns.map(body))).toEqual(
+        dryRun
+          ? [
+              {
+                field_id: author.id,
+                type: "relation",
+                ...dryRun,
+                configuration: { expanded: [name.id] },
+                on_invalid: "fail",
+              },
+            ]
+          : []
+      )
+      const added = requests.indexOf(`POST /v1/collections/${PEOPLE_ID}/fields`)
+      const written = requests.lastIndexOf(write)
+      expect(added).toBeGreaterThan(-1)
+      expect(added).toBeLessThan(written)
+      expect(await body(t.requests[written])).toMatchObject({
+        ...sent,
+        configuration: { expanded: [name.id, email.id] },
+      })
+    }
+  )
 
-  it.each(["expanded", "searched"])(
-    "refuses a relation's %s key that isn't a field of its target",
-    async (option) => {
+  // Before changing anything, also when the relation becomes required.
+  it.each([
+    ["expanded", ""],
+    ["searched", ""],
+    ["expanded", "required: true, "],
+  ])(
+    "refuses a relation's %s key that isn't a field of its target (%s)",
+    async (option, required) => {
       const t = project({
-        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      author: { type: relation, collection: people, searchable: true, ${option}: [name, email] }\n`,
+        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      author: { type: relation, collection: people, ${required}searchable: true, ${option}: [name, email] }\n`,
       })
       expect(await run(["schema", "push", "--yes"], t.runtime)).toBe(
         ExitCode.Usage
@@ -1603,6 +1705,7 @@ describe("schema: what search hits include", () => {
       expect(t.err()).toContain(
         `Field author: ${option} lists email, which isn't a field of people`
       )
+      expect(t.requests.filter((r) => r.method !== "GET")).toEqual([])
     }
   )
 
@@ -2369,6 +2472,17 @@ describe("field migrations", () => {
   })
 })
 
+// The SDK reads the upload URL's expiry against the real clock.
+const pendingUpload = {
+  ...asset("pending"),
+  upload: {
+    method: "PUT",
+    url: "https://storage.test/bucket/key?X-Amz-Signature=x",
+    headers: { "Content-Type": "image/png" },
+    expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+  },
+}
+
 describe("idempotency", () => {
   const created = () =>
     contractResponse("records_create", record(REC_A, { title: "Hi" }), {
@@ -2392,6 +2506,65 @@ describe("idempotency", () => {
 
     expect(t.requests[0].headers.get("Idempotency-Key")).toBe("deploy-42")
   })
+
+  // Each request has its own key: the API would refuse the second request
+  // for reusing the first one's key with another body.
+  it.each<{
+    command: string[]
+    routes: Record<string, Handler>
+    writes: string
+  }>([
+    {
+      command: [
+        "records",
+        "bulk",
+        "publish",
+        "posts",
+        ...Array.from({ length: 101 }, (_, n) => `rec_${n}`),
+      ],
+      routes: {
+        "POST /v1/collections/posts/record-batches": () =>
+          contractResponse("records_bulk", {
+            object: "record_batch",
+            action: "publish",
+            succeeded: 0,
+            failed: 0,
+            results: [],
+          }),
+      },
+      writes: "/record-batches",
+    },
+    {
+      command: ["assets", "upload", "a.png", "b.png"],
+      routes: {
+        "GET /v1/me": me,
+        [`POST /v1/projects/${PROJECT_ID}/assets`]: () =>
+          contractResponse("assets_upload", pendingUpload, { status: 201 }),
+        "GET /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T": () =>
+          contractResponse("assets_get", asset("pending")),
+        "PUT /bucket/key": () => new Response(null, { status: 200 }),
+        "POST /v1/assets/ast_01J9ZQ3F8X5W2K7M4N6P0R1S2T/complete": () =>
+          contractResponse("assets_complete", asset("ready")),
+      },
+      writes: `/projects/${PROJECT_ID}/assets`,
+    },
+  ])(
+    "gives each request of $command.0 $command.1 a key of its own from --idempotency-key",
+    async ({ command, routes, writes }) => {
+      const t = testRuntime({
+        files: { "a.png": new Uint8Array([1]), "b.png": new Uint8Array([2]) },
+        routes,
+      })
+
+      await t.ok(["--idempotency-key", "deploy-42", ...command])
+
+      expect(
+        t.requests
+          .filter((r) => r.url.endsWith(writes))
+          .map((r) => r.headers.get("Idempotency-Key"))
+      ).toEqual(["deploy-42:0", "deploy-42:1"])
+    }
+  )
 
   it("gives each imported line a key that is the same on every re-run", async () => {
     const file = [
@@ -3033,16 +3206,6 @@ describe("link", () => {
 })
 
 describe("assets", () => {
-  // The SDK reads the upload URL's expiry against the real clock.
-  const pendingUpload = {
-    ...asset("pending"),
-    upload: {
-      method: "PUT",
-      url: "https://storage.test/bucket/key?X-Amz-Signature=x",
-      headers: { "Content-Type": "image/png" },
-      expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
-    },
-  }
   it("searches assets and lists them by kind", async () => {
     let query: URLSearchParams | undefined
     const t = testRuntime({
@@ -3606,7 +3769,7 @@ describe("drafts", () => {
       `Started ${DRF_A} for ${REC_A} (changes title). Merge it with: nohead drafts merge ${DRF_A}`
     )
 
-    await t.ok(["drafts", "list", "posts", "--record", REC_A])
+    await t.ok(["drafts", "list", "--record", REC_A])
     expect(t.out()).toMatch(new RegExp(`${DRF_A}\\s+${REC_A}\\s+1\\s+title`))
 
     await t.ok(["--note", "Typo", "drafts", "merge", DRF_A])
@@ -4751,6 +4914,95 @@ describe("commands with a single request", () => {
         /record\.published\s+failing\n.*record\.published\s+disabled \(failing\)/,
     },
     {
+      argv: ["webhooks", "get", WEBHOOK_ID],
+      request: `GET /v1/webhooks/${WEBHOOK_ID}`,
+      response: () =>
+        contractResponse("webhooks_get", {
+          ...webhook,
+          description: "Deploys",
+          last_attempt_at: NOW,
+          last_status_code: 401,
+          failing_since: NOW,
+        }),
+      output: new RegExp(
+        `description: +Deploys\nevents: +record.published\nstatus: +failing\nfailing since: +${NOW}\nlast attempt: +${NOW} \\(401\\)\nlast success: +never\n$`
+      ),
+    },
+    {
+      argv: ["webhooks", "get", WEBHOOK_ID],
+      request: `GET /v1/webhooks/${WEBHOOK_ID}`,
+      response: () =>
+        contractResponse("webhooks_get", {
+          ...webhook,
+          enabled: false,
+          disabled_reason: "failing",
+          last_attempt_at: NOW,
+          last_error: "timeout",
+          last_succeeded_at: NOW,
+          failing_since: NOW,
+        }),
+      output: new RegExp(
+        `status: +disabled \\(failing\\)\n.*\nlast attempt: +${NOW} \\(timeout\\)\nlast success: +${NOW}\n$`
+      ),
+    },
+    {
+      // No attempt yet.
+      argv: ["webhooks", "get", WEBHOOK_ID],
+      request: `GET /v1/webhooks/${WEBHOOK_ID}`,
+      response: () =>
+        contractResponse("webhooks_get", {
+          ...webhook,
+          deleted_at: NOW,
+          purge_after: NOW,
+        }),
+      output: /\nstatus: +deleted\n$/,
+    },
+    {
+      // Turns on again a webhook Nohead disabled.
+      argv: ["webhooks", "update", WEBHOOK_ID, "--enable"],
+      request: `PATCH /v1/webhooks/${WEBHOOK_ID}`,
+      body: { enabled: true },
+      response: () => contractResponse("webhooks_update", webhook),
+      output: `Updated ${WEBHOOK_ID} (enabled)`,
+    },
+    {
+      argv: [
+        "webhooks",
+        "update",
+        WEBHOOK_ID,
+        "--disable",
+        "--url",
+        "https://example.com/new",
+        "--events",
+        "record.*, asset.*",
+        "--description",
+        "",
+        "--no-published-only",
+      ],
+      request: `PATCH /v1/webhooks/${WEBHOOK_ID}`,
+      body: {
+        enabled: false,
+        url: "https://example.com/new",
+        event_types: ["record.*", "asset.*"],
+        description: null,
+        published_only: false,
+      },
+      response: () =>
+        contractResponse("webhooks_update", { ...webhook, enabled: false }),
+      output: `Updated ${WEBHOOK_ID} (disabled)`,
+    },
+    {
+      argv: ["webhooks", "update", WEBHOOK_ID, "--published-only"],
+      request: `PATCH /v1/webhooks/${WEBHOOK_ID}`,
+      body: { published_only: true },
+      response: () =>
+        contractResponse("webhooks_update", {
+          ...webhook,
+          published_only: true,
+        }),
+      output: `Updated ${WEBHOOK_ID} (enabled)`,
+    },
+    {
       argv: ["webhooks", "delete", WEBHOOK_ID],
       request: `DELETE /v1/webhooks/${WEBHOOK_ID}`,
       response: () =>
@@ -5160,6 +5412,14 @@ describe("usage errors, refused before calling the API", () => {
       message: "Give record IDs or a selection, not both",
     },
     {
+      argv: ["drafts", "list"],
+      message: "Give a collection, or a record with --record",
+    },
+    {
+      argv: ["drafts", "list", "posts", "--record", REC_A],
+      message: "Give a collection or --record, not both",
+    },
+    {
       argv: ["drafts", "discard", DRF_A],
       message: `Refusing to discard ${DRF_A} without --yes`,
     },
@@ -5170,6 +5430,20 @@ describe("usage errors, refused before calling the API", () => {
     {
       argv: ["assets", "update", ASSET],
       message: "Nothing to update: pass --filename or --alt",
+    },
+    {
+      argv: ["webhooks", "update", "wh_1"],
+      message:
+        "Nothing to update: pass --enable, --disable, --url, --events, --description or --[no-]published-only",
+    },
+    {
+      argv: ["webhooks", "update", "wh_1", "--events", " , "],
+      message: "--events needs an event type, or * for all",
+    },
+    {
+      argv: ["webhooks", "update", "wh_1", "--enable", "--disable"],
+      message: /'--enable'.*'--disable'/,
+      help: true,
     },
     {
       argv: ["assets", "list", "--kind", "photo"],

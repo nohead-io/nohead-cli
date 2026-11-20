@@ -58,26 +58,29 @@ export function registerDrafts(
   withPaging(
     drafts
       .command("list")
-      .description("List a collection's drafts, most recently changed first")
-      .argument("<collection>", "collection slug or ID")
-      .option(
-        "--record <id>",
-        "this record's draft instead, whatever its collection"
-      ),
+      .description(
+        "List a collection's drafts, or a record's, most recently changed first"
+      )
+      .argument("[collection]", "collection slug or ID (or --record)")
+      .option("--record <id>", "this record's draft instead of a collection's"),
     "draft"
   ).action(
-    async (collection: string, options: PageOptions & { record?: string }) => {
+    async (
+      collection: string | undefined,
+      options: PageOptions & { record?: string }
+    ) => {
+      const { record } = options
+      if (collection !== undefined && record !== undefined)
+        throw usageError("Give a collection or --record, not both")
       const ctx = context()
       const query = pageQuery(options)
-      await printList(
-        ctx,
-        options.all,
-        () =>
-          options.record
-            ? ctx.api.records.drafts(options.record, query)
-            : ctx.api.drafts.list(collection, query),
-        draftTable
-      )
+      let list
+      if (record !== undefined)
+        list = () => ctx.api.records.drafts(record, query)
+      else if (collection !== undefined)
+        list = () => ctx.api.drafts.list(collection, query)
+      else throw usageError("Give a collection, or a record with --record")
+      await printList(ctx, options.all, list, draftTable)
     }
   )
 
