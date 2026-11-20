@@ -107,7 +107,7 @@ function browserLogin(
     const answer = list.shift()
     if (answer) return answer(request)
     unanswered.push(new URL(request.url).pathname)
-    return failure(400, "invalid_request", "No answer stubbed")
+    return failure(400, "test_unstubbed", "No answer stubbed")
   }
   const t = testRuntime({
     env: { HOME, NOHEAD_API_URL: "http://api.test", ...env },

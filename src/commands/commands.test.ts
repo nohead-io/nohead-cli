@@ -3371,6 +3371,12 @@ describe("assets", () => {
         files: { "cover.png": new Uint8Array([1, 2, 3]) },
         routes: uploadRoutes(put),
       })
+    const completed = (upload: ReturnType<typeof storage>) =>
+      upload.requests.some(
+        (r) =>
+          `${r.method} ${new URL(r.url).pathname}` ===
+          `POST /v1/assets/${asset().id}/complete`
+      )
 
     const down = storage(() => {
       throw new TypeError("fetch failed")
@@ -3382,8 +3388,6 @@ describe("assets", () => {
     ).toBe(ExitCode.Network)
     expect(down.err()).toContain("Could not reach storage; retrying")
     expect(down.err()).toContain("Could not reach storage: fetch failed")
-    const completed = (t: ReturnType<typeof storage>) =>
-      t.requests.some((r) => r.url.endsWith("/complete"))
     expect(completed(down)).toBe(false)
 
     const refused = storage(() => new Response("denied", { status: 403 }))
