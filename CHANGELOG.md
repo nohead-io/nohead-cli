@@ -7,6 +7,14 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `schema push` (and `schema diff`'s previews) no longer refuse a relation
+  that becomes required, or migrates (such as to `multiple`), while its
+  `expanded` or `searched` lists a field the same push adds to the related
+  collection. They stopped with "isn't a field of" (exit 2) before changing
+  anything.
+
 ## 0.10.0
 
 - **Breaking:** `nohead webhooks list` says how each webhook is doing: its
