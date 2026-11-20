@@ -1,6 +1,6 @@
 import { Nohead, type RequestOptions } from "@nohead/sdk"
 
-import { savedKey, type ConfigFile } from "./config.ts"
+import { savedKey, type ConfigFile, type SavedKey } from "./config.ts"
 import { CliError, ExitCode, unwrap } from "./errors.ts"
 import {
   chooseProject,
@@ -120,6 +120,11 @@ export interface CommandContext {
    * NOHEAD_API_KEY says (`login`, `logout`).
    */
   savedProjectChoice: () => ProjectChoice | undefined
+  /**
+   * The saved keys, parsed on first use: a broken file stops only the
+   * commands that need them.
+   */
+  config: () => ConfigFile
   /** The nearest nohead.json, unchecked. */
   link?: LinkFile
   /**
@@ -185,7 +190,7 @@ export function createApi(options: {
 export function createContext(
   runtime: Runtime,
   options: GlobalOptions,
-  config: ConfigFile = { keys: {} },
+  config: () => ConfigFile = () => ({ keys: {} }),
   link?: LinkFile
 ): CommandContext {
   const envApiKey = envVar(runtime.env, "NOHEAD_API_KEY")
@@ -203,18 +208,23 @@ export function createContext(
       envApiKey: withEnvKey ? envApiKey : undefined,
     })
   let choice: ProjectChoice | undefined
+  let saved: SavedKey | undefined
   let choiceError: Error | undefined
   try {
     choice = choose(true)
   } catch (error) {
     choiceError = error as Error
   }
+  try {
+    if (!envApiKey && choice?.project)
+      saved = savedKey(config(), choice.project)
+  } catch {
+    // A broken config file: commands that need the key say so.
+  }
   const projectChoice = () => {
     if (choiceError) throw choiceError
     return choice
   }
-  const saved =
-    !envApiKey && choice?.project ? savedKey(config, choice.project) : undefined
   const baseUrl = apiUrl ?? saved?.api_url ?? DEFAULT_API_URL
   const credentials = envApiKey
     ? "NOHEAD_API_KEY"
@@ -236,7 +246,7 @@ export function createContext(
         message: "Not logged in: run `nohead login`, or set NOHEAD_API_KEY",
       })
     }
-    const key = savedKeyFor(config, chosen)
+    const key = savedKeyFor(config(), chosen)
     // A saved key only goes to the API it was saved for: a NOHEAD_API_URL
     // from some project's .envrc must not receive it.
     if (origin(key.api_url) !== origin(baseUrl)) {
@@ -314,6 +324,7 @@ export function createContext(
     projectId,
     projectChoice,
     savedProjectChoice: () => choose(false),
+    config,
     link,
     writeOptions,
   }

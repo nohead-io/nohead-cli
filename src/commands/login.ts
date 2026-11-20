@@ -23,6 +23,8 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     .action(async () => {
       const ctx = context()
       const { runtime, options } = ctx
+      // Before a key is made: a broken config file couldn't save it.
+      ctx.config()
       const apiUrl = envVar(runtime.env, "NOHEAD_API_URL") ?? DEFAULT_API_URL
 
       // A key piped in (echo $KEY | nohead login), as CI does, is checked
@@ -47,6 +49,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
         : await browserLogin(ctx, apiUrl, wantedProject(ctx)?.project)
 
       const project = api_key.project_id
+      // As it is now: other keys may have been saved while this one was made.
       const config = await readConfig(runtime)
       // One key per project: logging in again for it replaces the old one.
       const replaced = savedKey(config, project) !== undefined
@@ -92,7 +95,7 @@ export function registerLogin(program: Command, context: () => CommandContext) {
     .action(async () => {
       const ctx = context()
       const { runtime } = ctx
-      const config = await readConfig(runtime)
+      const config = ctx.config()
       const project = ctx.savedProjectChoice()?.project
       const key = project ? savedKey(config, project) : undefined
       if (project && key) {

@@ -31,6 +31,10 @@ release's section is its GitHub release's notes.
 - **Breaking:** `nohead drafts list --record <id>` takes no collection: one
   given with `--record` is a usage error instead of being ignored. Before,
   `--record` needed one.
+- A broken saved config file (not JSON, say) no longer stops commands that
+  use no saved API key: `--help`, `health`, and commands run with
+  `NOHEAD_API_KEY`. `login`, `logout` and `link` still refuse it, before
+  changing anything.
 
 ## 0.10.0
 

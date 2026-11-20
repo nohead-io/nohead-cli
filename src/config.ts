@@ -36,19 +36,38 @@ export function configPath(env: Runtime["env"]): string {
   return join(base, "nohead", "config.json")
 }
 
+/** The saved keys, read now (login saves what is on disk when it saves). */
 export async function readConfig(runtime: Runtime): Promise<ConfigFile> {
+  return (await loadConfig(runtime))()
+}
+
+/**
+ * The saved keys, read before any command runs; a broken file is only
+ * reported to a command that asks for them, so it never stops `health`,
+ * `--help` or NOHEAD_API_KEY.
+ */
+export async function loadConfig(runtime: Runtime): Promise<() => ConfigFile> {
   const path = configPath(runtime.env)
   let text: string
   try {
     text = await runtime.readFile(path)
   } catch {
-    return { keys: {} }
+    const none: ConfigFile = { keys: {} }
+    return () => none
   }
-  const parsed = parseOwnFile(path, text) as {
-    keys?: ConfigFile["keys"]
-    profiles?: Record<string, Profile>
+  let config: ConfigFile
+  try {
+    const parsed = parseOwnFile(path, text) as {
+      keys?: ConfigFile["keys"]
+      profiles?: Record<string, Profile>
+    }
+    config = { keys: { ...fromProfiles(parsed.profiles), ...parsed.keys } }
+  } catch (error) {
+    return () => {
+      throw error
+    }
   }
-  return { keys: { ...fromProfiles(parsed.profiles), ...parsed.keys } }
+  return () => config
 }
 
 /**

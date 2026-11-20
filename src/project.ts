@@ -91,7 +91,8 @@ export function chooseProject({
 }: {
   options: Pick<GlobalOptions, "project">
   env: Runtime["env"]
-  config: ConfigFile
+  /** Read only when nothing else chooses the project. */
+  config: () => ConfigFile
   link?: LinkFile
   apiUrl?: string
   envApiKey?: string
@@ -107,12 +108,13 @@ export function chooseProject({
       linkFile: link.path,
     }
 
-  const saved = Object.keys(config.keys).filter(
-    (id) => !apiUrl || origin(config.keys[id].api_url) === origin(apiUrl)
+  const { keys } = config()
+  const saved = Object.keys(keys).filter(
+    (id) => !apiUrl || origin(keys[id].api_url) === origin(apiUrl)
   )
   if (saved.length === 1) return { source: "only_saved_key", project: saved[0] }
   if (saved.length === 0) {
-    if (apiUrl && Object.keys(config.keys).length > 0)
+    if (apiUrl && Object.keys(keys).length > 0)
       throw usageError(
         `No API key saved for ${apiUrl}; run \`nohead login\` to sign in to it, or set NOHEAD_API_KEY`
       )
@@ -120,7 +122,7 @@ export function chooseProject({
   }
   const list = saved
     .map((id) => {
-      const { name } = config.keys[id]
+      const { name } = keys[id]
       return name ? `${id} (${name})` : id
     })
     .join(", ")
