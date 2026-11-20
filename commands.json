@@ -23,7 +23,7 @@
     },
     {
       "flags": "--idempotency-key <key>",
-      "description": "makes retrying a mutation safe: the same key and request return the first result"
+      "description": "makes retrying a mutation safe: the same key and request return the first result (import <dir> and schema push ignore it)"
     }
   ],
   "commands": [
@@ -1366,20 +1366,20 @@
       "commands": [
         {
           "name": "list",
-          "usage": "[options] <collection>",
-          "description": "List a collection's drafts, most recently changed first",
+          "usage": "[options] [collection]",
+          "description": "List a collection's drafts, or a record's, most recently changed first",
           "arguments": [
             {
               "name": "collection",
-              "description": "collection slug or ID",
-              "required": true,
+              "description": "collection slug or ID (or --record)",
+              "required": false,
               "variadic": false
             }
           ],
           "options": [
             {
               "flags": "--record <id>",
-              "description": "this record's draft instead, whatever its collection"
+              "description": "this record's draft instead of a collection's"
             },
             {
               "flags": "--limit <n>",
@@ -1945,6 +1945,65 @@
             {
               "flags": "--published-only",
               "description": "send only changes to published content: no drafts, schedules or edits to unpublished records"
+            }
+          ],
+          "commands": []
+        },
+        {
+          "name": "get",
+          "usage": "[options] <id>",
+          "description": "Show a webhook and how its deliveries are doing",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "webhook ID (wh_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [],
+          "commands": []
+        },
+        {
+          "name": "update",
+          "usage": "[options] <id>",
+          "description": "Change a webhook, or turn it on again after Nohead disabled it",
+          "arguments": [
+            {
+              "name": "id",
+              "description": "webhook ID (wh_...)",
+              "required": true,
+              "variadic": false
+            }
+          ],
+          "options": [
+            {
+              "flags": "--enable",
+              "description": "send it events again"
+            },
+            {
+              "flags": "--disable",
+              "description": "stop sending it events"
+            },
+            {
+              "flags": "--url <url>",
+              "description": "https URL to send events to"
+            },
+            {
+              "flags": "--events <types>",
+              "description": "comma-separated event types, or * for all"
+            },
+            {
+              "flags": "--description <text>",
+              "description": "what it is for (\"\" clears it)"
+            },
+            {
+              "flags": "--published-only",
+              "description": "send only changes to published content: no drafts, schedules or edits to unpublished records"
+            },
+            {
+              "flags": "--no-published-only",
+              "description": "send changes to all content"
             }
           ],
           "commands": []

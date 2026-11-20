@@ -136,6 +136,17 @@ export interface CommandContext {
 }
 
 /**
+ * The Idempotency-Key of request `n` of a command that sends several (a
+ * chunk of `records bulk`, a file of `assets upload`): `<--idempotency-key>:<n>`,
+ * so each request has its own key and a rerun sends the same ones. Without
+ * the flag, null: the SDK makes one up for each request.
+ */
+export function requestKey(ctx: CommandContext, n: number): string | null {
+  const key = ctx.options.idempotencyKey
+  return key ? `${key}:${n}` : null
+}
+
+/**
  * An SDK client as the CLI uses it. The SDK retries what is safe to retry
  * (429 after Retry-After, network failures and 5xx with backoff; every write
  * carries an Idempotency-Key), and `notify` says so on stderr.

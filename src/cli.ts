@@ -55,7 +55,7 @@ function buildProgram(
     )
     .option(
       "--idempotency-key <key>",
-      "makes retrying a mutation safe: the same key and request return the first result"
+      "makes retrying a mutation safe: the same key and request return the first result (import <dir> and schema push ignore it)"
     )
     // Subcommands copy these settings when .command() makes them, so they
     // are set before any command is registered.
