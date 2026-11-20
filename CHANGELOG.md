@@ -7,6 +7,14 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `nohead import` reports a damaged `manifest.json` (no list of collections
+  or project ID, a collection without its counts or listed twice), and
+  record or draft IDs with spaces or control characters, as a damaged
+  export, exit code 2, before importing anything, instead of an unexpected
+  error partway through.
+
 ## 0.10.0
 
 - **Breaking:** `nohead webhooks list` says how each webhook is doing: its
