@@ -1366,20 +1366,20 @@
       "commands": [
         {
           "name": "list",
-          "usage": "[options] <collection>",
-          "description": "List a collection's drafts, most recently changed first",
+          "usage": "[options] [collection]",
+          "description": "List a collection's drafts, or a record's, most recently changed first",
           "arguments": [
             {
               "name": "collection",
-              "description": "collection slug or ID",
-              "required": true,
+              "description": "collection slug or ID (or --record)",
+              "required": false,
               "variadic": false
             }
           ],
           "options": [
             {
               "flags": "--record <id>",
-              "description": "this record's draft instead, whatever its collection"
+              "description": "this record's draft instead of a collection's"
             },
             {
               "flags": "--limit <n>",

@@ -7,6 +7,12 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- **Breaking:** `nohead drafts list --record <id>` takes no collection: one
+  given with `--record` is a usage error instead of being ignored. Before,
+  `--record` needed one.
+
 ## 0.10.0
 
 - **Breaking:** `nohead webhooks list` says how each webhook is doing: its

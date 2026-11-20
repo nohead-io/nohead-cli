@@ -3606,7 +3606,7 @@ describe("drafts", () => {
       `Started ${DRF_A} for ${REC_A} (changes title). Merge it with: nohead drafts merge ${DRF_A}`
     )
 
-    await t.ok(["drafts", "list", "posts", "--record", REC_A])
+    await t.ok(["drafts", "list", "--record", REC_A])
     expect(t.out()).toMatch(new RegExp(`${DRF_A}\\s+${REC_A}\\s+1\\s+title`))
 
     await t.ok(["--note", "Typo", "drafts", "merge", DRF_A])
@@ -5061,6 +5061,14 @@ describe("usage errors, refused before calling the API", () => {
         "unpublished",
       ],
       message: "Give record IDs or a selection, not both",
+    },
+    {
+      argv: ["drafts", "list"],
+      message: "Give a collection, or a record with --record",
+    },
+    {
+      argv: ["drafts", "list", "posts", "--record", REC_A],
+      message: "Give a collection or --record, not both",
     },
     {
       argv: ["drafts", "discard", DRF_A],
