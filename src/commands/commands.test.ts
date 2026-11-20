@@ -2371,14 +2371,14 @@ describe("flags", () => {
 
 // A migration of products.price from text to decimal.
 const price = field({ key: "price", type: "text" })
-const text = {
+const asText = {
   type: "text",
   configuration: {},
   multiple: false,
   required: false,
 } as const
-const decimal = { ...text, type: "decimal" } as const
-const counts = (overrides = {}) => ({
+const asDecimal = { ...asText, type: "decimal" } as const
+const migrationCounts = (overrides = {}) => ({
   total: 2,
   unchanged: 0,
   converted: 1,
@@ -2393,12 +2393,12 @@ const migration = (status: string, overrides = {}) => ({
   collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
   field_id: price.id,
   status,
-  from: text,
-  to: decimal,
+  from: asText,
+  to: asDecimal,
   backfill: null,
   on_invalid: "fail",
   time_zone: null,
-  records: counts(),
+  records: migrationCounts(),
   failure: null,
   schema_change_id:
     status === "complete" ? "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T" : null,
@@ -2428,10 +2428,10 @@ describe("field migrations", () => {
           contractResponse("migrations_create", {
             object: "field_migration_preview",
             field_id: price.id,
-            from: text,
-            to: decimal,
+            from: asText,
+            to: asDecimal,
             conversion: "conditional",
-            records: counts({ invalid: 1, converted: 1 }),
+            records: migrationCounts({ invalid: 1, converted: 1 }),
             samples: [
               {
                 record_id: REC_A,
@@ -3357,10 +3357,7 @@ describe("assets", () => {
 
   it("uploads a file with its alt text", async () => {
     const t = testRuntime({
-      files: {
-        "cover.png": new Uint8Array([1, 2, 3]),
-        "back.png": new Uint8Array([4]),
-      },
+      files: { "cover.png": new Uint8Array([1, 2, 3]) },
       routes: uploadRoutes(),
     })
 
@@ -3385,12 +3382,16 @@ describe("assets", () => {
     ).toBe(ExitCode.Network)
     expect(down.err()).toContain("Could not reach storage; retrying")
     expect(down.err()).toContain("Could not reach storage: fetch failed")
+    const completed = (t: ReturnType<typeof storage>) =>
+      t.requests.some((r) => r.url.endsWith("/complete"))
+    expect(completed(down)).toBe(false)
 
     const refused = storage(() => new Response("denied", { status: 403 }))
     expect(
       await run(["--json", "assets", "upload", "cover.png"], refused.runtime)
     ).toBe(ExitCode.ApiError)
     expect(JSON.parse(refused.err()).error.type).toBe("upload_failed")
+    expect(completed(refused)).toBe(false)
   })
 
   // Tools run some dotfiles from the current directory (.pnpmfile.cjs).

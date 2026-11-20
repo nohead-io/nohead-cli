@@ -99,14 +99,15 @@ function browserLogin(
 ) {
   const starts = [...start]
   const answers = [...polls]
-  // Requests past the stubbed answers, which fail the test once it ends.
+  // Requests past the stubbed answers: refused, so the sign-in stops there,
+  // and failing the test once it ends.
   const unanswered: string[] = []
   onTestFinished(() => expect(unanswered).toEqual([]))
   const next = (list: Handler[], request: Request) => {
     const answer = list.shift()
     if (answer) return answer(request)
     unanswered.push(new URL(request.url).pathname)
-    return unavailable()
+    return failure(400, "invalid_request", "No answer stubbed")
   }
   const t = testRuntime({
     env: { HOME, NOHEAD_API_URL: "http://api.test", ...env },
@@ -545,9 +546,11 @@ describe("login in the browser", () => {
 })
 
 describe("login with a piped key", () => {
-  it("checks and saves the key as before, without the browser", async () => {
+  it("checks and saves the key next to other projects' keys, without the browser", async () => {
+    const other = { api_url: "http://api.test", api_key: "nohead_sk_other" }
     const t = testRuntime({
       env: { HOME, NOHEAD_API_URL: "http://api.test" },
+      files: { [CONFIG]: JSON.stringify({ keys: { prj_other: other } }) },
       stdin: "nohead_sk_test0000000_secret\n",
       routes: { "GET /v1/me": () => contractResponse("me_get", ME) },
     })
@@ -571,9 +574,14 @@ describe("login with a piped key", () => {
       replaced: false,
       config: CONFIG,
     })
-    expect(JSON.parse(t.text(CONFIG)).keys[PROJECT_ID].api_key).toBe(
-      "nohead_sk_test0000000_secret"
-    )
+    expect(JSON.parse(t.text(CONFIG)).keys).toEqual({
+      prj_other: other,
+      [PROJECT_ID]: {
+        api_url: "http://api.test",
+        api_key: "nohead_sk_test0000000_secret",
+        name: "ci",
+      },
+    })
   })
 
   // A pipe left open (ssh without -t) never ends, so the read never does.
