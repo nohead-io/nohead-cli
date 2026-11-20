@@ -7,6 +7,18 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `nohead webhooks get <id>` shows a webhook and how its deliveries are
+  doing: since when they fail, the last attempt's status code or error, and
+  the last success.
+- `nohead webhooks update <id>` changes a webhook's URL, events, description
+  or `--[no-]published-only`, and turns it off (`--disable`) or on again
+  (`--enable`), as after Nohead disabled it for failing.
+- `webhooks create --events` refuses a list with no event type (`--events ""`)
+  instead of sending an empty one, and `--description ""` leaves the
+  description empty (null), as in `webhooks update`.
+
 ## 0.10.0
 
 - **Breaking:** `nohead webhooks list` says how each webhook is doing: its
