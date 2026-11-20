@@ -28,6 +28,9 @@ release's section is its GitHub release's notes.
   `expanded` or `searched` lists a field the same push adds to the related
   collection. They stopped with "isn't a field of" (exit 2) before changing
   anything.
+- **Breaking:** `nohead drafts list --record <id>` takes no collection: one
+  given with `--record` is a usage error instead of being ignored. Before,
+  `--record` needed one.
 
 ## 0.10.0
 
