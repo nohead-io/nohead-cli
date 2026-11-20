@@ -1550,48 +1550,154 @@ describe("schema: what search hits include", () => {
     expect((await body(patch)).configuration).toEqual(sent)
   })
 
-  it("adds a field to the target before listing it, in the same push", async () => {
-    const email = field({
-      key: "email",
-      name: "Email",
-      collection_id: PEOPLE_ID,
-      position: 2,
-    })
-    const t = project(
-      {
-        [FILE]:
-          "collections:\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, expanded: [name, email], searchable: true, searched: [role] }\n  people:\n    fields:\n      name: text\n      role: text\n      email: text\n",
-      },
-      {
-        [`POST /v1/collections/${PEOPLE_ID}/fields`]: () =>
-          contractResponse("fields_create", email, { status: 201 }),
-        [`PATCH /v1/fields/${author.id}`]: () =>
-          contractResponse("fields_update", author),
-        [`PUT /v1/collections/${PEOPLE_ID}/field-order`]: () =>
-          contractResponse("fields_reorder", {
-            object: "field_order",
-            collection_id: PEOPLE_ID,
-            field_ids: [],
-          }),
+  // Becoming required, or multiple, is dry-run before anything changes,
+  // while the field the relation lists doesn't exist yet.
+  it.each([
+    {
+      change: "lists it",
+      options: "",
+      dryRun: undefined,
+      write: `PATCH /v1/fields/${author.id}`,
+      sent: {},
+    },
+    {
+      change: "becomes required and lists it",
+      options: "required: true, ",
+      dryRun: { multiple: false, required: true },
+      write: `PATCH /v1/fields/${author.id}`,
+      sent: { required: true },
+    },
+    {
+      change: "becomes multiple and lists it",
+      options: "multiple: true, ",
+      dryRun: { multiple: true, required: false },
+      write: `POST /v1/collections/${COLLECTION_ID}/migrations`,
+      sent: { multiple: true },
+    },
+  ])(
+    "adds a field to the target before a relation $change, in the same push",
+    async ({ options, dryRun, write, sent }) => {
+      const email = field({
+        key: "email",
+        name: "Email",
+        collection_id: PEOPLE_ID,
+        position: 2,
+      })
+      const relation = {
+        type: "relation",
+        configuration: { target_collection_id: PEOPLE_ID },
+        multiple: false,
+        required: false,
+      } as const
+      const counts = {
+        total: 0,
+        unchanged: 0,
+        converted: 0,
+        backfilled: 0,
+        cleared: 0,
+        invalid: 0,
       }
-    )
-    await t.ok(["schema", "push", "--yes"])
+      const t = project(
+        {
+          [FILE]: `collections:\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, ${options}expanded: [name, email], searchable: true, searched: [role] }\n  people:\n    fields:\n      name: text\n      role: text\n      email: text\n`,
+        },
+        {
+          [`POST /v1/collections/${COLLECTION_ID}/migrations`]: (request) =>
+            new URL(request.url).searchParams.get("dry_run") === "true"
+              ? contractResponse("migrations_create", {
+                  object: "field_migration_preview",
+                  field_id: author.id,
+                  from: relation,
+                  to: relation,
+                  conversion: "conditional",
+                  records: counts,
+                  samples: [],
+                })
+              : contractResponse(
+                  "migrations_create",
+                  {
+                    id: "mig_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                    object: "field_migration",
+                    collection_id: COLLECTION_ID,
+                    field_id: author.id,
+                    status: "complete",
+                    from: relation,
+                    to: { ...relation, multiple: true },
+                    backfill: null,
+                    on_invalid: "fail",
+                    time_zone: null,
+                    records: counts,
+                    failure: null,
+                    schema_change_id: "sch_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                    cancel_requested_at: null,
+                    actor: {
+                      type: "api_key",
+                      id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                      name: "ci",
+                    },
+                    via: "cli",
+                    note: null,
+                    request_id: "req_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
+                    created_at: NOW,
+                    started_at: NOW,
+                    completed_at: NOW,
+                  },
+                  { status: 202 }
+                ),
+          [`POST /v1/collections/${PEOPLE_ID}/fields`]: () =>
+            contractResponse("fields_create", email, { status: 201 }),
+          [`PATCH /v1/fields/${author.id}`]: () =>
+            contractResponse("fields_update", author),
+          [`PUT /v1/collections/${PEOPLE_ID}/field-order`]: () =>
+            contractResponse("fields_reorder", {
+              object: "field_order",
+              collection_id: PEOPLE_ID,
+              field_ids: [],
+            }),
+        }
+      )
+      await t.ok(["schema", "push", "--yes", "--allow-migrations"])
 
-    const writes = t.requests
-      .filter((r) => r.method !== "GET")
-      .map((r) => r.method)
-    expect(writes.indexOf("POST")).toBeLessThan(writes.indexOf("PATCH"))
-    const patch = t.requests.find((r) => r.method === "PATCH")!
-    expect((await body(patch)).configuration).toEqual({
-      expanded: [name.id, email.id],
-    })
-  })
+      const requests = t.requests.map((r) => {
+        const url = new URL(r.url)
+        return `${r.method} ${url.pathname}${url.search}`
+      })
+      // The dry run leaves out the field the push hasn't added yet.
+      const dryRuns = t.requests.filter((r) => r.url.includes("dry_run=true"))
+      expect(await Promise.all(dryRuns.map(body))).toEqual(
+        dryRun
+          ? [
+              {
+                field_id: author.id,
+                type: "relation",
+                ...dryRun,
+                configuration: { expanded: [name.id] },
+                on_invalid: "fail",
+              },
+            ]
+          : []
+      )
+      const added = requests.indexOf(`POST /v1/collections/${PEOPLE_ID}/fields`)
+      const written = requests.lastIndexOf(write)
+      expect(added).toBeGreaterThan(-1)
+      expect(added).toBeLessThan(written)
+      expect(await body(t.requests[written])).toMatchObject({
+        ...sent,
+        configuration: { expanded: [name.id, email.id] },
+      })
+    }
+  )
 
-  it.each(["expanded", "searched"])(
-    "refuses a relation's %s key that isn't a field of its target",
-    async (option) => {
+  // Before changing anything, also when the relation becomes required.
+  it.each([
+    ["expanded", ""],
+    ["searched", ""],
+    ["expanded", "required: true, "],
+  ])(
+    "refuses a relation's %s key that isn't a field of its target (%s)",
+    async (option, required) => {
       const t = project({
-        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      author: { type: relation, collection: people, searchable: true, ${option}: [name, email] }\n`,
+        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      author: { type: relation, collection: people, ${required}searchable: true, ${option}: [name, email] }\n`,
       })
       expect(await run(["schema", "push", "--yes"], t.runtime)).toBe(
         ExitCode.Usage
@@ -1599,6 +1705,7 @@ describe("schema: what search hits include", () => {
       expect(t.err()).toContain(
         `Field author: ${option} lists email, which isn't a field of people`
       )
+      expect(t.requests.filter((r) => r.method !== "GET")).toEqual([])
     }
   )
 

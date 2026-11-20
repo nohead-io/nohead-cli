@@ -23,6 +23,11 @@ release's section is its GitHub release's notes.
 - `webhooks create --events` refuses a list with no event type (`--events ""`)
   instead of sending an empty one, and `--description ""` leaves the
   description empty (null), as in `webhooks update`.
+- `schema push` (and `schema diff`'s previews) no longer refuse a relation
+  that becomes required, or migrates (such as to `multiple`), while its
+  `expanded` or `searched` lists a field the same push adds to the related
+  collection. They stopped with "isn't a field of" (exit 2) before changing
+  anything.
 
 ## 0.10.0
 
