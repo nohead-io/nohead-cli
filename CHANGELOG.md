@@ -35,6 +35,11 @@ release's section is its GitHub release's notes.
   use no saved API key: `--help`, `health`, and commands run with
   `NOHEAD_API_KEY`. `login`, `logout` and `link` still refuse it, before
   changing anything.
+- `nohead import` reports a damaged `manifest.json` (no list of collections
+  or project ID, a collection without its counts or listed twice), and
+  record or draft IDs with spaces or control characters, as a damaged
+  export, exit code 2, before importing anything, instead of an unexpected
+  error partway through.
 
 ## 0.10.0
 

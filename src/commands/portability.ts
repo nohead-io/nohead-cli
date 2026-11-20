@@ -63,6 +63,23 @@ export interface Manifest {
 }
 
 const ASSET_ID = /^ast_[0-9A-Z]{26}$/
+// IDs go into the import's idempotency keys: printable, no spaces, short.
+const ID = /^[\x21-\x7e]{1,100}$/
+const isId = (value: unknown, prefix = "") =>
+  typeof value === "string" && value.startsWith(prefix) && ID.test(value)
+
+type ManifestCollection = Manifest["collections"][number]
+
+function isManifestCollection(entry: unknown): entry is ManifestCollection {
+  const isCount = (value: unknown) =>
+    Number.isInteger(value) && Number(value) >= 0
+  return (
+    isObject(entry) &&
+    typeof entry.slug === "string" &&
+    isCount(entry.records) &&
+    (entry.drafts === undefined || isCount(entry.drafts))
+  )
+}
 // The API's slug format (Sluggable): safe as a file name.
 const SLUG = /^[a-z][a-z0-9_-]{0,62}$/
 
@@ -466,15 +483,31 @@ async function readExport(
 ): Promise<{ exported: ExportedContent; assets: Asset[] }> {
   const problems: string[] = []
   const exported: ExportedContent = new Map()
-  for (const {
-    slug,
-    records: expected,
-    drafts: expectedDrafts,
-  } of manifest.collections) {
+  if (!isId(manifest.project_id, "prj_"))
+    problems.push("manifest.json's project_id is not a project ID (prj_...)")
+  const entries: unknown[] = Array.isArray(manifest.collections)
+    ? manifest.collections
+    : []
+  if (!Array.isArray(manifest.collections))
+    problems.push("manifest.json has no list of collections")
+  const seen = new Set<string>()
+  for (const [index, entry] of entries.entries()) {
+    if (!isManifestCollection(entry)) {
+      problems.push(
+        `Collection ${index + 1} in manifest.json is not a collection (a slug, and records and drafts counts)`
+      )
+      continue
+    }
+    const { slug, records: expected, drafts: expectedDrafts } = entry
     if (!SLUG.test(slug)) {
       problems.push(`${toJson(slug)} in manifest.json is not a collection slug`)
       continue
     }
+    if (seen.has(slug)) {
+      problems.push(`${slug} is in manifest.json twice`)
+      continue
+    }
+    seen.add(slug)
     if (!schema.some((c) => c.slug === slug)) {
       problems.push(`${slug} is in manifest.json but not in schema.yaml`)
       continue
@@ -491,7 +524,7 @@ async function readExport(
       text,
       file,
       "a record (no id or data)",
-      (item) => typeof item.id === "string" && isObject(item.data),
+      (item) => isId(item.id) && isObject(item.data),
       problems
     )
     if (records.length !== expected)
@@ -514,8 +547,8 @@ async function readExport(
           draftFile,
           "a draft (no id, record_id, data or changed_fields)",
           (item) =>
-            typeof item.id === "string" &&
-            typeof item.record_id === "string" &&
+            isId(item.id) &&
+            isId(item.record_id) &&
             isObject(item.data) &&
             Array.isArray(item.changed_fields),
           problems
@@ -535,15 +568,18 @@ async function readExport(
     exported.set(slug, { records, drafts })
   }
   const assets = await readExportedAssets(ctx, dir, manifest, problems)
-  if (problems.length > 0)
-    throw new CliError(ExitCode.Usage, {
-      type: "invalid_request",
-      message: `The export in ${dir} is incomplete or damaged; nothing was imported`,
-      details: problems
-        .slice(0, 20)
-        .map((message) => ({ code: "invalid_export", message })),
-    })
+  if (problems.length > 0) throw damagedExport(dir, problems)
   return { exported, assets }
+}
+
+function damagedExport(dir: string, problems: string[]) {
+  return new CliError(ExitCode.Usage, {
+    type: "invalid_request",
+    message: `The export in ${dir} is incomplete or damaged; nothing was imported`,
+    details: problems
+      .slice(0, 20)
+      .map((message) => ({ code: "invalid_export", message })),
+  })
 }
 
 /** A collection's fields by what import does to their values. */

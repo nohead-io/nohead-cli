@@ -4325,6 +4325,103 @@ describe("import", () => {
     expect(t.requests).toHaveLength(0)
   })
 
+  const NOT_A_COLLECTION =
+    "Collection 1 in manifest.json is not a collection (a slug, and records and drafts counts)"
+  const NO_PROJECT = "manifest.json's project_id is not a project ID (prj_...)"
+  it.each([
+    {
+      damage: "collections that are not a list",
+      manifest: { collections: { posts: 1 } },
+      problems: ["manifest.json has no list of collections"],
+    },
+    {
+      damage: "no project ID",
+      manifest: { project_id: undefined },
+      problems: [NO_PROJECT],
+    },
+    {
+      // It goes into the import's idempotency keys.
+      damage: "a project ID that isn't one",
+      manifest: { project_id: "prj_1\n2" },
+      problems: [NO_PROJECT],
+    },
+    {
+      damage: "a collection that is not an object",
+      manifest: { collections: [null] },
+      problems: [NOT_A_COLLECTION],
+    },
+    {
+      damage: "a collection without its records count",
+      manifest: { collections: [{ slug: "posts" }] },
+      problems: [NOT_A_COLLECTION],
+    },
+    {
+      damage: "a negative records count",
+      manifest: { collections: [{ slug: "posts", records: -1 }] },
+      problems: [NOT_A_COLLECTION],
+    },
+    {
+      damage: "a drafts count that isn't a number",
+      manifest: { collections: [{ slug: "posts", records: 0, drafts: "1" }] },
+      problems: [NOT_A_COLLECTION],
+    },
+    {
+      damage: "a collection twice",
+      manifest: {
+        collections: [
+          { slug: "posts", records: 0 },
+          { slug: "posts", records: 0 },
+        ],
+      },
+      problems: ["posts is in manifest.json twice"],
+    },
+    {
+      // IDs go into the import's idempotency keys too.
+      damage: "a record ID with a space in its records",
+      manifest: { collections: [{ slug: "posts", records: 0 }] },
+      records: `${JSON.stringify(record("rec 1", {}))}\n`,
+      problems: ["records/posts.jsonl line 1 is not a record (no id or data)"],
+    },
+    {
+      // All at once, in one run.
+      damage: "no project ID and a damaged collection",
+      manifest: { project_id: undefined, collections: [null] },
+      problems: [NO_PROJECT, NOT_A_COLLECTION],
+    },
+  ])(
+    "refuses a manifest with $damage as damaged",
+    async ({ manifest, records = "", problems }) => {
+      const t = testRuntime({
+        files: {
+          "out/manifest.json": JSON.stringify({
+            format: "nohead-export",
+            version: 1,
+            exported_at: NOW,
+            api_url: "http://api.test",
+            project_id: PROJECT_ID,
+            include_history: false,
+            include_deleted: false,
+            collections: [],
+            ...manifest,
+          }),
+          "out/schema.yaml":
+            "collections:\n  posts:\n    fields:\n      title: text\n",
+          "out/records/posts.jsonl": records,
+        },
+      })
+
+      expect(await run(["--json", "import", "out"], t.runtime)).toBe(
+        ExitCode.Usage
+      )
+      const { error } = JSON.parse(t.err())
+      expect(error.message).toContain("nothing was imported")
+      expect(error.details).toEqual(
+        problems.map((message) => ({ code: "invalid_export", message }))
+      )
+      expect(t.requests).toHaveLength(0)
+    }
+  )
+
   it("creates a published record with no relations published, in one request", async () => {
     const t = testRuntime({
       files: {
