@@ -7,7 +7,7 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
-## Unreleased
+## 0.11.0
 
 - `--idempotency-key` works with commands that send several requests: each
   gets its own key, `<key>:0`, `<key>:1` and so on. `records bulk` with more
@@ -51,6 +51,7 @@ release's section is its GitHub release's notes.
   as the schema file does, so the next `schema pull` writes no `name`.
 - `nohead search` labels each hit with its first text value that isn't
   blank, as `nohead records list` does.
+- Built on `@nohead/sdk` 0.24.0.
 
 ## 0.10.0
 

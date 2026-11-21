@@ -1,6 +1,6 @@
 {
   "name": "@nohead/cli",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "The Nohead command-line interface",
   "license": "MIT",
   "homepage": "https://nohead.io",
@@ -41,7 +41,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@nohead/sdk": "^0.23.0",
+    "@nohead/sdk": "^0.24.0",
     "@sindresorhus/slugify": "^4.0.0",
     "commander": "^15.0.0",
     "yaml": "^2.9.1"
