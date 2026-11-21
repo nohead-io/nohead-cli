@@ -89,7 +89,9 @@ describe("creationOrder", () => {
     ).toEqual(["people", "categories", "posts", "pages"])
   })
 
-  it("leaves self-references and cycles in the export's order", () => {
+  // In a cycle, the first collection waits for the one it points at; that
+  // one's relation back is set after both exist.
+  it("ignores self-references, and creates a cycle's first collection last", () => {
     const schema = [
       collection("pages", ["pages"]),
       collection("a", ["b"]),
