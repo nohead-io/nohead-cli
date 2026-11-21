@@ -4125,7 +4125,7 @@
       "post": {
         "operationId": "webhooks_restore",
         "summary": "Restore a webhook",
-        "description": "Brings a deleted webhook back, with its settings and secrets, until\n`purge_after`. Deliveries that came due while it was deleted failed;\nattempt them again with `POST /v1/webhook-deliveries/{delivery_id}/retry`.\nRestoring counts against the plan's webhook limit (`402`).\n",
+        "description": "Brings a deleted webhook back, with its settings and secrets, until\n`purge_after`. Deliveries that came due while it was deleted failed;\nattempt them again with `POST /v1/webhook-deliveries/{delivery_id}/retry`.\nAn enabled webhook's `failing_since` is cleared: failures before it\nwas deleted no longer count, so it's warned about again before it's\ndisabled. Restoring counts against the plan's webhook limit (`402`).\n",
         "tags": [
           "webhooks"
         ],
@@ -8574,7 +8574,7 @@
               "failing",
               null
             ],
-            "description": "Why it was disabled, when Nohead did it: `failing`, after its attempts failed for 3 days. Its project's owners and admins are emailed after it has failed for a day (an hour, if it has never worked), and again when it's disabled. Null when it's enabled, or was disabled by someone; enabling it again clears it."
+            "description": "Why it was disabled, when Nohead did it: `failing`, after its attempts failed for 3 days. Its organization's owners and admins are emailed after it has failed for a day (an hour, if it has never worked), and again when it's disabled. Null when it's enabled, or was disabled by someone; enabling it again clears it."
           },
           "last_attempt_at": {
             "description": "When a delivery to it was last attempted; null before the first attempt.",
@@ -8599,7 +8599,7 @@
             "$ref": "#/components/schemas/NullableTimestamp"
           },
           "failing_since": {
-            "description": "When its attempts started failing: set by a failed attempt after a success (or by a first attempt that fails), and cleared by the next success. Null while it works, and before the first attempt. To check a webhook at once, send it a test event (`POST /v1/webhooks/{webhook_id}/test`).",
+            "description": "When its attempts started failing: set by a failed attempt after a success (or by a first attempt that fails), and cleared by the next success, by enabling it again, by changing its URL, and by restoring it while it's enabled. Null while it works, and before the first attempt. To check a webhook at once, send it a test event (`POST /v1/webhooks/{webhook_id}/test`).",
             "$ref": "#/components/schemas/NullableTimestamp"
           },
           "deleted_at": {
