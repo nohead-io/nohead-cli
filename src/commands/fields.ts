@@ -9,7 +9,8 @@ import {
   type FieldType,
 } from "../field-types.ts"
 import { unwrap, unwrapFind } from "../errors.ts"
-import { toFieldKey, usageError } from "../input.ts"
+import { isObject, toFieldKey, usageError } from "../input.ts"
+import { searchOf } from "../schema/format.ts"
 import { printResult, table } from "../output.ts"
 import { pageQuery, printList, withPaging, type PageOptions } from "../pages.ts"
 import { apiOptions, fieldIdsOf } from "./schema.ts"
@@ -34,17 +35,17 @@ function number(value: string, flag: string): number {
 export interface ConfigOptions {
   /** A new type (add, migrate). */
   type?: FieldType
-  searchable?: boolean
+  /** true, false, or a relation's related field keys, comma-separated. */
+  searchable?: boolean | string
   filterable?: boolean
   sortable?: boolean
+  /** true, false, or an asset's parts or a relation's related field keys. */
+  returned?: boolean | string
   options?: string
   target?: string
   minLength?: number
   maxLength?: number
   acceptedTypes?: string
-  included?: boolean
-  expanded?: string
-  searched?: string
   min?: number
   max?: number
   description?: string
@@ -64,8 +65,9 @@ const list = (value: string) =>
 /**
  * Type-specific configuration from flags for `field` (its key, and its
  * current configuration when it exists): relation targets resolve slugs to
- * IDs, and the related fields a relation's search hits return and searches
- * match keys to IDs.
+ * IDs, and the related fields a relation's searches match and its search
+ * hits return keys to IDs. The search settings go in `search`, only those
+ * given: the API merges them onto the field's.
  */
 export async function configuration(
   ctx: CommandContext,
@@ -82,7 +84,6 @@ export async function configuration(
   if (options.maxLength !== undefined) config.max_length = options.maxLength
   if (options.acceptedTypes !== undefined)
     config.accepted_types = list(options.acceptedTypes)
-  if (options.included !== undefined) config.included = options.included
   if (options.min !== undefined) config.min = options.min
   if (options.max !== undefined) config.max = options.max
   if (options.description !== undefined)
@@ -92,21 +93,46 @@ export async function configuration(
   if (options.timeZone !== undefined) config.time_zone = options.timeZone
   if (options.format !== undefined) config.format = options.format
   if (options.unique !== undefined) config.unique = options.unique
-  for (const flag of ["searchable", "filterable", "sortable"] as const)
-    if (options[flag] !== undefined) config[flag] = options[flag]
+  const type = options.type ?? field.type
+  const search: Record<string, unknown> = {}
+  for (const flag of [
+    "searchable",
+    "filterable",
+    "sortable",
+    "returned",
+  ] as const) {
+    const value = options[flag]
+    if (value === undefined) continue
+    if (typeof value !== "string") search[flag] = value
+    else if (flag === "returned" && (type === "asset" || type === "relation"))
+      search[flag] = list(value)
+    else if (flag === "searchable" && type === "relation")
+      search[flag] = list(value)
+    else
+      throw usageError(
+        flag === "returned"
+          ? "--returned takes a list only for asset and relation fields"
+          : "--searchable takes a list only for relation fields"
+      )
+  }
+  if (
+    type === "relation" &&
+    (search.searchable === true ||
+      (Array.isArray(search.searchable) && search.searchable.length === 0))
+  )
+    throw usageError(
+      "A relation holds IDs, no words: pass --searchable with the related collection's field keys searches match"
+    )
   let target: Collection | undefined
   if (options.target !== undefined) {
     target = await unwrap(ctx.api.collections.get(options.target))
     config.target_collection_id = target.id
   }
-  const related: Record<string, string[]> = {}
-  if (options.expanded !== undefined) related.expanded = list(options.expanded)
-  if (options.searched !== undefined) related.searched = list(options.searched)
   // A relation's related fields by key become IDs, as schema push sends
   // them; an asset's parts stay as they are.
   if (
-    Object.keys(related).length > 0 &&
-    (options.type ?? field.type) === "relation"
+    type === "relation" &&
+    (Array.isArray(search.searchable) || Array.isArray(search.returned))
   ) {
     const current = field.configuration?.target_collection_id
     if (!target && typeof current === "string")
@@ -118,26 +144,30 @@ export async function configuration(
     Object.assign(
       config,
       apiOptions(
-        related,
+        { search },
         new Map(),
         field.key,
         fieldIdsOf([target]),
         target.slug
       )
     )
-  } else Object.assign(config, related)
+  } else if (Object.keys(search).length > 0) config.search = search
   return config
 }
 
 /**
- * A field's configuration with options from flags on top. A date without its
- * time has no time zone either; a format sets its own lengths.
+ * A field's configuration with options from flags on top, search settings
+ * too. A date without its time has no time zone either; a format sets its
+ * own lengths.
  */
 export function mergeConfiguration(
   current: Record<string, unknown>,
   changes: Record<string, unknown>
 ): Record<string, unknown> {
   const merged = { ...current, ...changes }
+  // The search settings given join the field's, as the API merges them.
+  if (isObject(changes.search))
+    merged.search = { ...searchOf(current), ...changes.search }
   if (merged.include_time === false) {
     delete merged.include_time
     delete merged.time_zone
@@ -203,22 +233,20 @@ export function withConfigFlags(command: Command): Command {
     .option("--no-format", "text fields: plain text")
     .option("--unique", "no two records share a value (text, integer)")
     .option("--no-unique", "let records share a value")
-    .option("--searchable", "match search words in this field")
-    .option("--no-searchable", "leave this field out of search matching")
-    .option("--filterable", "allow filter[<field>] in search")
-    .option("--no-filterable", "disallow filtering in search")
-    .option("--sortable", "allow sorting search results by this field")
-    .option("--no-sortable", "disallow sorting search results")
-    .option("--included", "return this field in public search hits")
-    .option("--no-included", "leave this field out of public search hits")
     .option(
-      "--expanded <list>",
-      "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
+      "--searchable [fields]",
+      "searches match this field's words; relation fields: the related collection's field keys to match, comma-separated"
     )
+    .option("--no-searchable", "searches don't match this field's words")
+    .option("--filterable", "searches can filter on this field")
+    .option("--no-filterable", "searches can't filter on this field")
+    .option("--sortable", "searches can sort on this field")
+    .option("--no-sortable", "searches can't sort on this field")
     .option(
-      "--searched <list>",
-      "relation fields: the related collection's field keys searches match, comma-separated"
+      "--returned [list]",
+      "public search hits return this field; or, comma-separated, an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
     )
+    .option("--no-returned", "public search hits leave this field out")
 }
 
 export function registerFields(

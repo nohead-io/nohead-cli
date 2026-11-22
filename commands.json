@@ -414,44 +414,36 @@
               "description": "let records share a value"
             },
             {
-              "flags": "--searchable",
-              "description": "match search words in this field"
+              "flags": "--searchable [fields]",
+              "description": "searches match this field's words; relation fields: the related collection's field keys to match, comma-separated"
             },
             {
               "flags": "--no-searchable",
-              "description": "leave this field out of search matching"
+              "description": "searches don't match this field's words"
             },
             {
               "flags": "--filterable",
-              "description": "allow filter[<field>] in search"
+              "description": "searches can filter on this field"
             },
             {
               "flags": "--no-filterable",
-              "description": "disallow filtering in search"
+              "description": "searches can't filter on this field"
             },
             {
               "flags": "--sortable",
-              "description": "allow sorting search results by this field"
+              "description": "searches can sort on this field"
             },
             {
               "flags": "--no-sortable",
-              "description": "disallow sorting search results"
+              "description": "searches can't sort on this field"
             },
             {
-              "flags": "--included",
-              "description": "return this field in public search hits"
+              "flags": "--returned [list]",
+              "description": "public search hits return this field; or, comma-separated, an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
             },
             {
-              "flags": "--no-included",
-              "description": "leave this field out of public search hits"
-            },
-            {
-              "flags": "--expanded <list>",
-              "description": "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
-            },
-            {
-              "flags": "--searched <list>",
-              "description": "relation fields: the related collection's field keys searches match, comma-separated"
+              "flags": "--no-returned",
+              "description": "public search hits leave this field out"
             }
           ],
           "commands": []
@@ -552,44 +544,36 @@
               "description": "let records share a value"
             },
             {
-              "flags": "--searchable",
-              "description": "match search words in this field"
+              "flags": "--searchable [fields]",
+              "description": "searches match this field's words; relation fields: the related collection's field keys to match, comma-separated"
             },
             {
               "flags": "--no-searchable",
-              "description": "leave this field out of search matching"
+              "description": "searches don't match this field's words"
             },
             {
               "flags": "--filterable",
-              "description": "allow filter[<field>] in search"
+              "description": "searches can filter on this field"
             },
             {
               "flags": "--no-filterable",
-              "description": "disallow filtering in search"
+              "description": "searches can't filter on this field"
             },
             {
               "flags": "--sortable",
-              "description": "allow sorting search results by this field"
+              "description": "searches can sort on this field"
             },
             {
               "flags": "--no-sortable",
-              "description": "disallow sorting search results"
+              "description": "searches can't sort on this field"
             },
             {
-              "flags": "--included",
-              "description": "return this field in public search hits"
+              "flags": "--returned [list]",
+              "description": "public search hits return this field; or, comma-separated, an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
             },
             {
-              "flags": "--no-included",
-              "description": "leave this field out of public search hits"
-            },
-            {
-              "flags": "--expanded <list>",
-              "description": "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
-            },
-            {
-              "flags": "--searched <list>",
-              "description": "relation fields: the related collection's field keys searches match, comma-separated"
+              "flags": "--no-returned",
+              "description": "public search hits leave this field out"
             }
           ],
           "commands": []
@@ -762,44 +746,36 @@
               "description": "let records share a value"
             },
             {
-              "flags": "--searchable",
-              "description": "match search words in this field"
+              "flags": "--searchable [fields]",
+              "description": "searches match this field's words; relation fields: the related collection's field keys to match, comma-separated"
             },
             {
               "flags": "--no-searchable",
-              "description": "leave this field out of search matching"
+              "description": "searches don't match this field's words"
             },
             {
               "flags": "--filterable",
-              "description": "allow filter[<field>] in search"
+              "description": "searches can filter on this field"
             },
             {
               "flags": "--no-filterable",
-              "description": "disallow filtering in search"
+              "description": "searches can't filter on this field"
             },
             {
               "flags": "--sortable",
-              "description": "allow sorting search results by this field"
+              "description": "searches can sort on this field"
             },
             {
               "flags": "--no-sortable",
-              "description": "disallow sorting search results"
+              "description": "searches can't sort on this field"
             },
             {
-              "flags": "--included",
-              "description": "return this field in public search hits"
+              "flags": "--returned [list]",
+              "description": "public search hits return this field; or, comma-separated, an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
             },
             {
-              "flags": "--no-included",
-              "description": "leave this field out of public search hits"
-            },
-            {
-              "flags": "--expanded <list>",
-              "description": "what public search hits return of what the field points at, comma-separated: an asset's parts (image_url, dimensions, alt, file_url, filename, content_type) or the related collection's field keys"
-            },
-            {
-              "flags": "--searched <list>",
-              "description": "relation fields: the related collection's field keys searches match, comma-separated"
+              "flags": "--no-returned",
+              "description": "public search hits leave this field out"
             }
           ],
           "commands": []

@@ -13,6 +13,7 @@ import {
   fromCollections,
   fromYaml,
   RELATED_LISTS,
+  searchOf,
   toYaml,
   type FieldSpec,
 } from "../schema/format.ts"
@@ -78,8 +79,9 @@ function relatedId(
 /**
  * A field's options as the API's configuration: a relation's target
  * collection resolves slug -> ID (null, when an option is removed, stays),
- * and the related fields search hits return and searches match key -> ID
- * (`target`: the relation's target collection, by slug).
+ * and the related fields its searches match and its search hits return
+ * (`search.searchable`, `search.returned`) key -> ID (`target`: the
+ * relation's target collection, by slug).
  */
 export function apiOptions(
   options: Record<string, unknown>,
@@ -90,18 +92,22 @@ export function apiOptions(
 ): Record<string, unknown> {
   const { collection, ...rest } = options
   const configuration: Record<string, unknown> = { ...rest }
-  for (const option of RELATED_LISTS) {
-    const listed = rest[option]
-    if (!Array.isArray(listed) || typeof target !== "string") continue
+  if (typeof target === "string" && Object.keys(searchOf(rest)).length > 0) {
+    const search = { ...searchOf(rest) }
     const known = fields.get(target)
-    configuration[option] = listed.map((item: unknown) => {
-      const id = relatedId(known, item)
-      if (!id)
-        throw usageError(
-          `Field ${key}: ${option} lists ${String(item)}, which isn't a field of ${target}`
-        )
-      return id
-    })
+    for (const setting of RELATED_LISTS) {
+      const listed = search[setting]
+      if (!Array.isArray(listed)) continue
+      search[setting] = listed.map((item: unknown) => {
+        const id = relatedId(known, item)
+        if (!id)
+          throw usageError(
+            `Field ${key}: search.${setting} lists ${String(item)}, which isn't a field of ${target}`
+          )
+        return id
+      })
+    }
+    configuration.search = search
   }
   if (collection === null) configuration.target_collection_id = null
   else if (typeof collection === "string") {
@@ -162,16 +168,23 @@ function migrationBody(
       ? configurationChange(change.from.options, change.to.options)
       : { ...change.changes.options }
   const target = change.to.options.collection
-  if (typeof target === "string") {
+  if (typeof target === "string" && Object.keys(searchOf(options)).length > 0) {
     const known = fields.get(target)
-    for (const option of RELATED_LISTS) {
-      const listed = options[option]
-      if (Array.isArray(listed))
-        options[option] = listed.filter(
-          (item: unknown) =>
-            relatedId(known, item) || !adding.get(target)?.has(String(item))
-        )
+    const search = { ...searchOf(options) }
+    for (const setting of RELATED_LISTS) {
+      const listed = search[setting]
+      if (!Array.isArray(listed)) continue
+      const exist = listed.filter(
+        (item: unknown) =>
+          relatedId(known, item) || !adding.get(target)?.has(String(item))
+      )
+      // A list of only fields to come is left out: the API refuses an empty
+      // `searchable`, and the dry run can't check it anyway.
+      if (exist.length > 0 || listed.length === 0) search[setting] = exist
+      else delete search[setting]
     }
+    if (Object.keys(search).length > 0) options.search = search
+    else delete options.search
   }
   return {
     type,
@@ -204,15 +217,7 @@ function tightens(change: Change): change is UpdateChange {
 }
 
 /** Options that never make a field's values invalid: help text and search. */
-const LOOSE_OPTIONS = new Set([
-  "description",
-  "searchable",
-  "filterable",
-  "sortable",
-  "included",
-  "expanded",
-  "searched",
-])
+const LOOSE_OPTIONS = new Set(["description", "search"])
 
 /** Field keys by collection slug. */
 type FieldKeys = Map<string, Set<string>>
@@ -466,8 +471,8 @@ export async function applyPlan(
   const last: { slug: string; field: FieldSpec }[] = []
   const listsUnknown = (field: FieldSpec) => {
     const known = fieldIds.get(String(field.options.collection))
-    return RELATED_LISTS.some((option) => {
-      const listed = field.options[option]
+    return RELATED_LISTS.some((setting) => {
+      const listed = searchOf(field.options)[setting]
       return (
         Array.isArray(listed) && listed.some((key) => !relatedId(known, key))
       )
@@ -526,11 +531,11 @@ export async function applyPlan(
   // exists.
   const listsRelated = (change: Change) =>
     RELATED_LISTS.some(
-      (option) =>
+      (setting) =>
         (change.kind === "update_field" &&
-          Array.isArray(change.changes.options?.[option])) ||
+          Array.isArray(searchOf(change.changes.options ?? {})[setting])) ||
         (change.kind === "add_field" &&
-          Array.isArray(change.field.options[option]))
+          Array.isArray(searchOf(change.field.options)[setting]))
     )
   const ordered = [
     ...todo.filter((c) => !listsRelated(c) && c.kind !== "reorder_fields"),
