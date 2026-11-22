@@ -5427,7 +5427,8 @@ describe("usage errors, refused before calling the API", () => {
         "--searchable",
         "name",
       ],
-      message: "--searchable takes a list only for relation fields",
+      message:
+        '--searchable takes a list only for relation fields (got "name")',
     },
     {
       argv: [
@@ -5440,7 +5441,8 @@ describe("usage errors, refused before calling the API", () => {
         "--returned",
         "image_url",
       ],
-      message: "--returned takes a list only for asset and relation fields",
+      message:
+        '--returned takes a list only for asset and relation fields (got "image_url")',
     },
     {
       argv: [

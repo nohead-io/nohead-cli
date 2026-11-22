@@ -110,9 +110,7 @@ export async function configuration(
       search[flag] = list(value)
     else
       throw usageError(
-        flag === "returned"
-          ? "--returned takes a list only for asset and relation fields"
-          : "--searchable takes a list only for relation fields"
+        `--${flag} takes a list only for ${flag === "returned" ? "asset and relation" : "relation"} fields (got ${JSON.stringify(value)})`
       )
   }
   if (

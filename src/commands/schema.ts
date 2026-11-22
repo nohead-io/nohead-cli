@@ -178,8 +178,8 @@ function migrationBody(
         (item: unknown) =>
           relatedId(known, item) || !adding.get(target)?.has(String(item))
       )
-      // A list of only fields to come is left out: the API refuses an empty
-      // `searchable`, and the dry run can't check it anyway.
+      // A list of only fields to come is left out, so the field keeps its
+      // current setting until they exist (and the dry run can't check them).
       if (exist.length > 0 || listed.length === 0) search[setting] = exist
       else delete search[setting]
     }
