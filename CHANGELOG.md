@@ -7,6 +7,41 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- **Breaking:** the schema file groups a field's search settings under
+  `search`, one key per idea, in the order `searchable`, `filterable`,
+  `sortable`, `returned`. They replace the top-level `searchable`,
+  `filterable`, `sortable`, `included`, `expanded` and `searched`; a file
+  that still has those is a usage error that says where each one goes now.
+  - `returned: false` leaves a field out of public search hits; an asset's
+    `returned` lists its parts (`returned: [image_url, alt]`), and a
+    relation's the related collection's fields by key (`returned: [name]`).
+    `returned: true`, the default, isn't written, nor an empty group.
+  - A relation's `searchable` lists the related fields searches match
+    (`searchable: [name]`), or is false; `searchable: true` is refused, as
+    a relation holds IDs, no words.
+
+  ```yaml
+  author:
+    type: relation
+    collection: people
+    search:
+      searchable: [name]
+      filterable: true
+      returned: [name, portrait]
+  ```
+
+- **Breaking:** `nohead fields add`, `update` and `migrate` take
+  `--searchable [fields]` (a relation's related field keys),
+  `--returned [list]` (an asset's parts, or a relation's related field
+  keys) and `--no-returned`, beside `--[no-]searchable`, `--[no-]filterable`
+  and `--[no-]sortable`. They send only the settings given, which the API
+  merges onto the field's. `--included`, `--no-included`, `--expanded` and
+  `--searched` are gone.
+- Needs the API's grouped search settings, which refuses the old top-level
+  keys.
+
 ## 0.11.0
 
 - `--idempotency-key` works with commands that send several requests: each

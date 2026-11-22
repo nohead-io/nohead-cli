@@ -13,11 +13,12 @@ import { escapeC1 } from "../output.ts"
  *       fields:
  *         title: { type: text, required: true }
  *         author: { type: relation, collection: authors }
+ *         body: { type: long_text, search: { returned: false } }
  *
  * Collections are keyed by slug and fields by API key. Type options are
- * flattened (`options`, `max_length`, ...); a relation's target is its
- * collection's slug. Names default to the humanized key and are written only
- * when they differ.
+ * flattened (`options`, `max_length`, ...), but for the search settings,
+ * grouped under `search`; a relation's target is its collection's slug.
+ * Names default to the humanized key and are written only when they differ.
  */
 export interface FieldSpec {
   key: string
@@ -43,11 +44,41 @@ export interface CollectionSpec {
   fields: FieldSpec[]
 }
 
-/** A relation's settings that list fields of its target collection. */
-export const RELATED_LISTS = ["expanded", "searched"] as const
+/** The `search` group's settings, in the file's order. */
+const SEARCH_KEYS = ["searchable", "filterable", "sortable", "returned"]
+
+/**
+ * The search settings a relation can list fields of its target collection
+ * in: by key in the file, by ID in the API.
+ */
+export const RELATED_LISTS = ["searchable", "returned"] as const
+
+/** Types with no words to search: `searchable` can only be false. */
+const UNSEARCHABLE = new Set(["asset", "boolean", "date"])
+
+const ASSET_PARTS =
+  "image_url, dimensions, alt, file_url, filename, content_type"
+
+/**
+ * Where each old top-level search option went: a relation's
+ * `searched` first, as its `searchable: true` only took effect with one.
+ */
+const MOVED: Record<string, string> = {
+  searched: "searchable",
+  expanded: "returned",
+  included: "returned",
+  searchable: "searchable",
+  filterable: "filterable",
+  sortable: "sortable",
+}
 
 const isStringList = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string")
+
+/** An options group's `search` settings, or none. */
+export const searchOf = (
+  options: Record<string, unknown>
+): Record<string, unknown> => (isObject(options.search) ? options.search : {})
 
 const OPTION_KEYS = [
   "description",
@@ -62,12 +93,7 @@ const OPTION_KEYS = [
   "unique",
   "accepted_types",
   "collection",
-  "searchable",
-  "filterable",
-  "sortable",
-  "included",
-  "expanded",
-  "searched",
+  "search",
 ]
 const FIELD_KEYS = [
   "type",
@@ -82,19 +108,27 @@ const SLUG = /^[a-z][a-z0-9_-]{0,62}$/
 const FIELD_KEY = /^[a-z][a-z0-9_]{0,62}$/
 
 /**
- * Options without what another option implies: a slug is always unique, so
- * files leave `unique` out (and a file that says it matches one that doesn't).
+ * Options without what another option or a default implies, so a file that
+ * says it matches one that doesn't: a slug is always unique, and every field
+ * is returned in search hits by default (`returned: true`). The search
+ * settings come last, in the file's order, and an empty group not at all.
  */
 function withoutImplied(
   options: Record<string, unknown>
 ): Record<string, unknown> {
-  // A slug is unique; and every field is included in search hits by default.
-  const implied = (key: string, value: unknown) =>
-    (key === "unique" && value === true && options.format === "slug") ||
-    (key === "included" && value === true)
-  return Object.fromEntries(
-    Object.entries(options).filter(([key, value]) => !implied(key, value))
+  const { search, ...rest } = options
+  if (rest.unique === true && rest.format === "slug") delete rest.unique
+  if (!isObject(search)) return rest
+  const settings = SEARCH_KEYS.filter(
+    (key) =>
+      search[key] !== undefined && !(key === "returned" && search[key] === true)
   )
+  return settings.length > 0
+    ? {
+        ...rest,
+        search: Object.fromEntries(settings.map((key) => [key, search[key]])),
+      }
+    : rest
 }
 
 /** "lead_author" / "blog-posts" -> "Lead Author" / "Blog Posts". */
@@ -108,9 +142,9 @@ export function humanize(key: string): string {
 
 /**
  * Collections as specs; relation targets become slugs (or stay IDs if
- * unknown), and the related fields a relation's search hits return and its
- * searches match (`expanded`, `searched`) keys (a field deleted since is
- * left out, as search skips it).
+ * unknown), and the related fields a relation's searches match and its
+ * search hits return (`search.searchable`, `search.returned`) keys (a field
+ * deleted since is left out, as search skips it).
  */
 export function fromCollections(collections: Collection[]): CollectionSpec[] {
   const slugs = new Map(collections.map((c) => [c.id, c.slug]))
@@ -125,14 +159,17 @@ export function fromCollections(collections: Collection[]): CollectionSpec[] {
     fields: collection.fields.map((field) => {
       const { target_collection_id: target, ...rest } =
         field.configuration as Record<string, unknown>
-      if (field.type === "relation")
-        for (const option of RELATED_LISTS) {
-          const listed = rest[option]
+      if (field.type === "relation" && isObject(rest.search)) {
+        const search = { ...rest.search }
+        for (const setting of RELATED_LISTS) {
+          const listed = search[setting]
           if (Array.isArray(listed))
-            rest[option] = listed.flatMap((id: unknown) =>
+            search[setting] = listed.flatMap((id: unknown) =>
               keys.has(String(id)) ? [keys.get(String(id))] : []
             )
         }
+        rest.search = search
+      }
       return {
         key: field.key,
         name: field.name,
@@ -200,6 +237,64 @@ function unknownKeys(
     )
 }
 
+/** A value as the file would write it inline, for messages: `[a, b]`, `true`. */
+const flow = (value: unknown) =>
+  Array.isArray(value) ? `[${value.join(", ")}]` : String(value)
+
+/**
+ * Checks a field's `search` group against its type: true or false, but a
+ * relation lists related field keys (`searchable`: false or a list,
+ * `returned`: true, false or a list), an asset's `returned` its parts, and
+ * types with no words are never searchable.
+ */
+function checkSearch(
+  field: Record<string, unknown>,
+  type: FieldType,
+  at: string
+) {
+  if (field.search === undefined) return
+  const search = field.search
+  if (!isObject(search))
+    throw usageError(
+      `${at}.search must be a mapping (${SEARCH_KEYS.join(", ")})`
+    )
+  unknownKeys(search, SEARCH_KEYS, `${at}.search`)
+  const where = (setting: string) => `${at}.search.${setting}`
+  for (const setting of ["filterable", "sortable"])
+    if (search[setting] !== undefined && typeof search[setting] !== "boolean")
+      throw usageError(`${where(setting)}: true or false`)
+
+  const { searchable, returned } = search
+  if (searchable !== undefined) {
+    if (type === "relation") {
+      if (searchable === true)
+        throw usageError(
+          `${where("searchable")}: a relation holds IDs, no words: list the related collection's field keys searches match (searchable: [name])`
+        )
+      if (searchable !== false && !isStringList(searchable))
+        throw usageError(
+          `${where("searchable")}: false or a list (the related collection's field keys)`
+        )
+    } else if (UNSEARCHABLE.has(type)) {
+      if (searchable !== false)
+        throw usageError(
+          `${where("searchable")}: ${type} fields hold no words to search; only false`
+        )
+    } else if (typeof searchable !== "boolean")
+      throw usageError(`${where("searchable")}: true or false`)
+  }
+  if (
+    returned !== undefined &&
+    typeof returned !== "boolean" &&
+    !((type === "asset" || type === "relation") && isStringList(returned))
+  )
+    throw usageError(
+      type === "asset" || type === "relation"
+        ? `${where("returned")}: true, false or a list (${type === "asset" ? ASSET_PARTS : "the related collection's field keys"})`
+        : `${where("returned")}: true or false`
+    )
+}
+
 export function fromYaml(text: string, source: string): CollectionSpec[] {
   let document: unknown
   try {
@@ -253,6 +348,11 @@ export function fromYaml(text: string, source: string): CollectionSpec[] {
           typeof rawField === "string" ? { type: rawField } : rawField
         if (!isObject(field))
           throw usageError(`${at} must be a mapping or a type name`)
+        for (const key of Object.keys(MOVED))
+          if (key in field)
+            throw usageError(
+              `${at}: ${key} goes under search:${MOVED[key] === key ? "" : ` as ${MOVED[key]}`} (search: { ${MOVED[key]}: ${flow(field[key])} })`
+            )
         unknownKeys(field, FIELD_KEYS, at)
         const type = String(field.type).replace(/-/g, "_")
         if (!isFieldType(type))
@@ -261,27 +361,7 @@ export function fromYaml(text: string, source: string): CollectionSpec[] {
           throw usageError(
             `${at}: relation fields need "collection" (the target collection's slug)`
           )
-        if (field.included !== undefined && typeof field.included !== "boolean")
-          throw usageError(`${at}.included: true or false`)
-        if (field.expanded !== undefined) {
-          if (
-            !isStringList(field.expanded) ||
-            (type !== "asset" && type !== "relation")
-          )
-            throw usageError(
-              type === "asset" || type === "relation"
-                ? `${at}.expanded: a list (${type === "asset" ? "image_url, dimensions, alt, file_url, filename, content_type" : "the related collection's field keys"})`
-                : `${at}.expanded: only asset and relation fields expand what they point at`
-            )
-        }
-        if (field.searched !== undefined) {
-          if (!isStringList(field.searched) || type !== "relation")
-            throw usageError(
-              type === "relation"
-                ? `${at}.searched: a list (the related collection's field keys)`
-                : `${at}.searched: only relation fields search fields of the records they point at`
-            )
-        }
+        checkSearch(field, type, at)
 
         const renamedFrom = field.renamed_from
         if (

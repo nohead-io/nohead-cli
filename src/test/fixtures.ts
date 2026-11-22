@@ -10,7 +10,14 @@ export const NOW = "2026-09-27T12:00:00.000Z"
 export const PROJECT_ID = "prj_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
 export const COLLECTION_ID = "col_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
 
-export function field(overrides: Partial<Field> & Pick<Field, "key">): Field {
+/**
+ * A field of any type, configured by the test: `configuration` is any
+ * options, as the contract checks responses (the SDK's types can lag it).
+ */
+export function field(
+  overrides: Partial<Omit<Field, "configuration">> &
+    Pick<Field, "key"> & { configuration?: Record<string, unknown> }
+): Field {
   return {
     id: `fld_01J9ZQ3F8X5W2K7M4N6P0${overrides.key.slice(0, 5).toUpperCase().padEnd(5, "0")}`,
     object: "field",
@@ -27,7 +34,7 @@ export function field(overrides: Partial<Field> & Pick<Field, "key">): Field {
     created_at: NOW,
     updated_at: NOW,
     ...overrides,
-  } as Field // a field of any type, configured by the test
+  } as Field
 }
 
 export function collection(overrides: Partial<Collection> = {}): Collection {

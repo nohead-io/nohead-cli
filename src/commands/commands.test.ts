@@ -190,9 +190,9 @@ describe("fields", () => {
       "--target",
       "authors",
       "--required",
-      "--expanded",
+      "--searchable",
       "title",
-      "--searched",
+      "--returned",
       "title",
     ])
     const authorTitle = collection().fields[0].id
@@ -204,8 +204,7 @@ describe("fields", () => {
       multiple: false,
       configuration: {
         target_collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR",
-        expanded: [authorTitle],
-        searched: [authorTitle],
+        search: { searchable: [authorTitle], returned: [authorTitle] },
       },
     })
 
@@ -259,22 +258,31 @@ describe("fields", () => {
   it.each<{ field: Field; flags: string[]; configuration: object }>([
     {
       field: field({ key: "title" }),
-      flags: ["--min-length", "3", "--no-included"],
-      configuration: { min_length: 3, included: false },
+      flags: ["--min-length", "3", "--no-returned"],
+      configuration: { min_length: 3, search: { returned: false } },
     },
     {
       field: field({ key: "cover", type: "asset" }),
       flags: [
         "--accepted-types",
         "image/*, application/pdf",
-        "--expanded",
+        "--returned",
         "image_url,alt",
       ],
       // An asset's parts, as they are.
       configuration: {
         accepted_types: ["image/*", "application/pdf"],
-        expanded: ["image_url", "alt"],
+        search: { returned: ["image_url", "alt"] },
       },
+    },
+    {
+      field: field({
+        key: "cover",
+        type: "asset",
+        configuration: { search: { returned: ["alt"] } },
+      }),
+      flags: ["--returned"],
+      configuration: { search: { returned: true } },
     },
     {
       // The field's own target collection resolves the key.
@@ -285,14 +293,17 @@ describe("fields", () => {
           target_collection_id: "col_01J9ZQ3F8X5W2K7M4N6P0AUTHR",
         },
       }),
-      flags: ["--searched", "title"],
-      configuration: { searched: [collection().fields[0].id] },
+      flags: ["--searchable", "title"],
+      configuration: { search: { searchable: [collection().fields[0].id] } },
     },
     {
       field: field({
         key: "category",
         type: "enum",
-        configuration: { options: ["news"], filterable: true },
+        configuration: {
+          options: ["news"],
+          search: { filterable: true, returned: false },
+        },
       }),
       flags: [
         "--options",
@@ -301,11 +312,10 @@ describe("fields", () => {
         "--no-filterable",
         "--sortable",
       ],
+      // Only the settings given: the API merges them, keeping `returned`.
       configuration: {
         options: ["news", "reviews"],
-        searchable: true,
-        filterable: false,
-        sortable: true,
+        search: { searchable: true, filterable: false, sortable: true },
       },
     },
   ])(
@@ -356,12 +366,12 @@ describe("fields", () => {
 
     expect(
       await run(
-        ["fields", "update", "posts", "author", "--searched", "nope"],
+        ["fields", "update", "posts", "author", "--searchable", "nope"],
         t.runtime
       )
     ).toBe(ExitCode.Usage)
     expect(t.err()).toContain(
-      "Field author: searched lists nope, which isn't a field of authors"
+      "Field author: search.searchable lists nope, which isn't a field of authors"
     )
     expect(t.requests.map((r) => r.method)).toEqual(["GET", "GET"])
   })
@@ -1245,7 +1255,7 @@ describe("schema push", () => {
     // Added after the other changes, which may add the fields it lists.
     {
       added: "a relation that lists fields of its target",
-      spec: "{ type: relation, collection: posts, expanded: [title] }",
+      spec: "{ type: relation, collection: posts, search: { returned: [title] } }",
     },
   ])(
     "adds $added between others, then puts every field in the file's order",
@@ -1606,10 +1616,10 @@ describe("schema pull, diff and push refusals", () => {
   })
 })
 
-// What public search hits include (`included`) and expand (`expanded`), and
-// what a relation's searches match (`searched`): a relation lists the related
-// collection's fields by key in the file and by ID in the API.
-describe("schema: what search hits include", () => {
+// A field's `search` group: what searches match and public search hits
+// return. A relation lists the related collection's fields by key in the
+// file and by ID in the API.
+describe("schema: search settings", () => {
   const PEOPLE_ID = "col_01J9ZQ3F8X5W2K7M4N6P0PEPLE"
   const name = field({ key: "name", name: "Name", collection_id: PEOPLE_ID })
   const role = field({
@@ -1630,14 +1640,14 @@ describe("schema: what search hits include", () => {
     name: "Body",
     type: "long_text",
     position: 1,
-    configuration: { included: false },
+    configuration: { search: { returned: false } },
   })
   const cover = field({
     key: "cover",
     name: "Cover",
     type: "asset",
     position: 2,
-    configuration: { expanded: ["image_url", "alt"] },
+    configuration: { search: { returned: ["image_url", "alt"] } },
   })
   const author = field({
     key: "author",
@@ -1646,10 +1656,11 @@ describe("schema: what search hits include", () => {
     position: 3,
     configuration: {
       target_collection_id: PEOPLE_ID,
-      // A field deleted since stays listed in the API; search skips it.
-      expanded: [name.id, "fld_01J9ZQ3F8X5W2K7M4N6P0GONE0"],
-      searchable: true,
-      searched: [role.id],
+      search: {
+        searchable: [role.id],
+        // A field deleted since stays listed in the API; search skips it.
+        returned: [name.id, "fld_01J9ZQ3F8X5W2K7M4N6P0GONE0"],
+      },
     },
   })
   const FILE = "nohead.schema.yaml"
@@ -1679,19 +1690,17 @@ describe("schema: what search hits include", () => {
         .fields.map((f) => [f.key, f.options])
     )
 
-  it("pulls a relation's expanded and searched fields as keys, and leaves out the default", async () => {
+  it("pulls a relation's related fields as keys, and an asset's parts", async () => {
     const t = project()
     await t.ok(["schema", "pull"])
 
     expect(fieldsOf(t.text(FILE), "posts")).toEqual({
       title: {},
-      body: { included: false },
-      cover: { expanded: ["image_url", "alt"] },
+      body: { search: { returned: false } },
+      cover: { search: { returned: ["image_url", "alt"] } },
       author: {
         collection: "people",
-        expanded: ["name"],
-        searchable: true,
-        searched: ["role"],
+        search: { searchable: ["role"], returned: ["name"] },
       },
     })
     // The file it pulled has nothing to change.
@@ -1702,19 +1711,19 @@ describe("schema: what search hits include", () => {
 
   it.each([
     [
-      "expanded",
-      "expanded: [name, role], searchable: true, searched: [role]",
-      { expanded: [name.id, role.id] },
+      "returned",
+      "searchable: [role], returned: [name, role]",
+      { search: { returned: [name.id, role.id] } },
     ],
     [
-      "searched",
-      "expanded: [name], searchable: true, searched: [name, role]",
-      { searched: [name.id, role.id] },
+      "searchable",
+      "searchable: [name, role], returned: [name]",
+      { search: { searchable: [name.id, role.id] } },
     ],
-  ])("pushes a relation's %s fields as IDs", async (_option, options, sent) => {
+  ])("pushes a relation's %s fields as IDs", async (_option, search, sent) => {
     const t = project(
       {
-        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, ${options} }\n`,
+        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, search: { returned: false } }\n      cover: { type: asset, search: { returned: [image_url, alt] } }\n      author: { type: relation, collection: people, search: { ${search} } }\n`,
       },
       {
         [`PATCH /v1/fields/${author.id}`]: () =>
@@ -1729,37 +1738,62 @@ describe("schema: what search hits include", () => {
 
   // Becoming required, or multiple, is dry-run before anything changes,
   // while the field the relation lists doesn't exist yet.
+  const email = field({
+    key: "email",
+    name: "Email",
+    collection_id: PEOPLE_ID,
+    position: 2,
+  })
+  const returnsEmail = "searchable: [role], returned: [name, email]"
   it.each([
     {
       change: "lists it",
       options: "",
+      search: returnsEmail,
       dryRun: undefined,
       write: `PATCH /v1/fields/${author.id}`,
       sent: {},
+      configuration: { search: { returned: [name.id, email.id] } },
     },
     {
       change: "becomes required and lists it",
       options: "required: true, ",
-      dryRun: { multiple: false, required: true },
+      search: returnsEmail,
+      dryRun: {
+        multiple: false,
+        required: true,
+        configuration: { search: { returned: [name.id] } },
+      },
       write: `PATCH /v1/fields/${author.id}`,
       sent: { required: true },
+      configuration: { search: { returned: [name.id, email.id] } },
+    },
+    {
+      // The API refuses an empty `searchable`: the dry run leaves it out.
+      change: "becomes required and searches only it",
+      options: "required: true, ",
+      search: "searchable: [email], returned: [name]",
+      dryRun: { multiple: false, required: true, configuration: {} },
+      write: `PATCH /v1/fields/${author.id}`,
+      sent: { required: true },
+      configuration: { search: { searchable: [email.id] } },
     },
     {
       change: "becomes multiple and lists it",
       options: "multiple: true, ",
-      dryRun: { multiple: true, required: false },
+      search: returnsEmail,
+      dryRun: {
+        multiple: true,
+        required: false,
+        configuration: { search: { returned: [name.id] } },
+      },
       write: `POST /v1/collections/${COLLECTION_ID}/migrations`,
       sent: { multiple: true },
+      configuration: { search: { returned: [name.id, email.id] } },
     },
   ])(
     "adds a field to the target before a relation $change, in the same push",
-    async ({ options, dryRun, write, sent }) => {
-      const email = field({
-        key: "email",
-        name: "Email",
-        collection_id: PEOPLE_ID,
-        position: 2,
-      })
+    async ({ options, search, dryRun, write, sent, configuration }) => {
       const relation = {
         type: "relation",
         configuration: { target_collection_id: PEOPLE_ID },
@@ -1776,7 +1810,7 @@ describe("schema: what search hits include", () => {
       }
       const t = project(
         {
-          [FILE]: `collections:\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, included: false }\n      cover: { type: asset, expanded: [image_url, alt] }\n      author: { type: relation, collection: people, ${options}expanded: [name, email], searchable: true, searched: [role] }\n  people:\n    fields:\n      name: text\n      role: text\n      email: text\n`,
+          [FILE]: `collections:\n  posts:\n    fields:\n      title: text\n      body: { type: long_text, search: { returned: false } }\n      cover: { type: asset, search: { returned: [image_url, alt] } }\n      author: { type: relation, collection: people, ${options}search: { ${search} } }\n  people:\n    fields:\n      name: text\n      role: text\n      email: text\n`,
         },
         {
           [`POST /v1/collections/${COLLECTION_ID}/migrations`]: (request) =>
@@ -1848,7 +1882,6 @@ describe("schema: what search hits include", () => {
                 field_id: author.id,
                 type: "relation",
                 ...dryRun,
-                configuration: { expanded: [name.id] },
                 on_invalid: "fail",
               },
             ]
@@ -1860,27 +1893,27 @@ describe("schema: what search hits include", () => {
       expect(added).toBeLessThan(written)
       expect(await body(t.requests[written])).toMatchObject({
         ...sent,
-        configuration: { expanded: [name.id, email.id] },
+        configuration,
       })
     }
   )
 
   // Before changing anything, also when the relation becomes required.
   it.each([
-    ["expanded", ""],
-    ["searched", ""],
-    ["expanded", "required: true, "],
+    ["returned", ""],
+    ["searchable", ""],
+    ["returned", "required: true, "],
   ])(
     "refuses a relation's %s key that isn't a field of its target (%s)",
     async (option, required) => {
       const t = project({
-        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      author: { type: relation, collection: people, ${required}searchable: true, ${option}: [name, email] }\n`,
+        [FILE]: `collections:\n  people:\n    fields:\n      name: text\n      role: text\n  posts:\n    fields:\n      title: text\n      author: { type: relation, collection: people, ${required}search: { ${option}: [name, email] } }\n`,
       })
       expect(await run(["schema", "push", "--yes"], t.runtime)).toBe(
         ExitCode.Usage
       )
       expect(t.err()).toContain(
-        `Field author: ${option} lists email, which isn't a field of people`
+        `Field author: search.${option} lists email, which isn't a field of people`
       )
       expect(t.requests.filter((r) => r.method !== "GET")).toEqual([])
     }
@@ -2173,7 +2206,7 @@ describe("schema push: a relation into a collection the push creates", () => {
         "listing a field still to come, then puts them in the file's order",
       jobs: [
         "title: text",
-        "company: { type: relation, collection: companies, expanded: [parent] }",
+        "company: { type: relation, collection: companies, search: { returned: [parent] } }",
         "kind: text",
       ],
       companies: [
@@ -5378,10 +5411,67 @@ describe("usage errors, refused before calling the API", () => {
         "Author",
         "--type",
         "relation",
-        "--searched",
+        "--returned",
         "name",
       ],
       message: "Field author has no target collection: pass --target",
+    },
+    {
+      argv: [
+        "fields",
+        "add",
+        "posts",
+        "Title",
+        "--type",
+        "text",
+        "--searchable",
+        "name",
+      ],
+      message:
+        '--searchable takes a list only for relation fields (got "name")',
+    },
+    {
+      argv: [
+        "fields",
+        "add",
+        "posts",
+        "Title",
+        "--type",
+        "text",
+        "--returned",
+        "image_url",
+      ],
+      message:
+        '--returned takes a list only for asset and relation fields (got "image_url")',
+    },
+    {
+      argv: [
+        "fields",
+        "add",
+        "posts",
+        "Author",
+        "--type",
+        "relation",
+        "--target",
+        "authors",
+        "--searchable",
+      ],
+      message:
+        "A relation holds IDs, no words: pass --searchable with the related collection's field keys searches match",
+    },
+    {
+      argv: [
+        "fields",
+        "add",
+        "posts",
+        "Author",
+        "--type",
+        "relation",
+        "--searchable",
+        "",
+      ],
+      message:
+        "A relation holds IDs, no words: pass --searchable with the related collection's field keys searches match",
     },
     {
       argv: ["fields", "update", "posts", "size", "--max", "ten"],

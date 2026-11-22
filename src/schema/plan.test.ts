@@ -88,19 +88,37 @@ describe("schema files", () => {
       lacks: "unique",
     },
     {
-      what: "a field's search settings",
+      what: "a field's search settings, grouped in the file's order",
       collections: [
         collection({
           fields: [
             field({
               key: "title",
               name: "Title",
-              configuration: { sortable: true },
+              configuration: {
+                search: { returned: false, sortable: true, filterable: true },
+              },
             }),
           ],
         }),
       ],
-      has: "sortable: true",
+      has: "search:\n          filterable: true\n          sortable: true\n          returned: false",
+    },
+    {
+      what: "search settings that are the default, left out",
+      collections: [
+        collection({
+          fields: [
+            field({
+              key: "title",
+              name: "Title",
+              configuration: { search: { returned: true } },
+            }),
+          ],
+        }),
+      ],
+      has: "type: text",
+      lacks: "search",
     },
   ])("round-trips $what", ({ collections, has, lacks }) => {
     const yaml = toYaml(fromCollections(collections))
@@ -162,21 +180,64 @@ describe("schema files", () => {
       error: "renamed_from is the field's previous API key",
     },
     {
-      problem: "expanded on a text field",
-      yaml: fields("      title: { type: text, expanded: [name] }"),
+      problem: "an old search option at the top",
+      yaml: fields("      title: { type: text, filterable: true }"),
       error:
-        "title.expanded: only asset and relation fields expand what they point at",
+        "title: filterable goes under search: (search: { filterable: true })",
     },
     {
-      problem: "searched on an asset field",
-      yaml: fields("      cover: { type: asset, searched: [alt] }"),
+      problem: "the old included",
+      yaml: fields("      title: { type: text, included: false }"),
       error:
-        "cover.searched: only relation fields search fields of the records they point at",
+        "title: included goes under search: as returned (search: { returned: false })",
     },
     {
-      problem: "an included that is not true or false",
-      yaml: fields("      cover: { type: asset, included: yes }"),
-      error: "cover.included: true or false",
+      problem: "the old searched",
+      yaml: fields(
+        "      author: { type: relation, collection: authors, searchable: true, searched: [name, bio] }"
+      ),
+      error:
+        "author: searched goes under search: as searchable (search: { searchable: [name, bio] })",
+    },
+    {
+      problem: "a search group that is not a mapping",
+      yaml: fields("      title: { type: text, search: true }"),
+      error: "title.search must be a mapping",
+    },
+    {
+      problem: "an unknown search setting",
+      yaml: fields("      title: { type: text, search: { expanded: [a] } }"),
+      error: "title.search: unknown key expanded",
+    },
+    {
+      problem: "a filterable that is not true or false",
+      yaml: fields("      title: { type: text, search: { filterable: yes } }"),
+      error: "title.search.filterable: true or false",
+    },
+    {
+      problem: "a list on a text field",
+      yaml: fields("      title: { type: text, search: { returned: [a] } }"),
+      error: "title.search.returned: true or false",
+    },
+    {
+      problem: "a searchable relation with no related fields",
+      yaml: fields(
+        "      author: { type: relation, collection: authors, search: { searchable: true } }"
+      ),
+      error:
+        "author.search.searchable: a relation holds IDs, no words: list the related collection's field keys",
+    },
+    {
+      problem: "a searchable asset",
+      yaml: fields(
+        "      cover: { type: asset, search: { searchable: true } }"
+      ),
+      error: "cover.search.searchable: asset fields hold no words to search",
+    },
+    {
+      problem: "an asset's returned that is not a list of parts",
+      yaml: fields("      cover: { type: asset, search: { returned: alt } }"),
+      error: "cover.search.returned: true, false or a list (image_url,",
     },
   ])("refuses $problem", ({ yaml, error }) => {
     expect(() => fromYaml(yaml, "s.yaml")).toThrow(error)
@@ -230,21 +291,24 @@ collections:
         field({
           key: "title",
           name: "Title",
-          configuration: { max_length: 120, filterable: true },
+          configuration: {
+            max_length: 120,
+            search: { filterable: true, returned: false },
+          },
         }),
       ],
     })
     expect(
       planChanges(
         fromYaml(
-          "collections:\n  posts:\n    fields:\n      title: { type: text, required: false, filterable: true, sortable: true }\n",
+          "collections:\n  posts:\n    fields:\n      title: { type: text, required: false, search: { filterable: true, sortable: true } }\n",
           "schema.yaml"
         ),
         fromCollections([limited]),
         [limited]
       ).map(describeChange)
     ).toEqual([
-      '~ field posts.title: options {"sortable":true,"max_length":null}',
+      '~ field posts.title: options {"search":{"sortable":true,"returned":null},"max_length":null}',
     ])
   })
 
@@ -505,30 +569,46 @@ describe("slugs in schema files", () => {
 })
 
 describe("search in schema files", () => {
-  it("plans field search options", () => {
+  // The file's search group against the field's: only real changes, the
+  // group merged one level down as the API does.
+  it.each<{ file: string; have?: Record<string, unknown>; plan: string[] }>([
+    {
+      file: "search: { filterable: true }",
+      plan: ['~ field posts.title: options {"search":{"filterable":true}}'],
+    },
+    { file: "search: { returned: true }", plan: [] },
+    { file: "search: {}", plan: [] },
+    {
+      file: "search: { sortable: true, filterable: true }",
+      have: { filterable: true, sortable: true },
+      plan: [],
+    },
+    {
+      file: "max_length: 10",
+      have: { filterable: true },
+      plan: ['~ field posts.title: options {"max_length":10,"search":null}'],
+    },
+  ])("plans $file against $have", ({ file, have, plan }) => {
+    const remote = [
+      collection({
+        fields: [
+          field({
+            key: "title",
+            name: "Title",
+            configuration: have ? { search: have } : {},
+          }),
+        ],
+      }),
+    ]
     const changes = planChanges(
       fromYaml(
-        `collections:
-  posts:
-    fields:
-      title: { type: text, required: true, filterable: true }
-`,
+        `collections:\n  posts:\n    fields:\n      title: { type: text, ${file} }\n`,
         "s.yaml"
       ),
-      fromCollections([
-        collection({
-          fields: [field({ key: "title", name: "Title", required: true })],
-        }),
-      ]),
-      [
-        collection({
-          fields: [field({ key: "title", name: "Title", required: true })],
-        }),
-      ]
+      fromCollections(remote),
+      remote
     )
 
-    expect(changes.map(describeChange)).toEqual([
-      '~ field posts.title: options {"filterable":true}',
-    ])
+    expect(changes.map(describeChange)).toEqual(plan)
   })
 })

@@ -5582,21 +5582,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/SearchOptions"
           },
           "min_length": {
             "type": "integer",
@@ -5631,21 +5618,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/SearchOptions"
           },
           "min_length": {
             "type": "integer",
@@ -5667,21 +5641,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/SearchOptions"
           },
           "min_length": {
             "type": "integer",
@@ -5704,21 +5665,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/SearchOptions"
           },
           "min": {
             "type": "integer"
@@ -5741,21 +5689,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/SearchOptions"
           },
           "min": {
             "type": "number"
@@ -5774,24 +5709,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "enum": [
-              false
-            ],
-            "description": "A date field has no words for searches to match, so it can't be searchable."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/UnsearchableSearchOptions"
           },
           "include_time": {
             "type": "boolean",
@@ -5812,24 +5731,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "enum": [
-              false
-            ],
-            "description": "A boolean field has no words for searches to match, so it can't be searchable."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/UnsearchableSearchOptions"
           }
         }
       },
@@ -5845,21 +5748,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+          "search": {
+            "$ref": "#/components/schemas/SearchOptions"
           },
           "options": {
             "type": "array",
@@ -5883,40 +5773,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "enum": [
-              false
-            ],
-            "description": "An asset field is indexed as an asset ID, with no words for searches to match, so it can't be searchable."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
-          },
-          "expanded": {
-            "type": "array",
-            "uniqueItems": true,
-            "description": "What public search hits return of the field's assets under `expanded`, while it's included: any of an image's `image_url`, `dimensions` (as `width` and `height`) and `alt`, and any file's `file_url`, `filename` and `content_type`, as the API's assets have them. By default an image's URL and dimensions where the field takes images, and a file's URL and filename where it takes other files (`accepted_types`; both when it takes any file). API reads expand what `?expand=` asks for.",
-            "items": {
-              "type": "string",
-              "enum": [
-                "image_url",
-                "dimensions",
-                "alt",
-                "file_url",
-                "filename",
-                "content_type"
-              ]
-            }
+          "search": {
+            "$ref": "#/components/schemas/AssetSearchOptions"
           },
           "accepted_types": {
             "type": "array",
@@ -5940,47 +5798,8 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
-          "searchable": {
-            "type": "boolean",
-            "description": "Search words match the related fields `searched` lists, in every search (API keys, search tokens, members). Default false."
-          },
-          "filterable": {
-            "type": "boolean",
-            "description": "API searches can filter on it. Default false."
-          },
-          "sortable": {
-            "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
-          },
-          "included": {
-            "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
-          },
-          "expanded": {
-            "type": "array",
-            "maxItems": 10,
-            "uniqueItems": true,
-            "description": "The related collection's fields, by ID (`fld_...`), that public search hits return of each published related record under `expanded`, while the field is included, by their current keys (a list holds the first 100 related records that exist). None by default: the IDs only, whether or not the related collection is in public search. A filterable relation field also filters on them. API reads expand what `?expand=` asks for.",
-            "items": {
-              "type": "string",
-              "pattern": "^fld_",
-              "examples": [
-                "fld_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
-              ]
-            }
-          },
-          "searched": {
-            "type": "array",
-            "maxItems": 10,
-            "uniqueItems": true,
-            "description": "The related collection's fields, by ID (`fld_...`), whose words searches match in each published related record while the field is `searchable`, in every search, whether or not hits return them; only text, long text, rich text and enum fields are matched. None by default. A filterable relation field also filters on them: under `expanded.<key>.data.<field>` when hits return them, `expanded.<key>.searched.<field>` when they don't.",
-            "items": {
-              "type": "string",
-              "pattern": "^fld_",
-              "examples": [
-                "fld_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
-              ]
-            }
+          "search": {
+            "$ref": "#/components/schemas/RelationSearchOptions"
           },
           "target_collection_id": {
             "type": "string",
@@ -5998,26 +5817,168 @@
             "maxLength": 500,
             "description": "Help text for editors."
           },
+          "search": {
+            "$ref": "#/components/schemas/SearchOptions"
+          }
+        }
+      },
+      "SearchOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "How searches use the field, and what public search hits return of it. A setting left out takes its default.",
+        "properties": {
           "searchable": {
             "type": "boolean",
-            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long_text, rich_text and enum."
+            "description": "Search words match the field, in every search (API keys, search tokens, members). Default true for text, long text, rich text and enum fields, false for the others."
           },
           "filterable": {
             "type": "boolean",
-            "description": "API searches can filter on it. Default false."
+            "description": "Searches can filter and count on it. Default false. Not for rich text and JSON fields."
           },
           "sortable": {
             "type": "boolean",
-            "description": "API searches can sort on it (one value only). Default false."
+            "description": "Searches can sort on it, for a single-value text, integer, decimal, boolean, date or enum field. Default false."
           },
-          "included": {
+          "returned": {
             "type": "boolean",
-            "description": "Public search hits (search tokens) include the field. Default true. A field not included can still be searched, filtered and sorted on."
+            "description": "Public search hits (search tokens) return the field. Default true. A field not returned can still be searched, filtered and sorted on."
+          }
+        }
+      },
+      "UnsearchableSearchOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "How searches use a date or boolean field, and whether public search hits return it. A setting left out takes its default.",
+        "properties": {
+          "searchable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Date and boolean fields hold no words for searches to match, so they can't be searchable."
+          },
+          "filterable": {
+            "type": "boolean",
+            "description": "Searches can filter and count on it. Default false."
+          },
+          "sortable": {
+            "type": "boolean",
+            "description": "Searches can sort on it (one value only). Default false."
+          },
+          "returned": {
+            "type": "boolean",
+            "description": "Public search hits (search tokens) return the field. Default true. A field not returned can still be filtered and sorted on."
+          }
+        }
+      },
+      "AssetSearchOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "How searches use an asset field, and what public search hits return of its assets. A setting left out takes its default.",
+        "properties": {
+          "searchable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "An asset field is indexed as asset IDs, with no words for searches to match, so it can't be searchable."
+          },
+          "filterable": {
+            "type": "boolean",
+            "description": "Searches can filter and count on its asset IDs. Default false."
+          },
+          "sortable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Asset IDs don't sort, so an asset field can't be sortable."
+          },
+          "returned": {
+            "description": "What public search hits return of the field: `true` (the default), each asset's ID with its default parts under `expanded`, an image's URL and dimensions where the field takes images and a file's URL and filename where it takes other files (`accepted_types`; both when it takes any file); a list of the parts to return instead, any of an image's `image_url`, `dimensions` (as `width` and `height`) and `alt`, and any file's `file_url`, `filename` and `content_type`; or `false`, nothing. A relation that returns the field from another collection returns the same parts. API reads expand what `?expand=` asks for.",
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "image_url",
+                    "dimensions",
+                    "alt",
+                    "file_url",
+                    "filename",
+                    "content_type"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "RelationSearchOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "How searches use a relation field, and what public search hits return of its related records. A setting left out takes its default.",
+        "properties": {
+          "searchable": {
+            "description": "`false` (the default), or the related collection's fields, by ID (`fld_...`), whose words searches match in each published related record, in every search, whether or not hits return them; only text, long text, rich text and enum fields are matched. A relation holds IDs, with no words of its own, so `true` alone is refused.",
+            "oneOf": [
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              {
+                "type": "array",
+                "maxItems": 10,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^fld_",
+                  "examples": [
+                    "fld_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+                  ]
+                }
+              }
+            ]
+          },
+          "filterable": {
+            "type": "boolean",
+            "description": "Searches can filter and count on its related records' IDs, and on the related fields it lists: under `expanded.<key>.data.<field>` when hits return them, `expanded.<key>.unreturned.<field>` when only searches match them. Default false."
+          },
+          "sortable": {
+            "type": "boolean",
+            "description": "Searches can sort on it (one value only). Default false."
+          },
+          "returned": {
+            "description": "What public search hits return of the field: `true` (the default), the related records' IDs; the related collection's fields, by ID (`fld_...`), to return with each published related record under `expanded`, by their current keys (a list holds the first 100 related records that exist), whether or not the related collection is in public search; or `false`, nothing. API reads expand what `?expand=` asks for.",
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "maxItems": 10,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^fld_",
+                  "examples": [
+                    "fld_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+                  ]
+                }
+              }
+            ]
           }
         }
       },
       "FieldConfiguration": {
-        "description": "Type-specific options, e.g. `max_length`, `options`, `target_collection_id`,\n`accepted_types` (asset fields: MIME types or `type/*` wildcards that newly\nwritten values must have; any file when absent), `include_time` and\n`time_zone` (date fields, below), `format` (text fields, below),\n`unique` (text and integer fields, below), plus\nthe options for searches with API keys: `searchable` (the search words match the\nfield; default true for text, long_text, rich_text and enum), `filterable` and\n`sortable` (default false).\n\nDate fields hold a calendar date, `YYYY-MM-DD`, with no time and no\ntime zone: returned exactly as written, so it never shows as the day\nbefore or after. With `include_time: true` they hold a moment: ISO\n8601 with an offset, stored in UTC and returned in UTC, or with the\noffset of `time_zone` (an IANA name such as `Europe/Copenhagen`,\ndaylight saving included) when the field has one. Input may use any\noffset. Changing `time_zone` never rewrites values; turning\n`include_time` on or off does, through a field migration.\n\nText fields (not long text) can have a `format`: `slug`\n(lowercase letters, digits and single hyphens, at most 200\ncharacters; one value per record, never a list, and always\nunique: a slug field has `unique: true`), `url` (an absolute\n`http` or `https` address) or `email`. A value that doesn't match is\nrefused with `invalid_format`. A format sets its own length limits\n(254 characters for emails, 2,048 for URLs), so `min_length` and\n`max_length` are for plain text. Text and integer\nfields with one value can be `unique`: no two active records of the\ncollection share a value (emails compare ignoring capitals; records\nwithout a value don't count). A taken value is refused with\n`taken` and the `record_id` that has it. Turning `unique` on is\nrefused with `duplicate_values` while records share a value (and\nso is restoring a deleted unique field, `409`). A field migration\nto a unique field is refused with `duplicate_values` when its\nconverted values or backfill would be shared, and fails if values\nwritten while it waits would be.\n",
+        "description": "Type-specific options, e.g. `max_length`, `options`, `target_collection_id`,\n`accepted_types` (asset fields: MIME types or `type/*` wildcards that newly\nwritten values must have; any file when absent), `include_time` and\n`time_zone` (date fields, below), `format` (text fields, below),\n`unique` (text and integer fields, below), plus `search`: how\nsearches use the field and what public search hits return of it\n(`searchable`, default true for text, long_text, rich_text and enum;\n`filterable` and `sortable`, default false; `returned`, default true).\n\nDate fields hold a calendar date, `YYYY-MM-DD`, with no time and no\ntime zone: returned exactly as written, so it never shows as the day\nbefore or after. With `include_time: true` they hold a moment: ISO\n8601 with an offset, stored in UTC and returned in UTC, or with the\noffset of `time_zone` (an IANA name such as `Europe/Copenhagen`,\ndaylight saving included) when the field has one. Input may use any\noffset. Changing `time_zone` never rewrites values; turning\n`include_time` on or off does, through a field migration.\n\nText fields (not long text) can have a `format`: `slug`\n(lowercase letters, digits and single hyphens, at most 200\ncharacters; one value per record, never a list, and always\nunique: a slug field has `unique: true`), `url` (an absolute\n`http` or `https` address) or `email`. A value that doesn't match is\nrefused with `invalid_format`. A format sets its own length limits\n(254 characters for emails, 2,048 for URLs), so `min_length` and\n`max_length` are for plain text. Text and integer\nfields with one value can be `unique`: no two active records of the\ncollection share a value (emails compare ignoring capitals; records\nwithout a value don't count). A taken value is refused with\n`taken` and the `record_id` that has it. Turning `unique` on is\nrefused with `duplicate_values` while records share a value (and\nso is restoring a deleted unique field, `409`). A field migration\nto a unique field is refused with `duplicate_values` when its\nconverted values or backfill would be shared, and fails if values\nwritten while it waits would be.\n",
         "anyOf": [
           {
             "$ref": "#/components/schemas/TextFieldConfiguration"
@@ -6421,7 +6382,7 @@
       "FieldConfigurationChange": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Options to change, merged onto the field's: an option sent replaces\nits value, one sent as `null` is removed, and options left out keep\ntheirs. So `{ \"filterable\": true }` changes one option and keeps the\nrest, and `{ \"max_length\": null }` removes the limit. Any field\ntype's option names are accepted here; the merged options are\nchecked against the field's type (`FieldConfiguration`).\n",
+        "description": "Options to change, merged onto the field's: an option sent replaces\nits value, one sent as `null` is removed, and options left out keep\ntheirs. So `{ \"max_length\": 200 }` changes one option and keeps the\nrest, and `{ \"max_length\": null }` removes the limit. Any field\ntype's option names are accepted here; the merged options are\nchecked against the field's type (`FieldConfiguration`).\n",
         "properties": {
           "description": {
             "type": [
@@ -6430,52 +6391,52 @@
             ],
             "maxLength": 500
           },
-          "searchable": {
+          "search": {
             "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "filterable": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "sortable": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "included": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "expanded": {
-            "description": "For an asset field, parts of its assets (`image_url`, `dimensions`, `alt`, `file_url`, `filename`, `content_type`); for a relation field, field IDs of the related collection.",
-            "type": [
-              "array",
+              "object",
               "null"
             ],
-            "maxItems": 10,
-            "uniqueItems": true,
-            "items": {
-              "type": "string"
-            }
-          },
-          "searched": {
-            "description": "For a relation field, field IDs of the related collection whose words searches match.",
-            "type": [
-              "array",
-              "null"
-            ],
-            "maxItems": 10,
-            "uniqueItems": true,
-            "items": {
-              "type": "string"
+            "additionalProperties": false,
+            "description": "Search settings to change, merged onto the field's the same way: a setting sent replaces its value, one sent as `null` is removed, and the rest stay. So `{ \"search\": { \"returned\": false } }` keeps the field's `searchable`.",
+            "properties": {
+              "searchable": {
+                "description": "True or false, or for a relation field the related collection's field IDs whose words searches match.",
+                "type": [
+                  "boolean",
+                  "array",
+                  "null"
+                ],
+                "maxItems": 10,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "filterable": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "sortable": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "returned": {
+                "description": "True or false, or the parts of an asset field's assets, or the field IDs of a relation field's related collection, to return.",
+                "type": [
+                  "boolean",
+                  "array",
+                  "null"
+                ],
+                "maxItems": 10,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "min_length": {
@@ -6641,7 +6602,7 @@
           },
           "public_search": {
             "type": "boolean",
-            "description": "Whether the project's search tokens (made in the web app) find\nits published records, from a browser or a backend. Off by\ndefault: every field of those records becomes readable by anyone\nwith a token, so turn it on only for collections whose published\nrecords are public. A change reaches search tokens within\nseconds. Off, its fields can still come along with hits of\nanother collection that is on, through a relation field's\n`expanded` and `searched`.\n"
+            "description": "Whether the project's search tokens (made in the web app) find\nits published records, from a browser or a backend. Off by\ndefault: every field of those records becomes readable by anyone\nwith a token, so turn it on only for collections whose published\nrecords are public. A change reaches search tokens within\nseconds. Off, its fields can still come along with hits of\nanother collection that is on, through a relation field's\n`search` settings (`searchable` and `returned`).\n"
           },
           "fields": {
             "type": "array",
