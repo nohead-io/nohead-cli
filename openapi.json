@@ -5887,6 +5887,13 @@
             "type": "boolean",
             "description": "Searches can filter and count on its asset IDs. Default false."
           },
+          "sortable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ],
+            "description": "Asset IDs don't sort, so an asset field can't be sortable."
+          },
           "returned": {
             "description": "What public search hits return of the field: `true` (the default), each asset's ID with its default parts under `expanded`, an image's URL and dimensions where the field takes images and a file's URL and filename where it takes other files (`accepted_types`; both when it takes any file); a list of the parts to return instead, any of an image's `image_url`, `dimensions` (as `width` and `height`) and `alt`, and any file's `file_url`, `filename` and `content_type`; or `false`, nothing. A relation that returns the field from another collection returns the same parts. API reads expand what `?expand=` asks for.",
             "oneOf": [
@@ -5928,7 +5935,6 @@
               },
               {
                 "type": "array",
-                "minItems": 1,
                 "maxItems": 10,
                 "uniqueItems": true,
                 "items": {
