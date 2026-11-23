@@ -7,6 +7,11 @@ scripts (output, exit codes, flags) is a major one. Before 1.0, a minor release
 may also break scripts, and its notes mark each such change **Breaking**. Each
 release's section is its GitHub release's notes.
 
+## Unreleased
+
+- `webhooks create` says after the signing secret that it won't be shown
+  again.
+
 ## 0.12.0
 
 - **Breaking:** the schema file groups a field's search settings under

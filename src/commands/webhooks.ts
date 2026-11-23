@@ -70,7 +70,8 @@ export function registerWebhooks(
         printResult(
           ctx,
           webhook,
-          () => `Created ${webhook.id}\nSigning secret: ${webhook.secret}`
+          () =>
+            `Created ${webhook.id}\nSigning secret: ${webhook.secret}\nPlease copy this secret to a safe place — it won't be shown again!`
         )
       }
     )
