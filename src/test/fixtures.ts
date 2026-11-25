@@ -81,10 +81,12 @@ export function record(
 
 export const DRF_A = "drf_01J9ZQ3F8X5W2K7M4N6P0R1S2A"
 
+// `editor_url` is in the contract the stubs are checked against, ahead of
+// @nohead/sdk's NoheadDraft type: drop the intersection once the SDK has it.
 export function draft(
   data: NoheadDraft["data"],
   overrides: Partial<NoheadDraft> = {}
-): NoheadDraft {
+): NoheadDraft & { editor_url: string } {
   return {
     id: DRF_A,
     object: "draft",
@@ -96,6 +98,7 @@ export function draft(
     data,
     changed_fields: Object.keys(data),
     schedule: { merge_at: null, last_error: null },
+    editor_url: `https://app.nohead.io/projects/prj_01J9ZQ3F8X5W2K7M4N6P0R1S2T/collections/${COLLECTION_ID}/records/rec_01J9ZQ3F8X5W2K7M4N6P0R1S2A`,
     created_by: {
       type: "api_key",
       id: "key_01J9ZQ3F8X5W2K7M4N6P0R1S2T",
