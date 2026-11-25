@@ -7551,6 +7551,7 @@
           "data",
           "changed_fields",
           "schedule",
+          "editor_url",
           "created_by",
           "edited_by",
           "created_at",
@@ -7598,6 +7599,14 @@
           },
           "schedule": {
             "$ref": "#/components/schemas/DraftSchedule"
+          },
+          "editor_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The record's page in the web editor, where the project's members\nreview the draft, change it and merge it. Give it to whoever will\nreview the draft.\n",
+            "examples": [
+              "https://app.nohead.io/projects/prj_01J9ZQ3F8X5W2K7M4N6P0R1S2T/collections/col_01J9ZQ3F8X5W2K7M4N6P0R1S2T/records/rec_01J9ZQ3F8X5W2K7M4N6P0R1S2T"
+            ]
           },
           "created_by": {
             "$ref": "#/components/schemas/Actor"
