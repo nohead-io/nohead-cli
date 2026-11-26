@@ -11,6 +11,9 @@ release's section is its GitHub release's notes.
 
 - `webhooks create` says after the signing secret that it won't be shown
   again.
+- `schema pull` writes a field's options in the file's order (`description`
+  first, `min` before `max`), as it reads them, rather than in the order the
+  API stores them. A file pulled again changes only in that order.
 
 ## 0.12.0
 

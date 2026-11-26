@@ -105,6 +105,23 @@ describe("schema files", () => {
       has: "search:\n          filterable: true\n          sortable: true\n          returned: false",
     },
     {
+      // The API keeps them as Postgres jsonb does: shortest key first.
+      what: "a field's options in the file's order, not the API's",
+      collections: [
+        collection({
+          fields: [
+            field({
+              key: "lat",
+              name: "Lat",
+              type: "decimal",
+              configuration: { max: 90, min: -90, description: "Latitude." },
+            }),
+          ],
+        }),
+      ],
+      has: "description: Latitude.\n        min: -90\n        max: 90",
+    },
+    {
       what: "search settings that are the default, left out",
       collections: [
         collection({
