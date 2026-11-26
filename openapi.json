@@ -4724,11 +4724,11 @@
       "Expand": {
         "name": "expand",
         "in": "query",
-        "description": "Comma-separated relation, asset or rich text field keys whose records or assets to embed under `expanded` (at most 5); for a rich text field, the assets its images show. Embedding needs permission to read what is embedded: `records:read` for relations, `assets:read` for assets and rich text (`403` otherwise).",
+        "description": "Comma-separated relation, asset or rich text field keys whose records or assets to embed under `expanded` (at most 5); for a rich text field, the assets its images show. A dotted key reaches one relation further: `author.photo` embeds the author, and the author's photo under the author's own `expanded`; it counts the author too. Embedding needs permission to read what is embedded, at each level: `records:read` for relations, `assets:read` for assets and rich text (`403` otherwise).",
         "schema": {
           "type": "string"
         },
-        "example": "author,tags"
+        "example": "author.photo,tags"
       },
       "RecordFilter": {
         "name": "filter",
@@ -7829,7 +7829,7 @@
           },
           "expanded": {
             "type": "object",
-            "description": "Only with `expand`: what each requested relation, asset or rich\ntext field points at, keyed by field key: records for\nrelation fields, assets for asset fields. A single value is the object, or null when\nit no longer exists; a multiple value is a list of those that still\nexist. For a rich text field, the list of assets its images show,\nin document order, leaving out those that no longer exist.\nExpanded records are not expanded further.\n",
+            "description": "Only with `expand`: what each requested relation, asset or rich\ntext field points at, keyed by field key: records for\nrelation fields, assets for asset fields. A single value is the object, or null when\nit no longer exists; a multiple value is a list of those that still\nexist. For a rich text field, the list of assets its images show,\nin document order, leaving out those that no longer exist.\nAn expanded record has its own `expanded` only for the dotted\nkeys that reach through it (`author.photo`).\n",
             "additionalProperties": {
               "anyOf": [
                 {
