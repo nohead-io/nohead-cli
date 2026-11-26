@@ -131,6 +131,19 @@ function withoutImplied(
     : rest
 }
 
+/**
+ * Options in the file's order (OPTION_KEYS), as a file is read: the API keeps
+ * them as Postgres jsonb does, shortest key first, which put `max` before
+ * `min`. Any the CLI doesn't know come last, as they came.
+ */
+const inFileOrder = (options: Record<string, unknown>) =>
+  Object.fromEntries(
+    [
+      ...OPTION_KEYS.filter((key) => key in options),
+      ...Object.keys(options).filter((key) => !OPTION_KEYS.includes(key)),
+    ].map((key) => [key, options[key]])
+  )
+
 /** "lead_author" / "blog-posts" -> "Lead Author" / "Blog Posts". */
 export function humanize(key: string): string {
   return key
@@ -176,12 +189,14 @@ export function fromCollections(collections: Collection[]): CollectionSpec[] {
         type: field.type,
         required: field.required,
         multiple: field.multiple,
-        options: withoutImplied({
-          ...rest,
-          ...(typeof target === "string"
-            ? { collection: slugs.get(target) ?? target }
-            : {}),
-        }),
+        options: withoutImplied(
+          inFileOrder({
+            ...rest,
+            ...(typeof target === "string"
+              ? { collection: slugs.get(target) ?? target }
+              : {}),
+          })
+        ),
       }
     }),
   }))
